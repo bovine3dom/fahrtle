@@ -1,123 +1,179 @@
-import { length, lineString } from '@turf/turf';
+// ==> src/store.ts <==
 import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
-// import { $timeOffset } from './time-sync';
 
-// Store for the VISUAL routes (The static lines on the map)
-// MapLibre can consume this directly.
-export const $routeLines = atom<GeoJSON.FeatureCollection>({
-  type: 'FeatureCollection',
-  features: []
-});
+// --- Configuration ---
+// Must match the server's BASE_SPEED
+const BASE_SPEED = 0.0001; 
+// The target duration for every leg (30 seconds)
+const TARGET_DURATION_MS = 30000; 
 
-// Store for the MATH (The animation logic)
-export type ProcessedTrip = {
-  id: string;
-  team: string;
-  segments: {
-    start: [number, number];
-    end: [number, number];
-    startTime: number;
-    endTime: number;
-  }[];
-  finalPosition: [number, number];
+// --- Types ---
+export type Waypoint = {
+  x: number;
+  y: number;
+  startTime: number;
+  arrivalTime: number;
+  speedFactor: number;
 };
 
-export const $activeTrips = map<Record<string, ProcessedTrip>>({});
+export type Player = {
+  id: string;
+  color: string;
+  waypoints: Waypoint[];
+};
 
-export function connectWebSocket(url: string) {
-  const ws = new WebSocket(url);
+export type AnimationSegment = {
+  start: [number, number];
+  end: [number, number];
+  startTime: number;
+  endTime: number;
+};
+
+export type RenderablePlayer = Player & {
+  segments: AnimationSegment[];
+};
+
+// --- State ---
+export const $connected = atom(false);
+export const $currentRoom = atom<string | null>(null);
+export const $myPlayerId = atom<string | null>(null);
+export const $players = map<Record<string, RenderablePlayer>>({});
+export const $globalRate = atom(1.0); 
+
+let ws: WebSocket | null = null;
+
+// --- Actions ---
+
+export function connectAndJoin(roomId: string, playerId: string) {
+  if (ws) ws.close();
+  
+  ws = new WebSocket('ws://localhost:8080');
+  
+  ws.onopen = () => {
+    $connected.set(true);
+    
+    // FIX: Send roomId with the sync request so server knows which clock to read
+    ws?.send(JSON.stringify({ 
+      type: 'SYNC_REQUEST', 
+      clientSendTime: Date.now(),
+      roomId: roomId 
+    }));
+    
+    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId }));
+    
+    $currentRoom.set(roomId);
+    $myPlayerId.set(playerId);
+  };
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
 
-    // 1. Initial Handshake / Ping-Pong Sync
     if (msg.type === 'SYNC_RESPONSE') {
       const now = Date.now();
       const latency = (now - msg.clientSendTime) / 2;
-      // Assume rate is 1.0 initially or server sends it
-      syncClock(msg.serverTime, msg.rate || 1.0, latency); 
+      syncClock(msg.serverTime, msg.rate, latency); 
+      $globalRate.set(msg.rate);
     }
 
-    // 2. Periodic Broadcast or Rate Change
-    // The server pushes this whenever it wants to change speed or fix drift
     if (msg.type === 'CLOCK_UPDATE') {
-      // We assume one-way latency is roughly half of previous RTT, 
-      // or we just ignore latency for simple broadcasts if <100ms doesn't matter.
-      // For precision, we'd want to ping/pong, but let's assume 50ms latency for broadcast.
-      const estimatedLatency = 50; 
-      syncClock(msg.serverTime, msg.rate, estimatedLatency);
+      syncClock(msg.serverTime, msg.rate, 50); // Assume 50ms latency for broadcast
+      $globalRate.set(msg.rate);
     }
-    
 
-    // SERVER SENDS GEOJSON LINESTRINGS NOW
-    if (msg.type === 'TRIP_UPDATE') {
-      const geoJson = msg.data as GeoJSON.FeatureCollection;
-      console.log(msg);
-      
-      // 1. Update the Route Lines immediately (Visuals)
-      $routeLines.set(geoJson);
+    if (msg.type === 'ROOM_STATE') {
+      const renderables: Record<string, RenderablePlayer> = {};
+      for(const pid in msg.players) {
+        renderables[pid] = processPlayer(msg.players[pid]);
+      }
+      $players.set(renderables);
+    }
 
-      // 2. Process for Animation (Logic)
-      const updates: Record<string, ProcessedTrip> = {};
+    if (msg.type === 'PLAYER_JOINED') {
+      $players.setKey(msg.player.id, processPlayer(msg.player));
+    }
 
-      geoJson.features.forEach((f) => {
-        const coords = (f.geometry as GeoJSON.LineString).coordinates;
-        const props = f.properties || {};
-        const startTime = props.startTime; // Absolute Server Time
-        const endTime = props.endTime;     // Absolute Server Time
-        const totalDuration = endTime - startTime;
-        
-        // --- TURF.JS MAGIC HERE ---
-        // We use Turf to get the precise geodesic length of the route
-        const routeFeature = lineString(coords);
-        const totalDistance = length(routeFeature, { units: 'kilometers' });
+    if (msg.type === 'PLAYER_LEFT') {
+      const current = { ...$players.get() };
+      delete current[msg.playerId];
+      $players.set(current);
+    }
 
-        const segments = [];
-        let accumulatedTime = 0;
-
-        // Break path into segments
-        for (let i = 0; i < coords.length - 1; i++) {
-          const segStart = coords[i];
-          const segEnd = coords[i+1];
-          
-          // Measure just this segment with Turf
-          const segFeat = lineString([segStart, segEnd]);
-          const segDist = length(segFeat, { units: 'kilometers' });
-          
-          // Calculate time window for this segment based on constant speed
-          // (segDist / totalDistance) * totalDuration
-          const segDuration = totalDistance > 0 
-            ? (segDist / totalDistance) * totalDuration 
-            : 0;
-
-          segments.push({
-            start: segStart as [number, number],
-            end: segEnd as [number, number],
-            startTime: startTime + accumulatedTime,
-            endTime: startTime + accumulatedTime + segDuration
-          });
-
-          accumulatedTime += segDuration;
-        }
-
-        updates[props.id] = {
-          id: props.id,
-          team: props.team,
-          segments: segments,
-          finalPosition: coords[coords.length - 1] as [number, number]
-        };
-      });
-
-      $activeTrips.set({ ...$activeTrips.get(), ...updates });
+    if (msg.type === 'WAYPOINT_ADDED') {
+      const all = $players.get();
+      const p = all[msg.playerId];
+      if (p) {
+        const updatedWaypoints = [...p.waypoints, msg.waypoint];
+        const updatedPlayer = processPlayer({ ...p, waypoints: updatedWaypoints });
+        $players.setKey(msg.playerId, updatedPlayer);
+      }
     }
   };
   
-  ws.onopen = () => {
-    // Initiate Sync immediately
-    ws.send(JSON.stringify({ 
-      type: 'SYNC_REQUEST', 
-      clientSendTime: Date.now() 
-    }));
-  };
+  ws.onclose = () => {
+    $connected.set(false);
+    $currentRoom.set(null);
+  }
+}
+
+export function submitWaypoint(lat: number, lng: number) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  
+  const myId = $myPlayerId.get();
+  const allPlayers = $players.get();
+  const player = myId ? allPlayers[myId] : null;
+
+  if (!player) return;
+
+  // 1. Get the last known position (or spawn point)
+  const lastPoint = player.waypoints[player.waypoints.length - 1];
+
+  // 2. Calculate Distance (Euclidean degrees)
+  // Matches server logic: dist = sqrt(dx^2 + dy^2)
+  const dist = Math.sqrt(
+    Math.pow(lng - lastPoint.x, 2) + Math.pow(lat - lastPoint.y, 2)
+  );
+
+  // 3. Calculate Speed Factor
+  // Formula: Duration = Distance / (BASE_SPEED * Factor)
+  // Therefore: Factor = Distance / (BASE_SPEED * Duration)
+  let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
+
+  // Safety Clamp: Don't let time stop completely on double-clicks
+  if (factor < 0.05) factor = 0.05;
+
+  console.log(`[Store] Trip: ${(dist * 111).toFixed(2)}km. Factor: ${factor.toFixed(3)}x`);
+
+  ws.send(JSON.stringify({
+    type: 'ADD_WAYPOINT',
+    x: lng,
+    y: lat,
+    speedFactor: factor
+  }));
+}
+
+export function leaveRoom() {
+  if(ws) ws.close();
+  $currentRoom.set(null);
+  $players.set({});
+}
+
+// --- Helper: Convert Points to Time Segments ---
+function processPlayer(raw: Player): RenderablePlayer {
+  const segments: AnimationSegment[] = [];
+  
+  for(let i=0; i < raw.waypoints.length; i++) {
+    const wp = raw.waypoints[i];
+    if (i > 0) {
+      const prev = raw.waypoints[i-1];
+      segments.push({
+        start: [prev.x, prev.y],
+        end: [wp.x, wp.y],
+        startTime: wp.startTime,
+        endTime: wp.arrivalTime
+      });
+    }
+  }
+
+  return { ...raw, segments };
 }

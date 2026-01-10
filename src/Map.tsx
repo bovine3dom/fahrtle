@@ -1,7 +1,8 @@
+// ==> src/Map.tsx <==
 import { onMount, onCleanup } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $activeTrips, $routeLines } from './store'; // Import routeLines
+import { $players, submitWaypoint } from './store';
 import { getServerTime } from './time-sync';
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
@@ -12,113 +13,147 @@ export default function MapView() {
   let frameId: number;
 
   onMount(() => {
-    mapInstance = new maplibregl.Map({
-      container: mapContainer!,
-      style: 'https://tiles.openfreemap.org/styles/positron',
-      center: [0, 0],
-      zoom: 2,
-      fadeDuration: 0,
+    console.log('[Map] Component Mounted. Container Ref:', mapContainer);
+
+    if (!mapContainer) {
+      console.error('[Map] Fatal: Map container ref is missing!');
+      return;
+    }
+
+    // Check container dimensions
+    const rect = mapContainer.getBoundingClientRect();
+    console.log(`[Map] Container Dimensions: ${rect.width}x${rect.height}`);
+    if (rect.height === 0) {
+      console.warn('[Map] Warning: Container height is 0. Map may be invisible.');
+    }
+
+    try {
+      mapInstance = new maplibregl.Map({
+        container: mapContainer,
+        // Using a reliable style fallback if needed:
+        style: 'https://tiles.openfreemap.org/styles/positron', 
+        center: [0, 0],
+        zoom: 14,
+        fadeDuration: 0,
+      });
+      console.log('[Map] Instance created.');
+    } catch (err) {
+      console.error('[Map] Error creating MapLibre instance:', err);
+      return;
+    }
+
+    mapInstance.on('error', (e) => {
+      console.error('[Map] Internal Map Error:', e);
     });
 
     mapInstance.on('load', () => {
-      // --- LAYER 1: The Routes (Static Lines) ---
-      mapInstance!.addSource('routes-source', {
-        type: 'geojson',
-        data: $routeLines.get() // Initial Empty Data
-      });
+      console.log('[Map] "load" event fired. Initializing layers...');
 
+      mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance!.addLayer({
-        id: 'routes-layer',
-        type: 'line',
-        source: 'routes-source',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#888',
-          'line-width': 2,
-          'line-opacity': 0.6
-        }
+        id: 'routes-line', type: 'line', source: 'routes',
+        paint: { 'line-color': '#888', 'line-width': 2, 'line-opacity': 0.5 }
       });
 
-      // --- LAYER 2: The Vehicles (Moving Dots) ---
-      mapInstance!.addSource('vehicles-source', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      });
-
+      mapInstance!.addSource('vehicles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance!.addLayer({
-        id: 'vehicles-layer',
-        type: 'circle',
-        source: 'vehicles-source',
+        id: 'vehicles-circle', type: 'circle', source: 'vehicles',
         paint: {
           'circle-radius': 6,
           'circle-color': ['get', 'color'],
-          'circle-stroke-width': 1,
+          'circle-stroke-width': 2,
           'circle-stroke-color': '#fff'
         }
       });
 
-      // --- REACTIVITY ---
-      // When the server sends new lines, update the Route Layer immediately
-      // This is low frequency (every 10s), so we can just subscribe.
-      const unsub = $routeLines.subscribe((geoJson) => {
-         const src = mapInstance?.getSource('routes-source') as maplibregl.GeoJSONSource;
-         if (src) src.setData(geoJson);
+      mapInstance!.on('click', (e) => {
+        console.log('[Map] Clicked at', e.lngLat);
+        submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
-      // Start the High-Frequency loop for the dots
+      console.log('[Map] Starting animation loop...');
       startAnimationLoop();
-      
-      onCleanup(unsub);
     });
   });
 
   const startAnimationLoop = () => {
+    let frameCount = 0;
     const loop = () => {
       if (!mapInstance) return;
+      frameCount++;
+      
+      // Log once every ~60 frames so console isn't flooded
+      if (frameCount % 120 === 0) {
+        // console.log('[Map] Animation Heartbeat. Players:', Object.keys($players.get()).length);
+      }
 
       const now = getServerTime();
-      const trips = $activeTrips.get();
-      const features = [];
+      const allPlayers = $players.get();
+      
+      const vehicleFeatures: any[] = [];
+      const routeFeatures: any[] = [];
 
-      for (const id in trips) {
-        const trip = trips[id];
-        let pos = trip.finalPosition;
+      for (const pid in allPlayers) {
+        const player = allPlayers[pid];
+        
+        const coords = player.waypoints.map(wp => [wp.x, wp.y]);
+        if (coords.length > 1) {
+          routeFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: { color: player.color }
+          });
+        }
 
-        // Logic: Find the segment matching the current time
-        // This math is virtually free compared to 'turf.along'
-        for (const seg of trip.segments) {
-          if (now >= seg.startTime && now < seg.endTime) {
-            const t = (now - seg.startTime) / (seg.endTime - seg.startTime);
-            pos = [
-              lerp(seg.start[0], seg.end[0], t),
-              lerp(seg.start[1], seg.end[1], t)
-            ];
-            break; 
+        let currentPos = null;
+        
+        if (player.segments.length === 0) {
+           if(player.waypoints.length > 0) {
+             const p = player.waypoints[0];
+             currentPos = [p.x, p.y];
+           }
+        } else {
+          const last = player.segments[player.segments.length - 1];
+          currentPos = last.end;
+
+          for (const seg of player.segments) {
+            if (now >= seg.startTime && now < seg.endTime) {
+              const t = (now - seg.startTime) / (seg.endTime - seg.startTime);
+              currentPos = [
+                lerp(seg.start[0], seg.end[0], t),
+                lerp(seg.start[1], seg.end[1], t)
+              ];
+              break;
+            }
           }
         }
 
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: pos },
-          properties: { 
-            id: trip.id, 
-            color: trip.team === 'red' ? '#ef4444' : '#3b82f6'
-          }
-        });
+        if (currentPos) {
+          vehicleFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: currentPos },
+            properties: { id: player.id, color: player.color }
+          });
+        }
       }
 
-      const src = mapInstance.getSource('vehicles-source') as maplibregl.GeoJSONSource;
-      if (src) src.setData({ type: 'FeatureCollection', features: features as any });
+      const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
+      const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
+
+      if(vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
+      if(rSource) rSource.setData({ type: 'FeatureCollection', features: routeFeatures });
 
       frameId = requestAnimationFrame(loop);
     };
     loop();
   };
 
-  onCleanup(() => cancelAnimationFrame(frameId));
+  onCleanup(() => {
+    console.log('[Map] Cleaning up...');
+    cancelAnimationFrame(frameId);
+    mapInstance?.remove();
+  });
 
-  return <div ref={mapContainer} style={{ width: '100vw', height: '100vh' }} />;
+  // Ensure this div takes up space!
+  return <div ref={mapContainer} style={{ width: '100%', height: '100vh', background: '#e5e5e5' }} />;
 }
