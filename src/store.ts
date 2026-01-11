@@ -45,6 +45,8 @@ export const $playerTimeZone = atom<string>('Europe/Paris');
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
 export const $clock = atom(0);
+export const $previewRoute = atom<{ id: string, color: string, coordinates: [number, number][] } | null>(null);
+export const $boardMinimized = atom(false);
 
 let ws: WebSocket | null = null;
 
@@ -248,4 +250,8 @@ function processPlayer(raw: Player): RenderablePlayer {
   }
 
   return { ...raw, segments };
+}
+
+export function clearPreviewRoute() {
+  $previewRoute.set(null);
 }

@@ -1,14 +1,29 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone } from './store';
-import { Show, For } from 'solid-js';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized } from './store';
+import { Show, For, createEffect } from 'solid-js';
 import { chQuery } from './clickhouse';
-import { formatInTimeZone } from './timezone';
+import { formatInTimeZone, getTimeZoneColor } from './timezone';
 
 export default function DepartureBoard() {
     const results = useStore($departureBoardResults);
     const currentTime = useStore($clock);
 
     const stopZone = useStore($stopTimeZone);
+    const isMinimized = useStore($boardMinimized);
+
+    // Auto-unminimize when results are lost (empty) or closed
+    createEffect(() => {
+        if (!results() || results()!.length === 0) {
+            $boardMinimized.set(false);
+        }
+    });
+
+    // Auto-expand when results appear
+    createEffect(() => {
+        if (results() && results()!.length > 0) {
+            $boardMinimized.set(false);
+        }
+    });
 
     const deduplicatedResults = () => {
         const raw = results();
@@ -38,26 +53,52 @@ export default function DepartureBoard() {
         });
     };
 
-    const close = () => $departureBoardResults.set([]);
+    // Clear preview whenever the displayed results change (e.g. closing board, new station)
+    createEffect(() => {
+        results(); // Track dependency
+        clearPreviewRoute();
+    });
+
+    const close = () => {
+        $departureBoardResults.set([]);
+        $boardMinimized.set(false);
+    };
+
+    const handlePreviewClick = (row: any) => {
+        console.log(`[DepartureBoard] Preview Clicked: ${row.trip_headsign}`);
+
+        // Query ClickHouse for all stops of this trip starting from THIS departure
+        const query = `
+          SELECT stop_lat, stop_lon
+          FROM transitous_everything_stop_times_one_day_even_saner
+          WHERE "ru.source" = '${row['ru.source']}'
+            AND "ru.trip_id" = '${row['ru.trip_id']}'
+            AND sane_route_id = '${row.sane_route_id}'
+            AND departure_time >= '${row.departure_time}'
+          ORDER BY departure_time ASC
+          LIMIT 100
+        `;
+
+        chQuery(query)
+            .then(res => {
+                if (res && res.data && res.data.length > 0) {
+                    const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
+                    $previewRoute.set({
+                        id: row['ru.trip_id'],
+                        color: row.route_color ? `#${row.route_color}` : '#333',
+                        coordinates: coords as [number, number][]
+                    });
+                    console.log($previewRoute.get());
+                    // Auto-minimize when previewing
+                    $boardMinimized.set(true);
+                }
+            })
+            .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
+    };
 
     const handleTripClick = (row: any) => {
         console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
-
-        // Query ClickHouse for all stops of this trip starting from this departure
-        const query = `
-      SELECT *
-      FROM transitous_everything_stop_times_one_day_even_saner
-      WHERE "ru.source" = '${row['ru.source']}'
-        AND "ru.trip_id" = '${row['ru.trip_id']}'
-        AND sane_route_id = '${row.sane_route_id}'
-        AND departure_time >= '${row.departure_time}'
-      ORDER BY departure_time ASC
-      LIMIT 100
-    `;
-
-        chQuery(query)
-            .then(res => console.log(`[ClickHouse] Trip Stops for ${row.trip_id}:`, res))
-            .catch(err => console.error(`[ClickHouse] Trip Stops query failed:`, err));
+        // (Existing single-click logic just logs for now)
     };
 
     const handleTripDoubleClick = (row: any) => {
@@ -92,15 +133,35 @@ export default function DepartureBoard() {
             .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
     };
 
-    const formatTime = (time: string | number, showSeconds = false) => {
+    const formatClockTime = (time: string | number, showSeconds = false) => {
         if (!time) return '--:--';
         const date = new Date(time);
-        if (isNaN(date.getTime())) return '--:--';
-        return date.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: showSeconds ? '2-digit' : undefined
-        });
+        const timestamp = date.getTime();
+        if (isNaN(timestamp)) return '--:--';
+        try {
+            return formatInTimeZone(timestamp, stopZone() || 'UTC', showSeconds);
+        } catch (e) {
+            return date.toLocaleTimeString([], {
+                hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined
+            });
+        }
+    };
+
+    const formatRowTime = (timeStr: string) => {
+        if (!timeStr) return '--:--';
+        // The DB returns local "wall time" string e.g. "2023-10-10 14:00:00"
+        // We just want to extract "14:00" without any timezone logic
+        try {
+            // Check if it matches YYYY-MM-DD HH:mm:ss format roughly
+            if (timeStr.length >= 16) {
+                return timeStr.substring(11, 16);
+            }
+            // Fallback
+            const d = new Date(timeStr);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        } catch (e) {
+            return '--:--';
+        }
     };
 
     const getRouteEmoji = (type: number) => {
@@ -136,23 +197,48 @@ export default function DepartureBoard() {
 
     return (
         <Show when={results() && results()!.length > 0}>
-            <div class="departure-board-overlay" onClick={close}>
-                <div class="departure-board" onClick={(e) => e.stopPropagation()}>
+            <div
+                class="departure-board-overlay"
+                classList={{ minimized: isMinimized() }}
+                onClick={close}
+            >
+                <div
+                    class="departure-board"
+                    classList={{ minimized: isMinimized() }}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div class="board-header">
-                        <div class="header-title">Departures</div>
-                        <div class="header-clock">
-                            <span class="local-time">{formatInTimeZone(currentTime(), stopZone(), true)}</span>
-                            <span class="timezone-label">{stopZone().split('/').pop()?.replace('_', ' ')}</span>
+                        <div class="header-main">
+                            <h1>Departures</h1>
+                            <div class="stop-name" style={{ color: '#ffed02', "font-weight": "900", }}>
+                                {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
+                            </div>
                         </div>
-                        <button class="close-button" onClick={close}>Close</button>
+                        <div class="header-controls">
+                            <button
+                                class="control-btn minimize-btn"
+                                onClick={() => $boardMinimized.set(!isMinimized())}
+                                title={isMinimized() ? "Expand" : "Minimize"}
+                            >
+                                <span class="cross-line" style={{ transform: isMinimized() ? 'rotate(90deg)' : 'none' }}></span>
+                                <span class="cross-line"></span>
+                            </button>
+                            <button class="control-btn close-btn" onClick={close} title="Close Board">✕</button>
+                        </div>
+                        <div class="header-clock" style={{ background: getTimeZoneColor(stopZone()) }}>
+                            <div class="clock-time">{formatClockTime(currentTime(), true)}</div>
+                            <div class="clock-zone">{stopZone()}</div>
+                        </div>
                     </div>
-                    <div class="board-table">
+
+                    <div class="table-container">
                         <div class="table-head">
                             <div class="col-status"></div>
                             <div class="col-time">Time</div>
                             <div class="col-route">Line</div>
                             <div class="col-dest">Destination</div>
                             <div class="col-type">Type</div>
+                            <div class="col-preview"></div>
                         </div>
                         <div class="table-body">
                             <For each={deduplicatedResults()}>
@@ -183,7 +269,7 @@ export default function DepartureBoard() {
                                                 </Show>
                                             </div>
                                             <div class="col-time">
-                                                {formatTime(row.departure_time)}
+                                                {formatRowTime(row.departure_time)}
                                             </div>
                                             <div class="col-route">
                                                 <span
@@ -201,6 +287,15 @@ export default function DepartureBoard() {
                                                 <div class="route-long">{row.route_long_name}</div>
                                             </div>
                                             <div class="col-type">{getRouteEmoji(row.route_type)}</div>
+                                            <div class="col-preview">
+                                                <button
+                                                    class="preview-btn"
+                                                    onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
+                                                    title="Preview Trip Route"
+                                                >
+                                                    🔍
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 }}
@@ -245,19 +340,42 @@ export default function DepartureBoard() {
           justify-content: center;
           z-index: 1000;
           backdrop-filter: blur(2px);
+          transition: all 0.4s ease;
+        }
+
+        .departure-board-overlay.minimized {
+          background: transparent;
+          backdrop-filter: none;
+          pointer-events: none;
         }
 
         .departure-board {
-          background: #002b5c; /* Deep European Blue */
-          color: #fff;
-          width: 90%;
-          max-width: 800px;
-          border-radius: 8px;
-          border: 4px solid #001a35;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-          font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          background: #0064ab; /* Official SNCF Blue */
+          width: 90vw;
+          max-width: 1000px;
+          height: 80vh;
+          border-radius: 12px;
+          display: flex;
+          flex-direction: column;
           overflow: hidden;
+          box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+          border: 4px solid #003a79;
+          position: relative;
+          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          font-family: 'Avenir', 'Inter', -apple-system, sans-serif;
+          pointer-events: auto;
           animation: slideIn 0.3s ease-out;
+        }
+
+        .departure-board.minimized {
+          height: 64px;
+          width: 500px;
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          border-radius: 8px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+          border: 2px solid #003a79;
         }
 
         @keyframes slideIn {
@@ -266,51 +384,158 @@ export default function DepartureBoard() {
         }
 
         .board-header {
-          background: #001a35;
-          padding: 12px 20px;
+          padding: 24px 32px;
+          background: #0064ab;
+          border-bottom: 2px solid #003a79;
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          border-bottom: 2px solid #004080;
+          position: relative;
+          min-height: 120px;
+          flex-shrink: 0;
+          transition: all 0.4s ease;
         }
 
-        .header-title {
-          font-size: 1.2rem;
-          font-weight: 700;
+        .departure-board.minimized .board-header {
+          padding: 12px 20px;
+          height: 100%;
+          border-bottom: none;
+        }
+
+        .header-main h1 {
+          margin: 0;
+          font-size: 14px;
           text-transform: uppercase;
-          letter-spacing: 1px;
-          color: #ffcc00; /* Contrast yellow */
-          width: 200px;
+          letter-spacing: 2px;
+          color: rgba(255,255,255,0.6);
+          transition: all 0.3s ease;
+        }
+
+        .departure-board.minimized .header-main h1 {
+          display: none;
+        }
+
+        .departure-board.minimized .header-clock {
+          display: none;
+        }
+
+        .stop-name {
+          font-size: 32px;
+          font-weight: 800;
+          margin: 0;
+          color: #fff;
+        }
+
+        .departure-board.minimized .stop-name {
+          font-size: 1rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #ffed02;
+        }
+
+        .departure-board.minimized .board-header {
+          padding: 0;
+          min-height: 0;
+        }
+
+        .header-controls {
+          display: flex;
+          gap: 8px;
+          position: absolute;
+          top: 24px;
+          right: 32px;
+          align-items: center;
+          z-index: 10;
+        }
+
+        .departure-board.minimized .header-controls {
+          top: 50%;
+          transform: translateY(-50%);
+          right: 12px;
+        }
+
+        .control-btn {
+          background: rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: #fff;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+          position: relative;
+        }
+
+        .cross-line {
+          position: absolute;
+          width: 14px;
+          height: 2px;
+          background: #fff;
+          transition: transform 0.3s ease;
+        }
+
+        .control-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: scale(1.1);
+        }
+
+        .close-btn {
+          font-weight: bold;
         }
 
         .header-clock {
-          flex: 1;
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          padding: 8px 20px;
+          border-radius: 8px;
+          color: #fff;
           text-align: center;
-          font-family: 'Courier New', Courier, monospace;
-          font-weight: bold;
-          font-size: 1.2rem;
+          border: 1px solid rgba(255,255,255,0.2);
           display: flex;
           flex-direction: column;
           align-items: center;
-          line-height: 1.1;
+          transition: background 1.5s ease;
         }
 
-        .timezone-label {
+        .departure-board.minimized .header-clock {
+          position: absolute;
+          right: 96px;
+          left: auto;
+          top: 50%;
+          transform: translateY(-50%);
+          padding: 4px 12px;
+          flex-direction: row;
+          gap: 12px;
+          border: none;
+          border-radius: 4px;
+        }
+
+        .clock-time {
+          font-family: 'Courier New', Courier, monospace;
+          font-weight: bold;
+          font-size: 1.8rem;
+          line-height: 1;
+        }
+
+        .departure-board.minimized .clock-time {
+          font-size: 1.2rem;
+        }
+
+        .clock-zone {
           font-size: 0.7rem;
           opacity: 0.8;
           text-transform: uppercase;
           letter-spacing: 1px;
         }
 
-        .close-button {
-          background: transparent;
-          border: none;
-          color: #fff;
-          font-size: 2rem;
-          cursor: pointer;
-          line-height: 1;
-          width: 200px;
-          text-align: right;
+        .departure-board.minimized .clock-zone {
+          display: none;
         }
 
         .board-table {
@@ -318,15 +543,34 @@ export default function DepartureBoard() {
           padding: 0;
         }
 
+        .table-container {
+          flex: 1;
+          overflow-y: auto;
+          background: #0064ab;
+          transition: all 0.4s ease;
+        }
+
+        .departure-board.minimized .table-container {
+          opacity: 0;
+          height: 0;
+          pointer-events: none;
+        }
+
         .table-head {
           display: flex;
-          background: #003a7a;
-          padding: 10px 20px;
-          font-weight: 700;
+          background: #003a79;
+          padding: 12px 20px;
+          border-bottom: 2px solid #0064ab;
+        }
+
+        .table-head > div {
+          font-weight: 800;
           text-transform: uppercase;
-          font-size: 0.85rem;
-          color: #a0c4ff;
-          border-bottom: 1px solid #004a99;
+          font-size: 0.9rem;
+          color: rgba(255,255,255,0.7);
+          letter-spacing: 0.1em;
+          display: flex;
+          align-items: center;
         }
 
         .table-body {
@@ -337,20 +581,63 @@ export default function DepartureBoard() {
         .table-row {
           display: flex;
           align-items: center;
-          padding: 12px 20px;
-          border-bottom: 1px solid #003a7a;
+          padding: 16px 20px;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
           transition: background 0.2s;
         }
 
-        .table-row:hover {
-          background: #003a7a;
+        .table-row:nth-child(even) {
+          background: #003a79;
         }
 
-        .col-status { width: 30px; display: flex; align-items: center; justify-content: center; }
-        .col-time { width: 80px; }
-        .col-route { width: 100px; }
-        .col-dest { flex: 1; }
-        .col-type { width: 60px; text-align: center; }
+        .table-row:hover {
+          background: rgba(255, 255, 255, 0.1) !important;
+          box-shadow: inset 0 0 0 1px #fff;
+        }
+
+        .col-status { width: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .col-time { 
+          width: 120px; 
+          flex-shrink: 0;
+        }
+        .table-body .col-time {
+          color: #ffed02; /* SNCF Time Yellow */
+          font-weight: 900;
+          font-size: 2.2rem;
+          letter-spacing: -0.02em;
+        }
+        .col-route { width: 100px; flex-shrink: 0; }
+        .col-dest { 
+          flex: 1; 
+          color: #fff; 
+          overflow: hidden; 
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          padding-right: 20px;
+        }
+        .table-body .col-dest {
+          font-weight: 900; 
+          font-size: 1.8rem; 
+        }
+          /* add a white rounded border to the cell but not the header*/
+        .table-body .col-type { width: 80px; text-align: center; flex-shrink: 0; border: 1px solid #fff; border-radius: 4px; background: rgba(255,255,255,0.8); }
+        .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
+
+        .preview-btn {
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+          cursor: pointer;
+          color: #fff;
+          font-size: 14px;
+          padding: 2px 6px;
+          transition: all 0.2s ease;
+        }
+
+        .preview-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: scale(1.1);
+        }
 
         .table-body .col-time { 
           font-weight: 700; 

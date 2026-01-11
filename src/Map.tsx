@@ -1,8 +1,8 @@
-// ==> src/Map.tsx <==
-import { onMount, onCleanup } from 'solid-js';
+import { onMount, onCleanup, createEffect } from 'solid-js';
+import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -35,9 +35,7 @@ export default function MapView() {
       return;
     }
 
-    // Check container dimensions
     const rect = mapContainer.getBoundingClientRect();
-    console.log(`[Map] Container Dimensions: ${rect.width}x${rect.height}`);
     if (rect.height === 0) {
       console.warn('[Map] Warning: Container height is 0. Map may be invisible.');
     }
@@ -45,7 +43,6 @@ export default function MapView() {
     try {
       mapInstance = new maplibregl.Map({
         container: mapContainer,
-        // Using a reliable style fallback if needed:
         style: 'https://tiles.openfreemap.org/styles/positron',
         center: [-3.1883, 55.9533],
         zoom: 14,
@@ -80,7 +77,6 @@ export default function MapView() {
 
       mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
-      // 1. White Casing for Contrast
       mapInstance!.addLayer({
         id: 'routes-casing', type: 'line', source: 'routes',
         paint: {
@@ -91,7 +87,6 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      // 2. Main Color Track
       mapInstance!.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
         paint: {
@@ -119,6 +114,17 @@ export default function MapView() {
         paint: { 'line-color': '#ff00ff', 'line-width': 3, 'line-opacity': 0.8 }
       });
 
+      mapInstance!.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addLayer({
+        id: 'preview-route-line', type: 'line', source: 'preview-route',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 4,
+          'line-dasharray': [2, 1]
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' }
+      });
+
       let clickTimeout: any = null;
 
       mapInstance!.on('dblclick', (e) => {
@@ -126,7 +132,6 @@ export default function MapView() {
           clearTimeout(clickTimeout);
           clickTimeout = null;
         }
-        console.log('[Map] Double-clicked at', e.lngLat);
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
@@ -136,7 +141,6 @@ export default function MapView() {
         clickTimeout = setTimeout(() => {
           const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
           const neighborhood = gridDisk(h3Index, 2);
-          console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index} | Neighbors: ${neighborhood.length}`);
 
           const features = neighborhood.map(index => {
             const boundary = cellToBoundary(index);
@@ -156,7 +160,6 @@ export default function MapView() {
               features: features as any
             });
 
-            // Briefly paint: Clear after 1 second
             setTimeout(() => {
               if (mapInstance) {
                 const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
@@ -165,19 +168,14 @@ export default function MapView() {
             }, 1000);
           }
 
-          // Timezone resolution
           const stopZone = getTimeZone(e.lngLat.lat, e.lngLat.lng);
           $stopTimeZone.set(stopZone);
 
-          // Query ClickHouse for all H3 indices in the neighborhood
-          // Shift the Paris reference clock to the local stop time
           const simTime = $clock.get();
           const localDateStr = new Date(simTime).toLocaleString('en-GB', { timeZone: stopZone });
           const localDate = new Date(localDateStr);
           const hour = localDate.getHours();
           const minute = localDate.getMinutes();
-
-          console.log(`[Map] Timezone: ${stopZone} | Local Time: ${hour}:${minute}`);
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const query = `
@@ -191,31 +189,49 @@ export default function MapView() {
 
           chQuery(query)
             .then(res => {
-              console.log(`[ClickHouse] Results for neighborhood of ${h3Index}:`, res);
               if (res && res.data) {
                 $departureBoardResults.set(res.data);
+                $boardMinimized.set(false);
               }
             })
-            .catch(err => console.error(`[ClickHouse] Query failed for ${h3Index}:`, err));
+            .catch(err => console.error(`[ClickHouse] Query failed:`, err));
 
           clickTimeout = null;
         }, 300);
       });
 
-      console.log('[Map] Starting animation loop...');
       startAnimationLoop();
     });
+  });
+
+  createEffect(() => {
+    const preview = useStore($previewRoute)();
+    if (!mapInstance || !mapInstance.isStyleLoaded()) return;
+
+    const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
+    if (!source) return;
+
+    if (preview) {
+      source.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: preview.coordinates },
+        properties: { color: preview.color }
+      });
+
+      if (preview.coordinates.length > 0) {
+        const bounds = new maplibregl.LngLatBounds();
+        preview.coordinates.forEach(coord => bounds.extend(coord as [number, number]));
+        mapInstance.fitBounds(bounds, { padding: 80, duration: 1500 });
+      }
+    } else {
+      source.setData({ type: 'FeatureCollection', features: [] });
+    }
   });
 
   const startAnimationLoop = () => {
     let frameCount = 0;
     const loop = () => {
       if (!mapInstance) return;
-
-      // Log once every ~60 frames so console isn't flooded
-      if (frameCount % 120 === 0) {
-        // console.log('[Map] Animation Heartbeat. Players:', Object.keys($players.get()).length);
-      }
 
       const now = getServerTime();
       const allPlayers = $players.get();
@@ -266,12 +282,10 @@ export default function MapView() {
             properties: { id: player.id, color: player.color }
           });
 
-          // Timezone update for local player (throttle to ~1s)
           const myId = $myPlayerId.get();
           if (pid === myId && frameCount % 60 === 0) {
             const zone = getTimeZone(currentPos[1], currentPos[0]);
             if ($playerTimeZone.get() !== zone) {
-              console.log(`[Map] Local player moved to ${zone} at [${currentPos[1]}, ${currentPos[0]}]`);
               $playerTimeZone.set(zone);
             }
           }
@@ -291,11 +305,9 @@ export default function MapView() {
   };
 
   onCleanup(() => {
-    console.log('[Map] Cleaning up...');
     cancelAnimationFrame(frameId);
     mapInstance?.remove();
   });
 
-  // Ensure this div takes up space!
   return <div ref={mapContainer} style={{ width: '100%', height: '100vh', background: '#e5e5e5' }} />;
 }
