@@ -1,5 +1,10 @@
 // ==> srv/server.ts <==
-import { serve } from "bun";
+import { serve, type ServerWebSocket } from "bun";
+
+type WSData = {
+  roomId: string | null;
+  playerId: string | null;
+};
 
 type Waypoint = {
   x: number;
@@ -23,6 +28,7 @@ type Room = {
   // Game State
   state: 'JOINING' | 'COUNTDOWN' | 'RUNNING';
   countdownEnd: number | null;
+  emptySince: number | null; // For cleanup
 
   // Time State
   virtualTime: number;
@@ -30,7 +36,7 @@ type Room = {
   playbackRate: number;
 
   // Game Loop
-  loopInterval: Timer;
+  loopInterval: ReturnType<typeof setInterval>;
 };
 
 const rooms = new Map<string, Room>();
@@ -42,34 +48,30 @@ function dist(p1: { x: number, y: number }, p2: { x: number, y: number }) {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 }
 
-const server = serve({
+const server = serve<WSData>({
   port: 8080,
-  fetch(req, server) {
+  fetch(req: Request, server) {
     if (server.upgrade(req)) return;
     return new Response("WebSocket Game Server", { status: 200 });
   },
   websocket: {
-    open(ws) {
+    open(ws: ServerWebSocket<WSData>) {
       ws.data = { roomId: null, playerId: null };
     },
-    message(ws, msg) {
+    message(ws: ServerWebSocket<WSData>, msg: string | Uint8Array) {
       const message = JSON.parse(String(msg));
       const now = Date.now();
 
       // --- SYNC ---
       if (message.type === 'SYNC_REQUEST') {
-        const d = ws.data as any;
-
-        // FIX: Check message.roomId (incoming request) OR d.roomId (socket session)
+        const d = ws.data;
         const targetRoomId = message.roomId || d.roomId;
 
         let serverTime = now;
         let rate = 1.0;
 
-        // Check if the room exists
         if (targetRoomId && rooms.has(targetRoomId)) {
           const r = rooms.get(targetRoomId)!;
-          // Calculate precise virtual time at this instant
           const elapsed = now - r.lastRealTime;
           serverTime = r.virtualTime + (elapsed * r.playbackRate);
           rate = r.playbackRate;
@@ -91,23 +93,25 @@ const server = serve({
 
         let room = rooms.get(roomId);
         if (!room) {
-          // Initialize new room with a Game Loop
           room = {
             id: roomId,
             players: {},
             state: 'JOINING',
             countdownEnd: null,
+            emptySince: null,
             virtualTime: now,
             lastRealTime: now,
             playbackRate: 1.0,
-            loopInterval: setInterval(() => updateRoom(roomId), 100) // 10 ticks/sec
+            loopInterval: setInterval(() => updateRoom(roomId), 100)
           };
           rooms.set(roomId, room);
           console.log(`Created room ${roomId}`);
         }
 
+        // Room is no longer empty
+        room.emptySince = null;
+
         if (!room.players[playerId]) {
-          // Add ~50m random spread to starting position [-3.1883, 55.9533]
           const spreadMeters = 50;
           const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
           const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(55.9533 * Math.PI / 180)));
@@ -116,7 +120,6 @@ const server = serve({
             id: playerId,
             color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
-            // Initial position: Edinburgh, Scotland [-3.1883, 55.9533]
             waypoints: [{
               x: -3.1883 + lngOffset,
               y: 55.9533 + latOffset,
@@ -127,13 +130,11 @@ const server = serve({
           };
         }
 
-        const d = ws.data as any;
-        d.roomId = roomId;
-        d.playerId = playerId;
+        ws.data.roomId = roomId;
+        ws.data.playerId = playerId;
 
         ws.subscribe(roomId);
 
-        // Send Initial State
         ws.send(JSON.stringify({
           type: 'ROOM_STATE',
           state: room.state,
@@ -152,7 +153,7 @@ const server = serve({
 
       // --- TOGGLE READY ---
       if (message.type === 'TOGGLE_READY') {
-        const d = ws.data as any;
+        const d = ws.data;
         if (!d.roomId || !d.playerId) return;
         const room = rooms.get(d.roomId);
         const player = room?.players[d.playerId];
@@ -171,7 +172,7 @@ const server = serve({
 
       // --- ADD WAYPOINT ---
       if (message.type === 'ADD_WAYPOINT') {
-        const d = ws.data as any;
+        const d = ws.data;
         if (!d.roomId || !d.playerId) return;
 
         const room = rooms.get(d.roomId);
@@ -179,7 +180,6 @@ const server = serve({
         const player = room.players[d.playerId];
         if (!player) return;
 
-        // Force a clock update before math to ensure precision
         stepClock(room);
 
         const { x, y, speedFactor, arrivalTime } = message;
@@ -190,8 +190,6 @@ const server = serve({
           start = room.virtualTime;
         }
 
-        // Use explicit arrivalTime if provided (for GTFS sync), 
-        // otherwise calculate from speed/distance (for manual clicks)
         let finalArrival = arrivalTime;
         if (finalArrival === undefined) {
           const distance = dist(lastPoint, { x, y });
@@ -214,13 +212,12 @@ const server = serve({
           waypoint: newWaypoint
         }));
 
-        // Immediate update to adjust speed if this is the new slowest/fastest thing
         updateRoom(d.roomId);
       }
     },
 
-    close(ws) {
-      const d = ws.data as any;
+    close(ws: ServerWebSocket<WSData>) {
+      const d = ws.data;
       if (d.roomId && d.playerId) {
         const room = rooms.get(d.roomId);
         if (room) {
@@ -230,8 +227,8 @@ const server = serve({
           }));
 
           if (Object.keys(room.players).length === 0) {
-            clearInterval(room.loopInterval);
-            rooms.delete(d.roomId);
+            console.log(`Room ${d.roomId} is empty. Starting 1-min cleanup timer.`);
+            room.emptySince = Date.now();
           }
         }
       }
@@ -239,8 +236,6 @@ const server = serve({
   }
 });
 
-// --- GAME LOOP ---
-// Advances the virtual clock and determines global playback rate
 function stepClock(room: Room) {
   const now = Date.now();
   const elapsedReal = now - room.lastRealTime;
@@ -283,6 +278,17 @@ function updateRoom(roomId: string) {
 
   stepClock(room);
 
+  // 0. Cleanup check
+  if (room.emptySince !== null) {
+    const emptyDuration = Date.now() - room.emptySince;
+    if (emptyDuration > 60000) { // 1 Minute
+      console.log(`Killing room ${roomId} after 1 minute of emptiness.`);
+      clearInterval(room.loopInterval);
+      rooms.delete(roomId);
+      return;
+    }
+  }
+
   // Handle countdown completion
   if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
     room.state = 'RUNNING';
@@ -292,11 +298,8 @@ function updateRoom(roomId: string) {
 
   if (room.state !== 'RUNNING') return;
 
-  // 1. Find the lowest speed factor among all ACTIVELY moving players
   let minSpeed = 1.0;
-  let anyoneMoving = false;
   const activeFactors: number[] = [];
-
   const vTime = room.virtualTime;
 
   for (const pid in room.players) {
@@ -305,24 +308,18 @@ function updateRoom(roomId: string) {
     for (const wp of p.waypoints) {
       if (vTime >= wp.startTime && vTime < wp.arrivalTime) {
         currentFactor = wp.speedFactor;
-        anyoneMoving = true;
         break;
       }
     }
     activeFactors.push(currentFactor);
   }
 
-  // "The clock should tick at the speed of the smallest random speedfactor"
-  // Clamped to 1.0 minimum as per user request
   if (activeFactors.length > 0) {
     minSpeed = Math.max(1.0, Math.min(...activeFactors));
   } else {
-    // If no one is moving, revert to normal time? Or pause?
-    // Let's revert to normal time so the clock feels responsive.
     minSpeed = 1.0;
   }
 
-  // 2. If rate changed significantly, broadcast update
   if (Math.abs(room.playbackRate - minSpeed) > 0.01) {
     console.log(`[Room ${roomId}] Adjusting Global Clock: ${minSpeed}x`);
     room.playbackRate = minSpeed;
