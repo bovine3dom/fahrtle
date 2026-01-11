@@ -156,7 +156,15 @@ function App() {
                   }}
                   title="Stops at the next upcoming station and cancels remaining trip"
                 >
-                  <span>🛑</span> Get Off Next
+                  <span>🛑</span> Get Off At
+                  {(() => {
+                    // Find next waypoint
+                    const nextWp = players()[myId()!].waypoints.find((wp: any) => wp.arrivalTime > time());
+                    if (nextWp && nextWp.stopName) {
+                      return " " + nextWp.stopName;
+                    }
+                    return null;
+                  })()}
                 </button>
               </Show>
               {roomState() !== 'RUNNING' && (
