@@ -19,7 +19,7 @@ export default function DepartureBoard() {
         const seen = new Set<string>();
 
         // Convert current simulation time to local STOP wall-time
-        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+        const localDateStr = new Date(now).toLocaleString('en-GB', { timeZone: zone });
         const localDate = new Date(localDateStr);
         const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
 
@@ -65,7 +65,7 @@ export default function DepartureBoard() {
 
         // Fetch same data as single click but process it as points
         const query = `
-      SELECT stop_lat, stop_lon, departure_time
+      SELECT stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
       WHERE "ru.source" = '${row['ru.source']}'
         AND "ru.trip_id" = '${row['ru.trip_id']}'
@@ -78,10 +78,11 @@ export default function DepartureBoard() {
         chQuery(query)
             .then(res => {
                 if (res && res.data && res.data.length > 0) {
-                    const points = res.data.map((r: any) => ({
+                    const points = res.data.map((r: any, idx: number) => ({
                         lng: r.stop_lon,
                         lat: r.stop_lat,
-                        time: new Date(r.departure_time).getTime()
+                        // Use departure_time for the first stop, arrival_time for subsequent ones
+                        time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime()
                     }));
                     submitWaypointsBatch(points);
                     console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);
