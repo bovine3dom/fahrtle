@@ -4,12 +4,24 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { $players, submitWaypoint } from './store';
 import { getServerTime } from './time-sync';
+import { playerPositions } from './playerPositions';
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
+let mapInstance: maplibregl.Map | undefined;
+
+export function flyToPlayer(playerId: string) {
+  const pos = playerPositions[playerId];
+  if (pos && mapInstance) {
+    mapInstance.flyTo({
+      center: pos,
+      zoom: mapInstance.getZoom(),
+      essential: true
+    });
+  }
+}
 
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
-  let mapInstance: maplibregl.Map | undefined;
   let frameId: number;
 
   onMount(() => {
@@ -31,7 +43,7 @@ export default function MapView() {
       mapInstance = new maplibregl.Map({
         container: mapContainer,
         // Using a reliable style fallback if needed:
-        style: 'https://tiles.openfreemap.org/styles/positron', 
+        style: 'https://tiles.openfreemap.org/styles/positron',
         center: [0, 0],
         zoom: 14,
         fadeDuration: 0,
@@ -81,7 +93,7 @@ export default function MapView() {
     const loop = () => {
       if (!mapInstance) return;
       frameCount++;
-      
+
       // Log once every ~60 frames so console isn't flooded
       if (frameCount % 120 === 0) {
         // console.log('[Map] Animation Heartbeat. Players:', Object.keys($players.get()).length);
@@ -89,13 +101,13 @@ export default function MapView() {
 
       const now = getServerTime();
       const allPlayers = $players.get();
-      
+
       const vehicleFeatures: any[] = [];
       const routeFeatures: any[] = [];
 
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
-        
+
         const coords = player.waypoints.map(wp => [wp.x, wp.y]);
         if (coords.length > 1) {
           routeFeatures.push({
@@ -106,12 +118,12 @@ export default function MapView() {
         }
 
         let currentPos = null;
-        
+
         if (player.segments.length === 0) {
-           if(player.waypoints.length > 0) {
-             const p = player.waypoints[0];
-             currentPos = [p.x, p.y];
-           }
+          if (player.waypoints.length > 0) {
+            const p = player.waypoints[0];
+            currentPos = [p.x, p.y];
+          }
         } else {
           const last = player.segments[player.segments.length - 1];
           currentPos = last.end;
@@ -129,6 +141,7 @@ export default function MapView() {
         }
 
         if (currentPos) {
+          playerPositions[pid] = currentPos as [number, number];
           vehicleFeatures.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: currentPos },
@@ -140,8 +153,8 @@ export default function MapView() {
       const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
       const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
 
-      if(vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
-      if(rSource) rSource.setData({ type: 'FeatureCollection', features: routeFeatures });
+      if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
+      if (rSource) rSource.setData({ type: 'FeatureCollection', features: routeFeatures });
 
       frameId = requestAnimationFrame(loop);
     };
