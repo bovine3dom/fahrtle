@@ -1,5 +1,6 @@
 import { onMount, onCleanup } from 'solid-js';
 import { getServerTime } from './time-sync';
+import { $clock } from './store';
 
 export default function Clock() {
   let spanRef: HTMLSpanElement | undefined;
@@ -10,7 +11,7 @@ export default function Clock() {
     const update = () => {
       // 1. Get the synced time
       const now = getServerTime();
-      
+
       // 2. Format to HH:MM:SS (Standard 24h format)
       // formatting a date object is slightly expensive, 
       // but doing it once per frame is acceptable on Android 8+
@@ -26,6 +27,7 @@ export default function Clock() {
       // This ensures we only trigger a browser 'paint' once per second
       // even though we check 60 times a second.
       if (spanRef && timeString !== lastSecondString) {
+        $clock.set(now);
         spanRef.innerText = timeString;
         lastSecondString = timeString;
       }

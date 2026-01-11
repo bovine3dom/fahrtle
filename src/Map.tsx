@@ -2,7 +2,7 @@
 import { onMount, onCleanup } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -125,11 +125,17 @@ export default function MapView() {
         }
 
         // Query ClickHouse for all H3 indices in the neighborhood
+        // Filter by current game clock (Hour and Minute)
+        const d = new Date($clock.get());
+        const hour = d.getHours();
+        const minute = d.getMinutes();
+
         const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
         const query = `
           SELECT * 
           FROM transitous_everything_stop_times_one_day_even_saner 
           WHERE h3 IN (${h3Conditions})
+            AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
           ORDER by departure_time asc
           LIMIT 10
         `;

@@ -1,18 +1,31 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock } from './store';
 import { Show, For } from 'solid-js';
 import { chQuery } from './clickhouse';
 
 export default function DepartureBoard() {
     const results = useStore($departureBoardResults);
+    const currentTime = useStore($clock);
 
     const deduplicatedResults = () => {
         const raw = results();
         if (!raw) return [];
 
+        const now = currentTime();
         const seen = new Set<string>();
+
+        // Convert current time to seconds since midnight for day-independent comparison
+        const nowDate = new Date(now);
+        const nowSeconds = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
+
         return raw.filter(row => {
-            // Create a unique key for this departure
+            // 1. Filter out past departures (Time of day only)
+            const depDate = new Date(row.departure_time);
+            const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+
+            if (depSeconds < nowSeconds) return false;
+
+            // 2. Deduplicate
             const key = `${row.departure_time}|${row.route_short_name}|${row.trip_headsign}|${row.stop_name}`;
             if (seen.has(key)) return false;
             seen.add(key);

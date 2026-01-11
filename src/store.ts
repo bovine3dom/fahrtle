@@ -44,6 +44,7 @@ export const $globalRate = atom(1.0);
 export const $departureBoardResults = atom<any[] | null>(null);
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
+export const $clock = atom(0);
 
 let ws: WebSocket | null = null;
 
@@ -157,7 +158,9 @@ export function submitWaypoint(lat: number, lng: number) {
   // 3. Calculate Speed Factor
   // The goal is to make legs take TARGET_DURATION_MS, but NEVER slower than 1x base speed.
   let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
-  if (factor < 1.0) factor = 1.0;
+
+  // Safety Clamp: Don't let time stop completely on double-clicks
+  if (factor < 0.05) factor = 0.05;
 
   console.log(`[Store] Trip: ${(dist * 111).toFixed(2)}km. Factor: ${factor.toFixed(3)}x`);
 
