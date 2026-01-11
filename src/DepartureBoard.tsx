@@ -82,10 +82,15 @@ export default function DepartureBoard() {
             .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
     };
 
-    const formatTime = (dateTimeStr: string) => {
-        if (!dateTimeStr) return '--:--';
-        const date = new Date(dateTimeStr);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formatTime = (time: string | number, showSeconds = false) => {
+        if (!time) return '--:--';
+        const date = new Date(time);
+        if (isNaN(date.getTime())) return '--:--';
+        return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: showSeconds ? '2-digit' : undefined
+        });
     };
 
     const getRouteEmoji = (type: number) => {
@@ -125,10 +130,12 @@ export default function DepartureBoard() {
                 <div class="departure-board" onClick={(e) => e.stopPropagation()}>
                     <div class="board-header">
                         <span class="header-title">Departures</span>
+                        <div class="header-clock">{formatTime(currentTime(), true)}</div>
                         <button class="close-button" onClick={close}>×</button>
                     </div>
                     <div class="board-table">
                         <div class="table-head">
+                            <div class="col-status"></div>
                             <div class="col-time">Time</div>
                             <div class="col-route">Line</div>
                             <div class="col-dest">Destination</div>
@@ -136,32 +143,51 @@ export default function DepartureBoard() {
                         </div>
                         <div class="table-body">
                             <For each={deduplicatedResults()}>
-                                {(row) => (
-                                    <div
-                                        class="table-row"
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => handleTripClick(row)}
-                                        onDblClick={() => handleTripDoubleClick(row)}
-                                    >
-                                        <div class="col-time">{formatTime(row.departure_time)}</div>
-                                        <div class="col-route">
-                                            <span
-                                                class="route-pill"
-                                                style={{
-                                                    "background-color": row.route_color ? `#${row.route_color}` : '#333',
-                                                    "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
-                                                }}
-                                            >
-                                                {row.route_short_name || '??'}
-                                            </span>
+                                {(row) => {
+                                    const depDate = new Date(row.departure_time);
+                                    const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+
+                                    const isImminent = () => {
+                                        const now = currentTime();
+                                        const nowSeconds = new Date(now).getHours() * 3600 + new Date(now).getMinutes() * 60 + new Date(now).getSeconds();
+                                        const diff = depSeconds - nowSeconds;
+                                        return diff > 0 && diff <= 120;
+                                    };
+
+                                    return (
+                                        <div
+                                            class="table-row"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => handleTripClick(row)}
+                                            onDblClick={() => handleTripDoubleClick(row)}
+                                        >
+                                            <div class="col-status">
+                                                <Show when={isImminent()}>
+                                                    <span class="status-dot imminent"></span>
+                                                </Show>
+                                            </div>
+                                            <div class="col-time">
+                                                {formatTime(row.departure_time)}
+                                            </div>
+                                            <div class="col-route">
+                                                <span
+                                                    class="route-pill"
+                                                    style={{
+                                                        "background-color": row.route_color ? `#${row.route_color}` : '#333',
+                                                        "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
+                                                    }}
+                                                >
+                                                    {row.route_short_name || '??'}
+                                                </span>
+                                            </div>
+                                            <div class="col-dest">
+                                                <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
+                                                <div class="route-long">{row.route_long_name}</div>
+                                            </div>
+                                            <div class="col-type">{getRouteEmoji(row.route_type)}</div>
                                         </div>
-                                        <div class="col-dest">
-                                            <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
-                                            <div class="route-long">{row.route_long_name}</div>
-                                        </div>
-                                        <div class="col-type">{getRouteEmoji(row.route_type)}</div>
-                                    </div>
-                                )}
+                                    );
+                                }}
                             </For>
                         </div>
                     </div>
@@ -169,6 +195,28 @@ export default function DepartureBoard() {
             </div>
 
             <style>{`
+        /* Imminent Departure Indicator */
+        .status-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          margin-right: 8px;
+          vertical-align: middle;
+        }
+
+        .status-dot.imminent {
+          background-color: #ff9800; /* Orange */
+          box-shadow: 0 0 8px #e0b0ff; /* Mauve glow */
+          animation: pulse-orange-mauve 1.5s infinite;
+        }
+
+        @keyframes pulse-orange-mauve {
+          0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7), 0 0 0 0 rgba(224, 176, 255, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0), 0 0 15px 10px rgba(224, 176, 255, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(224, 176, 255, 0); }
+        }
+
         .departure-board-overlay {
           position: fixed;
           top: 0;
@@ -216,6 +264,17 @@ export default function DepartureBoard() {
           text-transform: uppercase;
           letter-spacing: 1px;
           color: #ffcc00; /* Contrast yellow */
+          width: 200px;
+        }
+
+        .header-clock {
+          flex: 1;
+          text-align: center;
+          font-size: 1.5rem;
+          font-weight: 800;
+          color: #fff;
+          font-family: 'Courier New', Courier, monospace;
+          letter-spacing: 2px;
         }
 
         .close-button {
@@ -225,6 +284,8 @@ export default function DepartureBoard() {
           font-size: 2rem;
           cursor: pointer;
           line-height: 1;
+          width: 200px;
+          text-align: right;
         }
 
         .board-table {
@@ -260,6 +321,7 @@ export default function DepartureBoard() {
           background: #003a7a;
         }
 
+        .col-status { width: 30px; display: flex; align-items: center; justify-content: center; }
         .col-time { width: 80px; }
         .col-route { width: 100px; }
         .col-dest { flex: 1; }
