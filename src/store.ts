@@ -4,6 +4,26 @@ import { syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 
 // --- Configuration ---
+// --- Debug Helper ---
+// Expose state getter on window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).getGameState = () => ({
+    connected: $connected.get(),
+    currentRoom: $currentRoom.get(),
+    myPlayerId: $myPlayerId.get(),
+    players: $players.get(),
+    globalRate: $globalRate.get(),
+    roomState: $roomState.get(),
+    countdownEnd: $countdownEnd.get(),
+    clock: $clock.get(),
+    playerSpeeds: $playerSpeeds.get(),
+    departureBoardResults: $departureBoardResults.get(),
+    stopTimeZone: $stopTimeZone.get(),
+    playerTimeZone: $playerTimeZone.get(),
+    previewRoute: $previewRoute.get(),
+    boardMinimized: $boardMinimized.get(),
+  });
+}
 // (No global client-side constants needed for movement math anymore)
 
 // --- Types ---
