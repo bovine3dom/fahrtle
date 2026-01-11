@@ -11,6 +11,7 @@
   "dependencies": {
     "@nanostores/solid": "^1.1.1",
     "@turf/turf": "^7.3.1",
+    "h3-js": "^4.4.0",
     "maplibre-gl": "^5.15.0",
     "nanostores": "^1.1.0",
     "solid-js": "^1.9.10",

@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { $players, submitWaypoint } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
+import { latLngToCell, cellToBoundary } from 'h3-js';
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
 let mapInstance: maplibregl.Map | undefined;
@@ -79,9 +80,42 @@ export default function MapView() {
         }
       });
 
+      mapInstance!.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addLayer({
+        id: 'h3-cell-line', type: 'line', source: 'h3-cell',
+        paint: { 'line-color': '#ff00ff', 'line-width': 3, 'line-opacity': 0.8 }
+      });
+
       mapInstance!.on('dblclick', (e) => {
         console.log('[Map] Double-clicked at', e.lngLat);
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
+      });
+
+      mapInstance!.on('click', (e) => {
+        const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
+        console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index}`);
+
+        const boundary = cellToBoundary(h3Index);
+        // h3-js returns [lat, lng], but GeoJSON needs [lng, lat]
+        const coords = boundary.map(p => [p[1], p[0]]);
+        coords.push(coords[0]); // Close the polygon
+
+        const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
+        if (source) {
+          source.setData({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: {}
+          });
+
+          // Briefly paint: Clear after 1 second
+          setTimeout(() => {
+            if (mapInstance) {
+              const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
+              if (s) s.setData({ type: 'FeatureCollection', features: [] });
+            }
+          }, 1000);
+        }
       });
 
       console.log('[Map] Starting animation loop...');
