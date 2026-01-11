@@ -6,6 +6,7 @@ import { generatePilotName } from './names';
 export default function Lobby() {
   const [room, setRoom] = createSignal("room-1");
   const [user, setUser] = createSignal(generatePilotName());
+  const [color, setColor] = createSignal('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'));
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
@@ -21,7 +22,7 @@ export default function Lobby() {
       const url = new URL(window.location.href);
       url.searchParams.set('room', room());
       window.history.replaceState(null, '', url);
-      connectAndJoin(room(), user());
+      connectAndJoin(room(), user(), color());
     }
   };
 
@@ -72,10 +73,27 @@ export default function Lobby() {
 
         <div>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Callsign</label>
-          <input
-            value={user()} onInput={e => setUser(e.currentTarget.value)}
-            style={{ padding: '8px', 'border-radius': '4px', border: 'none', width: '210px' }}
-          />
+          <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
+            <input
+              value={user()} onInput={e => setUser(e.currentTarget.value)}
+              style={{ padding: '8px', 'border-radius': '4px', border: 'none', width: '160px', flex: '1' }}
+            />
+            <div style={{ position: 'relative', width: '16px', height: '16px' }}>
+              <input
+                type="color"
+                value={color()}
+                onInput={e => setColor(e.currentTarget.value)}
+                style={{
+                  position: 'absolute', opacity: 0, width: '100%', height: '100%',
+                  cursor: 'pointer', 'z-index': 2
+                }}
+              />
+              <div style={{
+                width: '16px', height: '16px', 'border-radius': '50%', background: color(),
+                border: '2px solid white', 'box-shadow': '0 0 5px rgba(0,0,0,0.3)', 'flex-shrink': 0
+              }} />
+            </div>
+          </div>
         </div>
 
         <button type="submit" style={{

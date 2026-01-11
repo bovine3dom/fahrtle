@@ -86,7 +86,7 @@ const server = serve({
 
       // --- JOIN ---
       if (message.type === 'JOIN_ROOM') {
-        const { roomId, playerId } = message;
+        const { roomId, playerId, color } = message;
 
         let room = rooms.get(roomId);
         if (!room) {
@@ -108,7 +108,7 @@ const server = serve({
         if (!room.players[playerId]) {
           room.players[playerId] = {
             id: playerId,
-            color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+            color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
             // Initial position: Edinburgh, Scotland [-3.1883, 55.9533]
             waypoints: [{

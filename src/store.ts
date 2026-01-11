@@ -48,7 +48,7 @@ let ws: WebSocket | null = null;
 
 // --- Actions ---
 
-export function connectAndJoin(roomId: string, playerId: string) {
+export function connectAndJoin(roomId: string, playerId: string, color?: string) {
   if (ws) ws.close();
 
   ws = new WebSocket('ws://localhost:8080');
@@ -63,7 +63,7 @@ export function connectAndJoin(roomId: string, playerId: string) {
       roomId: roomId
     }));
 
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId }));
+    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId, color }));
 
     $currentRoom.set(roomId);
     $myPlayerId.set(playerId);
