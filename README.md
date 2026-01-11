@@ -1,28 +1,21 @@
-## Usage
+## Development
 
-```bash
-$ npm install # or pnpm install or yarn install
+```
+barn run dev
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+```
+ls srv/* | entr -r barn run srv/server.ts
+```
 
-## Available Scripts
+## Todo
 
-In the project directory, you can run:
+- walk /isocalc/ from e.g. st pancras to find every accessible h3 in europe and then paint that on the map somehow
 
-### `npm run dev`
+- pick random h3s within that area as start/stops
 
-Runs the app in the development mode.<br>
-Open [http://localhost:5173](http://localhost:5173) to view it in the browser.
+- think about different game modes other than just race: tag? relay? 
 
-### `npm run build`
+- trophies? most modes of transport? highest max speed? most departures? opposites of that?
 
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
-
-## Deployment
-
-Learn more about deploying your application with the [documentations](https://vite.dev/guide/static-deploy.html)
+- improve lobby screen

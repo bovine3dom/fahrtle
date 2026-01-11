@@ -197,6 +197,7 @@ export default function MapView() {
             ORDER by departure_time asc
             LIMIT 40
           `;
+          // ideally would check if there is only one stop on the service (i.e. ours) and exclude them
 
           chQuery(query)
             .then(res => {
