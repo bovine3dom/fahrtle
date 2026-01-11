@@ -172,6 +172,35 @@ export function submitWaypoint(lat: number, lng: number) {
   }));
 }
 
+export function submitWaypointsBatch(points: { lng: number, lat: number }[]) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  const myId = $myPlayerId.get();
+  const allPlayers = $players.get();
+  const player = myId ? allPlayers[myId] : null;
+
+  if (!player || points.length === 0) return;
+
+  let lastX = player.waypoints[player.waypoints.length - 1].x;
+  let lastY = player.waypoints[player.waypoints.length - 1].y;
+
+  for (const p of points) {
+    const dist = Math.sqrt(Math.pow(p.lng - lastX, 2) + Math.pow(p.lat - lastY, 2));
+    let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
+    if (factor < 0.05) factor = 0.05;
+
+    ws.send(JSON.stringify({
+      type: 'ADD_WAYPOINT',
+      x: p.lng,
+      y: p.lat,
+      speedFactor: factor
+    }));
+
+    lastX = p.lng;
+    lastY = p.lat;
+  }
+}
+
 export function leaveRoom() {
   if (ws) ws.close();
   $currentRoom.set(null);

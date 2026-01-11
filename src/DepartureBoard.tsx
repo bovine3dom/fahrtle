@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults } from './store';
+import { $departureBoardResults, submitWaypointsBatch } from './store';
 import { Show, For } from 'solid-js';
+import { chQuery } from './clickhouse';
 
 export default function DepartureBoard() {
     const results = useStore($departureBoardResults);
@@ -20,6 +21,53 @@ export default function DepartureBoard() {
     };
 
     const close = () => $departureBoardResults.set(null);
+
+    const handleTripClick = (row: any) => {
+        console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
+
+        // Query ClickHouse for all stops of this trip starting from this departure
+        const query = `
+      SELECT *
+      FROM transitous_everything_stop_times_one_day_even_saner
+      WHERE "ru.source" = '${row['ru.source']}'
+        AND "ru.trip_id" = '${row['ru.trip_id']}'
+        AND sane_route_id = '${row.sane_route_id}'
+        AND departure_time >= '${row.departure_time}'
+      ORDER BY departure_time ASC
+      LIMIT 100
+    `;
+
+        chQuery(query)
+            .then(res => console.log(`[ClickHouse] Trip Stops for ${row.trip_id}:`, res))
+            .catch(err => console.error(`[ClickHouse] Trip Stops query failed:`, err));
+    };
+
+    const handleTripDoubleClick = (row: any) => {
+        console.log(`[DepartureBoard] Trip Double-Clicked! Following: ${row.trip_headsign}`);
+
+        // Fetch same data as single click but process it as points
+        const query = `
+      SELECT stop_lat, stop_lon, departure_time
+      FROM transitous_everything_stop_times_one_day_even_saner
+      WHERE "ru.source" = '${row['ru.source']}'
+        AND "ru.trip_id" = '${row['ru.trip_id']}'
+        AND sane_route_id = '${row.sane_route_id}'
+        AND departure_time >= '${row.departure_time}'
+      ORDER BY departure_time ASC
+      LIMIT 100
+    `;
+
+        chQuery(query)
+            .then(res => {
+                if (res && res.data && res.data.length > 0) {
+                    const points = res.data.map((r: any) => ({ lng: r.stop_lon, lat: r.stop_lat }));
+                    submitWaypointsBatch(points);
+                    console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);
+                    close(); // Auto-close on successful follow
+                }
+            })
+            .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
+    };
 
     const formatTime = (dateTimeStr: string) => {
         if (!dateTimeStr) return '--:--';
@@ -76,7 +124,12 @@ export default function DepartureBoard() {
                         <div class="table-body">
                             <For each={deduplicatedResults()}>
                                 {(row) => (
-                                    <div class="table-row">
+                                    <div
+                                        class="table-row"
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => handleTripClick(row)}
+                                        onDblClick={() => handleTripDoubleClick(row)}
+                                    >
                                         <div class="col-time">{formatTime(row.departure_time)}</div>
                                         <div class="col-route">
                                             <span
