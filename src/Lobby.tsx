@@ -1,10 +1,11 @@
 // ==> src/Lobby.tsx <==
 import { createSignal, onMount } from 'solid-js';
 import { connectAndJoin } from './store';
+import { generatePilotName } from './names';
 
 export default function Lobby() {
   const [room, setRoom] = createSignal("room-1");
-  const [user, setUser] = createSignal("Pilot-" + Math.floor(Math.random() * 100));
+  const [user, setUser] = createSignal(generatePilotName());
 
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
@@ -26,8 +27,8 @@ export default function Lobby() {
 
   // Generates a random alphanumeric string (Base36)
   const generateRandomRoom = () => {
-    const randomId = Math.random().toString(36).substring(2, 10) + 
-                     Math.random().toString(36).substring(2, 10);
+    const randomId = Math.random().toString(36).substring(2, 10) +
+      Math.random().toString(36).substring(2, 10);
     setRoom(randomId);
   };
 
@@ -44,19 +45,19 @@ export default function Lobby() {
 
         <div>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
-          
+
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
-              value={room()} 
+              value={room()}
               onInput={e => setRoom(e.currentTarget.value)}
               placeholder="Enter Room ID"
-              style={{ 
-                padding: '8px', 'border-radius': '4px', border: 'none', 
-                width: '160px', flex: '1' 
+              style={{
+                padding: '8px', 'border-radius': '4px', border: 'none',
+                width: '160px', flex: '1'
               }}
             />
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={generateRandomRoom}
               title="Generate Random ID"
               style={{
