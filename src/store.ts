@@ -172,7 +172,7 @@ export function submitWaypoint(lat: number, lng: number) {
   }));
 }
 
-export function submitWaypointsBatch(points: { lng: number, lat: number }[]) {
+export function submitWaypointsBatch(points: { lng: number, lat: number, time: number }[]) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   const myId = $myPlayerId.get();
@@ -181,23 +181,46 @@ export function submitWaypointsBatch(points: { lng: number, lat: number }[]) {
 
   if (!player || points.length === 0) return;
 
+  // 1. Calculate relative timings and distances
   let lastX = player.waypoints[player.waypoints.length - 1].x;
   let lastY = player.waypoints[player.waypoints.length - 1].y;
+  let lastTime = $clock.get(); // Start from current game time
+
+  const legs = [];
+  let totalVirtualTime = 0;
 
   for (const p of points) {
-    const dist = Math.sqrt(Math.pow(p.lng - lastX, 2) + Math.pow(p.lat - lastY, 2));
-    let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
-    if (factor < 1.0) factor = 1.0;
+    const d = Math.sqrt(Math.pow(p.lng - lastX, 2) + Math.pow(p.lat - lastY, 2));
+    // Use the GTFS delta if possible, else a minimum 1s to avoid div/0
+    const delta = Math.max(1000, p.time - lastTime);
 
-    ws.send(JSON.stringify({
-      type: 'ADD_WAYPOINT',
-      x: p.lng,
-      y: p.lat,
-      speedFactor: factor
-    }));
+    legs.push({ x: p.lng, y: p.lat, dist: d, delta });
+    totalVirtualTime += delta;
 
     lastX = p.lng;
     lastY = p.lat;
+    lastTime = p.time;
+  }
+
+  // 2. Solve for factor: VirtualDuration / factor = 30 seconds
+  const targetRealTime = 30000;
+  let M = totalVirtualTime / targetRealTime;
+  if (M < 1.0) M = 1.0; // Respect 1x floor for realism
+
+  console.log(`[Store] Trip: ${(totalVirtualTime / 60000).toFixed(1)} virtual minutes. Compressing with ${M.toFixed(2)}x rate to hit 30s real-time.`);
+
+  // 3. Send waypoints with explicit arrival times
+  let currentTime = $clock.get();
+  for (const l of legs) {
+    currentTime += l.delta; // Advance our target clock by the GTFS delta
+
+    ws.send(JSON.stringify({
+      type: 'ADD_WAYPOINT',
+      x: l.x,
+      y: l.y,
+      arrivalTime: currentTime,
+      speedFactor: M
+    }));
   }
 }
 

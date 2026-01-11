@@ -182,28 +182,27 @@ const server = serve({
         // Force a clock update before math to ensure precision
         stepClock(room);
 
-        const { x, y, speedFactor } = message;
+        const { x, y, speedFactor, arrivalTime } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
-        // Logic: When does this segment start?
-        // If last point arrived in the past, we start NOW (Virtual Time).
-        // If last point arrives in future, we queue it after that.
         let start = lastPoint.arrivalTime;
         if (start < room.virtualTime) {
           start = room.virtualTime;
         }
 
-        const distance = dist(lastPoint, { x, y });
-
-        // Waypoint Duration is derived from its specific speed factor
-        // Note: This determines "Virtual Duration". 
-        // Actual wall-clock time depends on the Room's global Playback Rate.
-        const duration = distance / (BASE_SPEED * speedFactor);
+        // Use explicit arrivalTime if provided (for GTFS sync), 
+        // otherwise calculate from speed/distance (for manual clicks)
+        let finalArrival = arrivalTime;
+        if (finalArrival === undefined) {
+          const distance = dist(lastPoint, { x, y });
+          const duration = distance / (BASE_SPEED * speedFactor);
+          finalArrival = start + duration;
+        }
 
         const newWaypoint: Waypoint = {
           x, y,
           startTime: start,
-          arrivalTime: start + duration,
+          arrivalTime: finalArrival,
           speedFactor: speedFactor
         };
 

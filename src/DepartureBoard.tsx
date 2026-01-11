@@ -73,7 +73,11 @@ export default function DepartureBoard() {
         chQuery(query)
             .then(res => {
                 if (res && res.data && res.data.length > 0) {
-                    const points = res.data.map((r: any) => ({ lng: r.stop_lon, lat: r.stop_lat }));
+                    const points = res.data.map((r: any) => ({
+                        lng: r.stop_lon,
+                        lat: r.stop_lat,
+                        time: new Date(r.departure_time).getTime()
+                    }));
                     submitWaypointsBatch(points);
                     console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);
                     close(); // Auto-close on successful follow
