@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -110,7 +110,7 @@ function App() {
                           'overflow': 'hidden',
                           'text-overflow': 'ellipsis',
                         }}>
-                          {p.id} {p.id === myId() ? '(You)' : ''}
+                          {p.id} {p.id === myId() ? '(You)' : ''} {(p.desiredRate || 1) > 1 ? '💤' : ''}
                         </div>
                         {(() => {
                           // Find next waypoint
@@ -207,6 +207,28 @@ function App() {
               >
                 {leaveConfirm() ? 'Click again to confirm' : 'Leave Room'}
               </button>
+
+              {/* Snooze Button */}
+              {roomState() === 'RUNNING' && (() => {
+                const me = players()[myId()!];
+                const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
+                return (
+                  <button
+                    onClick={() => toggleSnooze()}
+                    style={{
+                      width: '100%', padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
+                      color: isSnoozing ? 'white' : '#475569',
+                      border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                      'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                      'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                    }}
+                    title="Request 500x speed simulation"
+                  >
+                    <span>{isSnoozing ? '⏩' : '💤'}</span> {isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
+                  </button>
+                );
+              })()}
+
               <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
                 {roomState() === 'RUNNING' ? 'Double click to set waypoint. Single click to query H3.' : 'Waiting for game to start...'}
               </div>

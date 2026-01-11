@@ -20,6 +20,7 @@ type Player = {
   color: string;
   isReady: boolean;
   waypoints: Waypoint[];
+  desiredRate: number; // 1.0 or 500.0
 };
 
 type Room = {
@@ -128,7 +129,8 @@ const server = serve<WSData>({
               startTime: 0,
               arrivalTime: 0,
               speedFactor: 1
-            }]
+            }],
+            desiredRate: 1.0,
           };
         }
 
@@ -170,6 +172,26 @@ const server = serve<WSData>({
         }));
 
         checkCountdown(room);
+      }
+
+      // --- SNOOZE ---
+      if (message.type === 'TOGGLE_SNOOZE') {
+        const d = ws.data;
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room) return;
+        const player = room.players[d.playerId];
+        if (player) {
+          // Toggle between 1x and 500x
+          player.desiredRate = player.desiredRate > 1.0 ? 1.0 : 500.0;
+          updateRoom(d.roomId); // Immediate update
+
+          // Broadcast player update so UI shows snooze state
+          server.publish(d.roomId, JSON.stringify({
+            type: 'PLAYER_JOINED',
+            player: player
+          }));
+        }
       }
 
       // --- ADD WAYPOINT ---
@@ -341,10 +363,12 @@ function updateRoom(roomId: string) {
 
   for (const pid in room.players) {
     const p = room.players[pid];
-    let currentFactor = 1.0;
+    let currentFactor = p.desiredRate || 1.0;
+
     for (const wp of p.waypoints) {
       if (vTime >= wp.startTime && vTime < wp.arrivalTime) {
-        currentFactor = wp.speedFactor;
+        // Effective speed is max of trip requirement vs desire
+        currentFactor = Math.max(wp.speedFactor, p.desiredRate || 1.0);
         break;
       }
     }

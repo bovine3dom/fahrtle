@@ -21,6 +21,8 @@ export type Player = {
   color: string;
   isReady: boolean;
   waypoints: Waypoint[];
+  renderableSegments?: AnimationSegment[]; // Client-side computed
+  desiredRate?: number;
 };
 
 export type AnimationSegment = {
@@ -234,6 +236,11 @@ export function leaveRoom() {
 
 export function toggleReady() {
   ws?.send(JSON.stringify({ type: 'TOGGLE_READY' }));
+}
+
+export function toggleSnooze() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'TOGGLE_SNOOZE' }));
 }
 
 export function cancelNavigation() {
