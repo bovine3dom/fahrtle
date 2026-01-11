@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized } from './store';
-import { Show, For, createEffect } from 'solid-js';
+import { Show, For, createEffect, createSignal } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor } from './timezone';
 
@@ -10,6 +10,7 @@ export default function DepartureBoard() {
 
     const stopZone = useStore($stopTimeZone);
     const isMinimized = useStore($boardMinimized);
+    const [filterType, setFilterType] = createSignal<string | null>(null);
 
     // Auto-unminimize when results are lost (empty) or closed
     createEffect(() => {
@@ -62,6 +63,7 @@ export default function DepartureBoard() {
     const close = () => {
         $departureBoardResults.set([]);
         $boardMinimized.set(false);
+        setFilterType(null);
     };
 
     const handlePreviewClick = (row: any) => {
@@ -232,6 +234,29 @@ export default function DepartureBoard() {
                         </div>
                     </div>
 
+                    {/* Type Filter Toolbar */}
+                    <div style={{ padding: '0 20px', 'background': '#003a79', display: 'flex', gap: '8px', 'overflow-x': 'auto', 'padding-bottom': '8px' }}>
+                        <For each={[...new Set(deduplicatedResults().map(r => getRouteEmoji(r.route_type)))]}>
+                            {(emoji) => (
+                                <button
+                                    onClick={() => setFilterType(filterType() === emoji ? null : emoji)}
+                                    style={{
+                                        background: filterType() === emoji ? '#ffed02' : 'rgba(255,255,255,0.1)',
+                                        color: filterType() === emoji ? '#000' : '#fff',
+                                        border: '1px solid rgba(255,255,255,0.2)',
+                                        'border-radius': '4px',
+                                        padding: '4px 8px',
+                                        cursor: 'pointer',
+                                        'font-size': '1.2em'
+                                    }}
+                                    title={filterType() === emoji ? 'Clear Filter' : `Filter by ${emoji}`}
+                                >
+                                    {emoji}
+                                </button>
+                            )}
+                        </For>
+                    </div>
+
                     <div class="table-container">
                         <div class="table-head">
                             <div class="col-status"></div>
@@ -242,7 +267,7 @@ export default function DepartureBoard() {
                             <div class="col-preview"></div>
                         </div>
                         <div class="table-body">
-                            <For each={deduplicatedResults()}>
+                            <For each={deduplicatedResults().filter(r => !filterType() || getRouteEmoji(r.route_type) === filterType())}>
                                 {(row) => {
                                     const depDate = new Date(row.departure_time);
                                     const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
