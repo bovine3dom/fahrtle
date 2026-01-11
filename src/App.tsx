@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
-import { Suspense, lazy, For, createSignal, onMount, onCleanup } from 'solid-js';
+import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -18,6 +18,14 @@ function App() {
   const roomState = useStore($roomState);
   const countdownEnd = useStore($countdownEnd);
   const speeds = useStore($playerSpeeds);
+  const time = useStore($clock);
+
+  const canCancel = createMemo(() => {
+    const p = players()[myId()!];
+    if (!p) return false;
+    const futurePoints = p.waypoints.filter(wp => wp.arrivalTime > time());
+    return futurePoints.length > 1;
+  });
 
   const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
 
@@ -124,6 +132,20 @@ function App() {
 
             {/* Footer Actions */}
             <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
+              <Show when={canCancel()}>
+                <button
+                  onClick={cancelNavigation}
+                  style={{
+                    width: '100%', padding: '8px', 'background': '#f59e0b', color: '#fff',
+                    border: '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
+                    'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                    'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                  }}
+                  title="Stops at the next upcoming station and cancels remaining trip"
+                >
+                  <span>🛑</span> Get Off Next
+                </button>
+              </Show>
               {roomState() !== 'RUNNING' && (
                 <button
                   onClick={() => toggleReady()}
@@ -150,9 +172,9 @@ function App() {
                 {roomState() === 'RUNNING' ? 'Double click to set waypoint. Single click to query H3.' : 'Waiting for game to start...'}
               </div>
 
-              <DepartureBoard />
             </div>
           </div>
+          <DepartureBoard />
 
           <Suspense fallback={
             <div style={{

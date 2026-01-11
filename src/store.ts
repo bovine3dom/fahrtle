@@ -233,6 +233,15 @@ export function toggleReady() {
   ws?.send(JSON.stringify({ type: 'TOGGLE_READY' }));
 }
 
+export function cancelNavigation() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('WebSocket not open, cannot cancel navigation');
+    return;
+  }
+  console.log('[Store] Sending CANCEL_NAVIGATION');
+  ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
+}
+
 // --- Helper: Convert Points to Time Segments ---
 function processPlayer(raw: Player): RenderablePlayer {
   const segments: AnimationSegment[] = [];

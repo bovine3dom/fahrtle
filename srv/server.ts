@@ -120,6 +120,7 @@ const server = serve<WSData>({
             id: playerId,
             color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
+            // Initial position: Edinburgh, Scotland [-3.1883, 55.9533]
             waypoints: [{
               x: -3.1883 + lngOffset,
               y: 55.9533 + latOffset,
@@ -213,6 +214,40 @@ const server = serve<WSData>({
         }));
 
         updateRoom(d.roomId);
+      }
+
+      // --- CANCEL NAVIGATION ---
+      if (message.type === 'CANCEL_NAVIGATION') {
+        const d = ws.data;
+        console.log(`[Server] Received CANCEL_NAVIGATION from ${d.playerId}`);
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room) return;
+        const player = room.players[d.playerId];
+        if (!player) return;
+
+        stepClock(room);
+        const vTime = room.virtualTime;
+
+        // Find the next waypoint (the one we are currently traveling towards)
+        const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
+        console.log(`[Server] VirtualTime: ${vTime}, NextWpIndex: ${nextWpIndex}, Total Waypoints: ${player.waypoints.length}`);
+
+        if (nextWpIndex !== -1 && nextWpIndex < player.waypoints.length - 1) {
+          console.log(`[Server] Truncating waypoints to index ${nextWpIndex}`);
+          // Truncate path: Keep everything up to the next waypoint, discard the rest
+          player.waypoints = player.waypoints.slice(0, nextWpIndex + 1);
+
+          // Force update for all clients
+          server.publish(d.roomId, JSON.stringify({
+            type: 'PLAYER_JOINED', // Overwrite player state on clients
+            player: player
+          }));
+
+          console.log(`[Player ${d.playerId}] Cancelled navigation. Stopping at next waypoint.`);
+        } else {
+          console.log(`[Server] No future waypoints to cancel or already at last waypoint.`);
+        }
       }
     },
 
