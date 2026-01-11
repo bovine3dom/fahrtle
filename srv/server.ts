@@ -296,16 +296,15 @@ function updateRoom(roomId: string) {
 
   for (const pid in room.players) {
     const p = room.players[pid];
-    // Check all segments? Or just the likely current one?
-    // Since queue is small, we can check recently added ones.
+    let currentFactor = 1.0;
     for (const wp of p.waypoints) {
       if (vTime >= wp.startTime && vTime < wp.arrivalTime) {
-        activeFactors.push(wp.speedFactor);
+        currentFactor = wp.speedFactor;
         anyoneMoving = true;
-        // A player can only be in one segment at a time, so we break
         break;
       }
     }
+    activeFactors.push(currentFactor);
   }
 
   // "The clock should tick at the speed of the smallest random speedfactor"
