@@ -3,10 +3,7 @@ import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
 
 // --- Configuration ---
-// Must match the server's BASE_SPEED
-const BASE_SPEED = 0.0000005;
-// The target duration for every leg (60 seconds)
-const TARGET_DURATION_MS = 60000;
+// (No global client-side constants needed for movement math anymore)
 
 // --- Types ---
 export type Waypoint = {
@@ -146,23 +143,10 @@ export function submitWaypoint(lat: number, lng: number) {
 
   if (!player) return;
 
-  // 1. Get the last known position (or spawn point)
-  const lastPoint = player.waypoints[player.waypoints.length - 1];
+  // 2. Set Speed Factor to Walking Speed (approx 5 km/h)
+  const factor = 0.025;
 
-  // 2. Calculate Distance (Euclidean degrees)
-  // Matches server logic: dist = sqrt(dx^2 + dy^2)
-  const dist = Math.sqrt(
-    Math.pow(lng - lastPoint.x, 2) + Math.pow(lat - lastPoint.y, 2)
-  );
-
-  // 3. Calculate Speed Factor
-  // The goal is to make legs take TARGET_DURATION_MS, but NEVER slower than 1x base speed.
-  let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
-
-  // Safety Clamp: Don't let time stop completely on double-clicks
-  if (factor < 0.05) factor = 0.05;
-
-  console.log(`[Store] Trip: ${(dist * 111).toFixed(2)}km. Factor: ${factor.toFixed(3)}x`);
+  console.log(`[Store] Manual Waypoint: Walking at 2.5km/h (Factor: ${factor}x)`);
 
   ws.send(JSON.stringify({
     type: 'ADD_WAYPOINT',
