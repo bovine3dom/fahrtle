@@ -1,7 +1,8 @@
 // ==> src/App.tsx <==
-import { Suspense, lazy, For } from 'solid-js';
+import { Suspense, lazy, For, createSignal, onMount, onCleanup } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady } from './store';
+import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
 import { flyToPlayer } from './Map';
@@ -13,6 +14,23 @@ function App() {
   const rate = useStore($globalRate);
   const players = useStore($players);
   const myId = useStore($myPlayerId);
+  const roomState = useStore($roomState);
+  const countdownEnd = useStore($countdownEnd);
+
+  const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      const end = countdownEnd();
+      if (end) {
+        const remaining = Math.max(0, Math.ceil((end - getRealServerTime()) / 1000));
+        setTimeLeft(remaining);
+      } else {
+        setTimeLeft(null);
+      }
+    }, 100);
+    onCleanup(() => clearInterval(interval));
+  });
 
   return (
     <>
@@ -46,7 +64,7 @@ function App() {
                 Active Pilots
               </div>
               <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
-                <For each={Object.values(players())}>
+                <For each={Object.values(players()).sort((a, b) => a.id.localeCompare(b.id))}>
                   {(p) => (
                     <div
                       onClick={() => flyToPlayer(p.id)}
@@ -55,7 +73,11 @@ function App() {
                       style={{
                         display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
                         'font-weight': p.id === myId() ? '800' : '400',
-                        'color': p.id === myId() ? '#0f172a' : '#334155'
+                        'color': p.id === myId() ? '#0f172a' : '#334155',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        'border-radius': '4px',
+                        transition: 'background 0.2s',
                       }}>
                       <div style={{
                         width: '10px', height: '10px', 'border-radius': '50%',
@@ -67,10 +89,17 @@ function App() {
                         'white-space': 'nowrap',
                         'overflow': 'hidden',
                         'text-overflow': 'ellipsis',
-                        'max-width': '140px'
+                        'flex': 1
                       }}>
                         {p.id} {p.id === myId() ? '(You)' : ''}
                       </span>
+                      {roomState() !== 'RUNNING' && (
+                        p.isReady ? (
+                          <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
+                        ) : (
+                          <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
+                        )
+                      )}
                     </div>
                   )}
                 </For>
@@ -79,6 +108,19 @@ function App() {
 
             {/* Footer Actions */}
             <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
+              {roomState() !== 'RUNNING' && (
+                <button
+                  onClick={() => toggleReady()}
+                  style={{
+                    width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
+                    color: players()[myId()!]?.isReady ? '#475569' : 'white',
+                    border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
+                    'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
+                  }}
+                >
+                  {players()[myId()!]?.isReady ? 'Unready' : 'Ready Up'}
+                </button>
+              )}
               <button
                 onClick={() => leaveRoom()}
                 style={{
@@ -104,6 +146,18 @@ function App() {
           }>
             <MapView />
           </Suspense>
+
+          {roomState() === 'COUNTDOWN' && (
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+              'z-index': 100, background: 'rgba(0,0,0,0.8)', padding: '2rem 4rem',
+              'border-radius': '16px', color: 'white', 'text-align': 'center',
+              'pointer-events': 'none', 'backdrop-filter': 'blur(4px)'
+            }}>
+              <div style={{ 'font-size': '1.5rem', opacity: 0.8, 'margin-bottom': '8px' }}>Mission Starts In</div>
+              <div style={{ 'font-size': '6rem', 'font-weight': 'bold', 'line-height': 1 }}>{timeLeft()}</div>
+            </div>
+          )}
         </div>
       )}
     </>

@@ -44,7 +44,7 @@ export default function MapView() {
         container: mapContainer,
         // Using a reliable style fallback if needed:
         style: 'https://tiles.openfreemap.org/styles/positron',
-        center: [0, 0],
+        center: [-3.1883, 55.9533],
         zoom: 14,
         fadeDuration: 0,
       });

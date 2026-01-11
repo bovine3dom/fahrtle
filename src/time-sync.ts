@@ -7,8 +7,15 @@ type ClockState = {
   rate: number;         // 0 = paused, 1 = normal, 5 = fast, etc.
 };
 
-// Initialize with 1:1 time mapped to now
+// Initialized with 1:1 time mapped to now
 export const $clockState = atom<ClockState>({
+  anchorServer: Date.now(),
+  anchorLocal: Date.now(),
+  rate: 1.0
+});
+
+// Second server clock (always 1:1 rate)
+export const $realClockState = atom<ClockState>({
   anchorServer: Date.now(),
   anchorLocal: Date.now(),
   rate: 1.0
@@ -16,32 +23,43 @@ export const $clockState = atom<ClockState>({
 
 /**
  * Calculates the current Virtual Server Time.
- * This runs 60 times a second, so it stays dead simple.
  */
 export function getServerTime() {
   const state = $clockState.get();
-  
-  // How many real milliseconds have passed since the last sync packet?
   const realDelta = Date.now() - state.anchorLocal;
-  
-  // Apply the playback rate
   const virtualDelta = realDelta * state.rate;
-  
   return state.anchorServer + virtualDelta;
+}
+
+/**
+ * Calculates the actual Server Time (ignores rate).
+ */
+export function getRealServerTime() {
+  const state = $realClockState.get();
+  const realDelta = Date.now() - state.anchorLocal;
+  // rate is always 1.0 for the real clock
+  return state.anchorServer + realDelta;
 }
 
 /**
  * Called when we receive a CLOCK_SYNC message from WS
  */
-export function syncClock(serverTime: number, rate: number, latency: number) {
+export function syncClock(serverTime: number, realTime: number, rate: number, latency: number) {
   // Compensate for network travel time
   const adjustedServerTime = serverTime + latency;
+  const adjustedRealTime = realTime + latency;
 
   $clockState.set({
     anchorServer: adjustedServerTime,
-    anchorLocal: Date.now(), // The moment we finalized the sync
+    anchorLocal: Date.now(),
     rate: rate
   });
-  
-  console.log(`Clock Synced. Time: ${new Date(adjustedServerTime).toISOString()}, Rate: ${rate}x`);
+
+  $realClockState.set({
+    anchorServer: adjustedRealTime,
+    anchorLocal: Date.now(),
+    rate: 1.0 // Real time always flows at 1x
+  });
+
+  console.log(`Clocks Synced. Virtual: ${new Date(adjustedServerTime).toISOString()} (${rate}x), Real: ${new Date(adjustedRealTime).toISOString()}`);
 }
