@@ -87,67 +87,79 @@ export default function MapView() {
         paint: { 'line-color': '#ff00ff', 'line-width': 3, 'line-opacity': 0.8 }
       });
 
+      let clickTimeout: any = null;
+
       mapInstance!.on('dblclick', (e) => {
+        if (clickTimeout) {
+          clearTimeout(clickTimeout);
+          clickTimeout = null;
+        }
         console.log('[Map] Double-clicked at', e.lngLat);
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
       mapInstance!.on('click', (e) => {
-        const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
-        const neighborhood = gridDisk(h3Index, 2);
-        console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index} | Neighbors: ${neighborhood.length}`);
+        if (clickTimeout) clearTimeout(clickTimeout);
 
-        const features = neighborhood.map(index => {
-          const boundary = cellToBoundary(index);
-          const coords = boundary.map(p => [p[1], p[0]]);
-          coords.push(coords[0]);
-          return {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: coords },
-            properties: {}
-          };
-        });
+        clickTimeout = setTimeout(() => {
+          const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
+          const neighborhood = gridDisk(h3Index, 2);
+          console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index} | Neighbors: ${neighborhood.length}`);
 
-        const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
-        if (source) {
-          source.setData({
-            type: 'FeatureCollection',
-            features: features as any
+          const features = neighborhood.map(index => {
+            const boundary = cellToBoundary(index);
+            const coords = boundary.map(p => [p[1], p[0]]);
+            coords.push(coords[0]);
+            return {
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: coords },
+              properties: {}
+            };
           });
 
-          // Briefly paint: Clear after 1 second
-          setTimeout(() => {
-            if (mapInstance) {
-              const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
-              if (s) s.setData({ type: 'FeatureCollection', features: [] });
-            }
-          }, 1000);
-        }
+          const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
+          if (source) {
+            source.setData({
+              type: 'FeatureCollection',
+              features: features as any
+            });
 
-        // Query ClickHouse for all H3 indices in the neighborhood
-        // Filter by current game clock (Hour and Minute)
-        const d = new Date($clock.get());
-        const hour = d.getHours();
-        const minute = d.getMinutes();
+            // Briefly paint: Clear after 1 second
+            setTimeout(() => {
+              if (mapInstance) {
+                const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
+                if (s) s.setData({ type: 'FeatureCollection', features: [] });
+              }
+            }, 1000);
+          }
 
-        const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
-        const query = `
-          SELECT * 
-          FROM transitous_everything_stop_times_one_day_even_saner 
-          WHERE h3 IN (${h3Conditions})
-            AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
-          ORDER by departure_time asc
-          LIMIT 10
-        `;
+          // Query ClickHouse for all H3 indices in the neighborhood
+          // Filter by current game clock (Hour and Minute)
+          const d = new Date($clock.get());
+          const hour = d.getHours();
+          const minute = d.getMinutes();
 
-        chQuery(query)
-          .then(res => {
-            console.log(`[ClickHouse] Results for neighborhood of ${h3Index}:`, res);
-            if (res && res.data) {
-              $departureBoardResults.set(res.data);
-            }
-          })
-          .catch(err => console.error(`[ClickHouse] Query failed for ${h3Index}:`, err));
+          const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
+          const query = `
+            SELECT * 
+            FROM transitous_everything_stop_times_one_day_even_saner 
+            WHERE h3 IN (${h3Conditions})
+              AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
+            ORDER by departure_time asc
+            LIMIT 10
+          `;
+
+          chQuery(query)
+            .then(res => {
+              console.log(`[ClickHouse] Results for neighborhood of ${h3Index}:`, res);
+              if (res && res.data) {
+                $departureBoardResults.set(res.data);
+              }
+            })
+            .catch(err => console.error(`[ClickHouse] Query failed for ${h3Index}:`, err));
+
+          clickTimeout = null;
+        }, 300);
       });
 
       console.log('[Map] Starting animation loop...');
