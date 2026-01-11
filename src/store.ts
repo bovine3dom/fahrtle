@@ -41,6 +41,7 @@ export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
 export const $players = map<Record<string, RenderablePlayer>>({});
 export const $globalRate = atom(1.0);
+export const $departureBoardResults = atom<any[] | null>(null);
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
 

@@ -2,10 +2,11 @@
 import { onMount, onCleanup } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint } from './store';
+import { $players, submitWaypoint, $departureBoardResults } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
-import { latLngToCell, cellToBoundary } from 'h3-js';
+import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
+import { chQuery } from './clickhouse';
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
 let mapInstance: maplibregl.Map | undefined;
@@ -93,19 +94,25 @@ export default function MapView() {
 
       mapInstance!.on('click', (e) => {
         const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
-        console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index}`);
+        const neighborhood = gridDisk(h3Index, 2);
+        console.log(`[Map] Click at ${e.lngLat.lat}, ${e.lngLat.lng} | H3: ${h3Index} | Neighbors: ${neighborhood.length}`);
 
-        const boundary = cellToBoundary(h3Index);
-        // h3-js returns [lat, lng], but GeoJSON needs [lng, lat]
-        const coords = boundary.map(p => [p[1], p[0]]);
-        coords.push(coords[0]); // Close the polygon
+        const features = neighborhood.map(index => {
+          const boundary = cellToBoundary(index);
+          const coords = boundary.map(p => [p[1], p[0]]);
+          coords.push(coords[0]);
+          return {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: {}
+          };
+        });
 
         const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
         if (source) {
           source.setData({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: coords },
-            properties: {}
+            type: 'FeatureCollection',
+            features: features as any
           });
 
           // Briefly paint: Clear after 1 second
@@ -116,6 +123,25 @@ export default function MapView() {
             }
           }, 1000);
         }
+
+        // Query ClickHouse for all H3 indices in the neighborhood
+        const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
+        const query = `
+          SELECT * 
+          FROM transitous_everything_stop_times_one_day_even_saner 
+          WHERE h3 IN (${h3Conditions})
+          ORDER by departure_time asc
+          LIMIT 10
+        `;
+
+        chQuery(query)
+          .then(res => {
+            console.log(`[ClickHouse] Results for neighborhood of ${h3Index}:`, res);
+            if (res && res.data) {
+              $departureBoardResults.set(res.data);
+            }
+          })
+          .catch(err => console.error(`[ClickHouse] Query failed for ${h3Index}:`, err));
       });
 
       console.log('[Map] Starting animation loop...');
