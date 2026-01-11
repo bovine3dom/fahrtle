@@ -131,7 +131,7 @@ function App() {
                 Leave Room
               </button>
               <div style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
-                Click map to add waypoint
+                Double click map to add waypoint
               </div>
             </div>
           </div>

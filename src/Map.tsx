@@ -47,6 +47,7 @@ export default function MapView() {
         center: [-3.1883, 55.9533],
         zoom: 14,
         fadeDuration: 0,
+        doubleClickZoom: false,
       });
       console.log('[Map] Instance created.');
     } catch (err) {
@@ -78,8 +79,8 @@ export default function MapView() {
         }
       });
 
-      mapInstance!.on('click', (e) => {
-        console.log('[Map] Clicked at', e.lngLat);
+      mapInstance!.on('dblclick', (e) => {
+        console.log('[Map] Double-clicked at', e.lngLat);
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
