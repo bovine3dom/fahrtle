@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -17,6 +17,7 @@ function App() {
   const myId = useStore($myPlayerId);
   const roomState = useStore($roomState);
   const countdownEnd = useStore($countdownEnd);
+  const speeds = useStore($playerSpeeds);
 
   const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
 
@@ -94,6 +95,20 @@ function App() {
                       }}>
                         {p.id} {p.id === myId() ? '(You)' : ''}
                       </span>
+
+                      {/* Speed Indicator */}
+                      {roomState() === 'RUNNING' && (
+                        <span style={{
+                          'font-size': '0.75em',
+                          'font-family': 'monospace',
+                          'color': '#64748b',
+                          'margin-right': '6px',
+                          'min-width': '60px',
+                          'text-align': 'right'
+                        }}>
+                          {(speeds()[p.id] || 0).toFixed(0)} km/h
+                        </span>
+                      )}
                       {roomState() !== 'RUNNING' && (
                         p.isReady ? (
                           <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>

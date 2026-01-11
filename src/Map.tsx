@@ -2,12 +2,23 @@ import { onMount, onCleanup, createEffect } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
+const haversineDist = (coords1: [number, number], coords2: [number, number]) => {
+  const toRad = (x: number) => x * Math.PI / 180;
+  const R = 6371; // km
+  const dLat = toRad(coords2[1] - coords1[1]);
+  const dLon = toRad(coords2[0] - coords1[0]);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(coords1[1])) * Math.cos(toRad(coords2[1])) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
 let mapInstance: maplibregl.Map | undefined;
@@ -230,11 +241,14 @@ export default function MapView() {
 
   const startAnimationLoop = () => {
     let frameCount = 0;
+    let lastSpeedUpdate = 0;
+
     const loop = () => {
       if (!mapInstance) return;
 
       const now = getServerTime();
       const allPlayers = $players.get();
+      const currentSpeeds: Record<string, number> = {};
 
       const vehicleFeatures: any[] = [];
       const routeFeatures: any[] = [];
@@ -269,6 +283,13 @@ export default function MapView() {
                 lerp(seg.start[0], seg.end[0], t),
                 lerp(seg.start[1], seg.end[1], t)
               ];
+
+              // Calculate speed for this segment
+              // Distance (km) / Time (hours)
+              const dist = haversineDist(seg.start, seg.end);
+              const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
+              const speed = durationHours > 0 ? dist / durationHours : 0;
+              currentSpeeds[pid] = speed;
               break;
             }
           }
@@ -298,6 +319,12 @@ export default function MapView() {
 
       if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
       if (rSource) rSource.setData({ type: 'FeatureCollection', features: routeFeatures });
+
+      // Throttle speed updates to 500ms
+      if (Date.now() - lastSpeedUpdate > 500) {
+        $playerSpeeds.set(currentSpeeds);
+        lastSpeedUpdate = Date.now();
+      }
 
       frameId = requestAnimationFrame(loop);
     };
