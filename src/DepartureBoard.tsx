@@ -106,7 +106,7 @@ export default function DepartureBoard() {
 
         // Fetch same data as single click but process it as points
         const query = `
-      SELECT stop_lat, stop_lon, arrival_time, departure_time
+      SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
       WHERE "ru.source" = '${row['ru.source']}'
         AND "ru.trip_id" = '${row['ru.trip_id']}'
@@ -123,7 +123,8 @@ export default function DepartureBoard() {
                         lng: r.stop_lon,
                         lat: r.stop_lat,
                         // Use departure_time for the first stop, arrival_time for subsequent ones
-                        time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime()
+                        time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime(),
+                        stopName: r.stop_name
                     }));
                     submitWaypointsBatch(points);
                     console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);

@@ -94,15 +94,28 @@ function App() {
                         background: p.color, 'flex-shrink': 0,
                         'border': '1px solid rgba(0,0,0,0.2)'
                       }} />
-                      <span style={{
-                        'font-size': '0.9em',
-                        'white-space': 'nowrap',
-                        'overflow': 'hidden',
-                        'text-overflow': 'ellipsis',
-                        'flex': 1
-                      }}>
-                        {p.id} {p.id === myId() ? '(You)' : ''}
-                      </span>
+                      <div style={{ 'flex': 1, 'min-width': 0 }}>
+                        <div style={{
+                          'font-size': '0.9em',
+                          'white-space': 'nowrap',
+                          'overflow': 'hidden',
+                          'text-overflow': 'ellipsis',
+                        }}>
+                          {p.id} {p.id === myId() ? '(You)' : ''}
+                        </div>
+                        {(() => {
+                          // Find next waypoint
+                          const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
+                          if (nextWp && nextWp.stopName) {
+                            return (
+                              <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
+                                &rarr; {nextWp.stopName}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
 
                       {/* Speed Indicator */}
                       {roomState() === 'RUNNING' && (

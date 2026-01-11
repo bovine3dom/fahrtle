@@ -12,6 +12,7 @@ type Waypoint = {
   startTime: number;   // Virtual Timestamp
   arrivalTime: number; // Virtual Timestamp
   speedFactor: number;
+  stopName?: string;
 };
 
 type Player = {
@@ -183,7 +184,7 @@ const server = serve<WSData>({
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime } = message;
+        const { x, y, speedFactor, arrivalTime, stopName } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -202,7 +203,8 @@ const server = serve<WSData>({
           x, y,
           startTime: start,
           arrivalTime: finalArrival,
-          speedFactor: speedFactor
+          speedFactor: speedFactor,
+          stopName: stopName || undefined
         };
 
         player.waypoints.push(newWaypoint);

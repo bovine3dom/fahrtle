@@ -13,6 +13,7 @@ export type Waypoint = {
   startTime: number;
   arrivalTime: number;
   speedFactor: number;
+  stopName?: string;
 };
 
 export type Player = {
@@ -167,11 +168,12 @@ export function submitWaypoint(lat: number, lng: number) {
     type: 'ADD_WAYPOINT',
     x: lng,
     y: lat,
-    speedFactor: factor
+    speedFactor: factor,
+    stopName: 'walking'
   }));
 }
 
-export function submitWaypointsBatch(points: { lng: number, lat: number, time: number }[]) {
+export function submitWaypointsBatch(points: { lng: number, lat: number, time: number, stopName?: string }[]) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   const myId = $myPlayerId.get();
@@ -193,7 +195,7 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
     // Use the GTFS delta if possible, else a minimum 1s to avoid div/0
     const delta = Math.max(1000, p.time - lastTime);
 
-    legs.push({ x: p.lng, y: p.lat, dist: d, delta });
+    legs.push({ x: p.lng, y: p.lat, dist: d, delta, stopName: p.stopName });
     totalVirtualTime += delta;
 
     lastX = p.lng;
@@ -218,7 +220,8 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
       x: l.x,
       y: l.y,
       arrivalTime: currentTime,
-      speedFactor: M
+      speedFactor: M,
+      stopName: l.stopName
     }));
   }
 }
