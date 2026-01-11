@@ -75,13 +75,31 @@ export default function MapView() {
         id: 'openrailwaymap-layer',
         type: 'raster',
         source: 'openrailwaymap',
-        paint: { 'raster-opacity': 0.7 }
+        paint: { 'raster-opacity': 1 }
       });
 
       mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+      // 1. White Casing for Contrast
+      mapInstance!.addLayer({
+        id: 'routes-casing', type: 'line', source: 'routes',
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 7,
+          'line-opacity': 1.0
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' }
+      });
+
+      // 2. Main Color Track
       mapInstance!.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
-        paint: { 'line-color': '#888', 'line-width': 2, 'line-opacity': 0.5 }
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 3,
+          'line-opacity': 1.0
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
       mapInstance!.addSource('vehicles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
