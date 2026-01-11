@@ -2,11 +2,12 @@
 import { onMount, onCleanup } from 'solid-js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
+import { getTimeZone } from './timezone';
 
 const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
 let mapInstance: maplibregl.Map | undefined;
@@ -133,11 +134,19 @@ export default function MapView() {
             }, 1000);
           }
 
+          // Timezone resolution
+          const stopZone = getTimeZone(e.lngLat.lat, e.lngLat.lng);
+          $stopTimeZone.set(stopZone);
+
           // Query ClickHouse for all H3 indices in the neighborhood
-          // Filter by current game clock (Hour and Minute)
-          const d = new Date($clock.get());
-          const hour = d.getHours();
-          const minute = d.getMinutes();
+          // Shift the Paris reference clock to the local stop time
+          const simTime = $clock.get();
+          const localDateStr = new Date(simTime).toLocaleString('en-GB', { timeZone: stopZone });
+          const localDate = new Date(localDateStr);
+          const hour = localDate.getHours();
+          const minute = localDate.getMinutes();
+
+          console.log(`[Map] Timezone: ${stopZone} | Local Time: ${hour}:${minute}`);
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const query = `
@@ -146,7 +155,7 @@ export default function MapView() {
             WHERE h3 IN (${h3Conditions})
               AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
             ORDER by departure_time asc
-            LIMIT 10
+            LIMIT 40
           `;
 
           chQuery(query)
@@ -171,7 +180,6 @@ export default function MapView() {
     let frameCount = 0;
     const loop = () => {
       if (!mapInstance) return;
-      frameCount++;
 
       // Log once every ~60 frames so console isn't flooded
       if (frameCount % 120 === 0) {
@@ -226,8 +234,19 @@ export default function MapView() {
             geometry: { type: 'Point', coordinates: currentPos },
             properties: { id: player.id, color: player.color }
           });
+
+          // Timezone update for local player (throttle to ~1s)
+          const myId = $myPlayerId.get();
+          if (pid === myId && frameCount % 60 === 0) {
+            const zone = getTimeZone(currentPos[1], currentPos[0]);
+            if ($playerTimeZone.get() !== zone) {
+              console.log(`[Map] Local player moved to ${zone} at [${currentPos[1]}, ${currentPos[0]}]`);
+              $playerTimeZone.set(zone);
+            }
+          }
         }
       }
+      frameCount++;
 
       const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
       const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;

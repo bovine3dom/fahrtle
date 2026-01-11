@@ -1,29 +1,34 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone } from './store';
 import { Show, For } from 'solid-js';
 import { chQuery } from './clickhouse';
+import { formatInTimeZone } from './timezone';
 
 export default function DepartureBoard() {
     const results = useStore($departureBoardResults);
     const currentTime = useStore($clock);
+
+    const stopZone = useStore($stopTimeZone);
 
     const deduplicatedResults = () => {
         const raw = results();
         if (!raw) return [];
 
         const now = currentTime();
+        const zone = stopZone();
         const seen = new Set<string>();
 
-        // Convert current time to seconds since midnight for day-independent comparison
-        const nowDate = new Date(now);
-        const nowSeconds = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
+        // Convert current simulation time to local STOP wall-time
+        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+        const localDate = new Date(localDateStr);
+        const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
 
         return raw.filter(row => {
-            // 1. Filter out past departures (Time of day only)
+            // 1. Filter out past departures (Local time of day only)
             const depDate = new Date(row.departure_time);
             const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
 
-            if (depSeconds < nowSeconds) return false;
+            if (depSeconds < localSeconds) return false;
 
             // 2. Deduplicate
             const key = `${row.departure_time}|${row.route_short_name}|${row.trip_headsign}|${row.stop_name}`;
@@ -33,7 +38,7 @@ export default function DepartureBoard() {
         });
     };
 
-    const close = () => $departureBoardResults.set(null);
+    const close = () => $departureBoardResults.set([]);
 
     const handleTripClick = (row: any) => {
         console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
@@ -133,9 +138,12 @@ export default function DepartureBoard() {
             <div class="departure-board-overlay" onClick={close}>
                 <div class="departure-board" onClick={(e) => e.stopPropagation()}>
                     <div class="board-header">
-                        <span class="header-title">Departures</span>
-                        <div class="header-clock">{formatTime(currentTime(), true)}</div>
-                        <button class="close-button" onClick={close}>×</button>
+                        <div class="header-title">Departures</div>
+                        <div class="header-clock">
+                            <span class="local-time">{formatInTimeZone(currentTime(), stopZone(), true)}</span>
+                            <span class="timezone-label">{stopZone().split('/').pop()?.replace('_', ' ')}</span>
+                        </div>
+                        <button class="close-button" onClick={close}>Close</button>
                     </div>
                     <div class="board-table">
                         <div class="table-head">
@@ -153,8 +161,11 @@ export default function DepartureBoard() {
 
                                     const isImminent = () => {
                                         const now = currentTime();
-                                        const nowSeconds = new Date(now).getHours() * 3600 + new Date(now).getMinutes() * 60 + new Date(now).getSeconds();
-                                        const diff = depSeconds - nowSeconds;
+                                        const zone = stopZone();
+                                        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+                                        const localDate = new Date(localDateStr);
+                                        const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+                                        const diff = depSeconds - localSeconds;
                                         return diff > 0 && diff <= 120;
                                     };
 
@@ -274,11 +285,20 @@ export default function DepartureBoard() {
         .header-clock {
           flex: 1;
           text-align: center;
-          font-size: 1.5rem;
-          font-weight: 800;
-          color: #fff;
           font-family: 'Courier New', Courier, monospace;
-          letter-spacing: 2px;
+          font-weight: bold;
+          font-size: 1.2rem;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          line-height: 1.1;
+        }
+
+        .timezone-label {
+          font-size: 0.7rem;
+          opacity: 0.8;
+          text-transform: uppercase;
+          letter-spacing: 1px;
         }
 
         .close-button {

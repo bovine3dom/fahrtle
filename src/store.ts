@@ -1,6 +1,7 @@
 // ==> src/store.ts <==
 import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
+import { getTimeZone } from './timezone';
 
 // --- Configuration ---
 // (No global client-side constants needed for movement math anymore)
@@ -38,7 +39,9 @@ export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
 export const $players = map<Record<string, RenderablePlayer>>({});
 export const $globalRate = atom(1.0);
-export const $departureBoardResults = atom<any[] | null>(null);
+export const $departureBoardResults = atom<any[]>([]);
+export const $stopTimeZone = atom<string>('Europe/Paris');
+export const $playerTimeZone = atom<string>('Europe/Paris');
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
 export const $clock = atom(0);
@@ -87,6 +90,15 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
       const renderables: Record<string, RenderablePlayer> = {};
       for (const pid in msg.players) {
         renderables[pid] = processPlayer(msg.players[pid]);
+
+        // Initial timezone detection for self
+        if (pid === $myPlayerId.get()) {
+          const p = msg.players[pid];
+          if (p.waypoints.length > 0) {
+            const spawn = p.waypoints[0];
+            $playerTimeZone.set(getTimeZone(spawn.y, spawn.x));
+          }
+        }
       }
       $players.set(renderables);
       $roomState.set(msg.state);
@@ -146,7 +158,7 @@ export function submitWaypoint(lat: number, lng: number) {
   // 2. Set Speed Factor to Walking Speed (approx 5 km/h)
   const factor = 0.025;
 
-  console.log(`[Store] Manual Waypoint: Walking at 2.5km/h (Factor: ${factor}x)`);
+  console.log(`[Store] Manual Waypoint: Walking at 5km/h (Factor: ${factor}x)`);
 
   ws.send(JSON.stringify({
     type: 'ADD_WAYPOINT',
