@@ -65,6 +65,19 @@ export default function MapView() {
     mapInstance.on('load', () => {
       console.log('[Map] "load" event fired. Initializing layers...');
 
+      mapInstance!.addSource('openrailwaymap', {
+        type: 'raster',
+        tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
+      });
+      mapInstance!.addLayer({
+        id: 'openrailwaymap-layer',
+        type: 'raster',
+        source: 'openrailwaymap',
+        paint: { 'raster-opacity': 0.7 }
+      });
+
       mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance!.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
