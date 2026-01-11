@@ -34,7 +34,8 @@ type Room = {
 };
 
 const rooms = new Map<string, Room>();
-const BASE_SPEED = 0.0001; // Degrees per Virtual Millisecond
+const BASE_SPEED = 0.0000005;
+// Degrees per Virtual Millisecond
 
 // Helper: Distance
 function dist(p1: { x: number, y: number }, p2: { x: number, y: number }) {
@@ -313,8 +314,9 @@ function updateRoom(roomId: string) {
   }
 
   // "The clock should tick at the speed of the smallest random speedfactor"
+  // Clamped to 1.0 minimum as per user request
   if (activeFactors.length > 0) {
-    minSpeed = Math.min(...activeFactors);
+    minSpeed = Math.max(1.0, Math.min(...activeFactors));
   } else {
     // If no one is moving, revert to normal time? Or pause?
     // Let's revert to normal time so the clock feels responsive.

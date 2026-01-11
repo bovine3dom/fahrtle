@@ -4,9 +4,9 @@ import { syncClock } from './time-sync';
 
 // --- Configuration ---
 // Must match the server's BASE_SPEED
-const BASE_SPEED = 0.0001;
-// The target duration for every leg (30 seconds)
-const TARGET_DURATION_MS = 30000;
+const BASE_SPEED = 0.0000005;
+// The target duration for every leg (60 seconds)
+const TARGET_DURATION_MS = 60000;
 
 // --- Types ---
 export type Waypoint = {
@@ -155,12 +155,9 @@ export function submitWaypoint(lat: number, lng: number) {
   );
 
   // 3. Calculate Speed Factor
-  // Formula: Duration = Distance / (BASE_SPEED * Factor)
-  // Therefore: Factor = Distance / (BASE_SPEED * Duration)
+  // The goal is to make legs take TARGET_DURATION_MS, but NEVER slower than 1x base speed.
   let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
-
-  // Safety Clamp: Don't let time stop completely on double-clicks
-  if (factor < 0.05) factor = 0.05;
+  if (factor < 1.0) factor = 1.0;
 
   console.log(`[Store] Trip: ${(dist * 111).toFixed(2)}km. Factor: ${factor.toFixed(3)}x`);
 
@@ -187,7 +184,7 @@ export function submitWaypointsBatch(points: { lng: number, lat: number }[]) {
   for (const p of points) {
     const dist = Math.sqrt(Math.pow(p.lng - lastX, 2) + Math.pow(p.lat - lastY, 2));
     let factor = dist / (BASE_SPEED * TARGET_DURATION_MS);
-    if (factor < 0.05) factor = 0.05;
+    if (factor < 1.0) factor = 1.0;
 
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
