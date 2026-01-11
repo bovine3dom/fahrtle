@@ -106,14 +106,19 @@ const server = serve({
         }
 
         if (!room.players[playerId]) {
+          // Add ~50m random spread to starting position [-3.1883, 55.9533]
+          const spreadMeters = 50;
+          const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
+          const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(55.9533 * Math.PI / 180)));
+
           room.players[playerId] = {
             id: playerId,
             color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
             // Initial position: Edinburgh, Scotland [-3.1883, 55.9533]
             waypoints: [{
-              x: -3.1883,
-              y: 55.9533,
+              x: -3.1883 + lngOffset,
+              y: 55.9533 + latOffset,
               startTime: 0,
               arrivalTime: 0,
               speedFactor: 1
