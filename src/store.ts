@@ -190,7 +190,7 @@ export function submitWaypoint(lat: number, lng: number) {
     type: 'ADD_WAYPOINT',
     x: lng,
     y: lat,
-    speedFactor: factor,
+    speedFactor: 20,
     stopName: 'walking'
   }));
 }

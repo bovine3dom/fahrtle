@@ -8,6 +8,8 @@ import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
+import { getRouteEmoji } from './getRouteEmoji';
+import { interpolateSpectral } from 'd3';
 const haversineDist = (coords1: [number, number], coords2: [number, number]) => {
   const toRad = (x: number) => x * Math.PI / 180;
   const R = 6371; // km
@@ -33,6 +35,69 @@ export function flyToPlayer(playerId: string) {
     });
   }
 }
+
+// Convert crow_km to color (0-100km range)
+// Higher km = better connectivity = cooler colors (purple/blue)
+// Lower km = worse connectivity = warmer colors (red/orange)
+const getCrowKmColor = (crowKm: number): string => {
+  const normalized = Math.min(crowKm / 100, 1); // Normalize to 0-1
+  // Invert so higher values get cooler colors (spectral goes red->purple)
+  return interpolateSpectral(normalized);
+};
+
+// Fetch and update stops based on map bounds
+const updateStops = async (map: maplibregl.Map) => {
+  const zoom = map.getZoom();
+  if (zoom < 14) {
+    // Clear stops if zoom is too low
+    const source = map.getSource('stops') as maplibregl.GeoJSONSource;
+    if (source) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+    }
+    return;
+  }
+
+  const bounds = map.getBounds();
+  const query = `
+    SELECT DISTINCT
+      crow_km,
+      stop_lat,
+      stop_lon,
+      stop_name,
+      route_type
+    FROM transitous_everything_stop_statistics${zoom >= 16 ? "_unmerged" : ""}
+    WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
+      AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
+    LIMIT 500
+  `;
+
+  try {
+    const res = await chQuery(query);
+    if (res && res.data) {
+      const features = res.data.map((stop: any) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [stop.stop_lon, stop.stop_lat]
+        },
+        properties: {
+          emoji: [getRouteEmoji(stop.route_type), stop.stop_name].join(' '),
+          name: stop.stop_name,
+          route_type: stop.route_type,
+          crow_km: stop.crow_km,
+          color: getCrowKmColor(stop.crow_km || 0)
+        }
+      }));
+
+      const source = map.getSource('stops') as maplibregl.GeoJSONSource;
+      if (source) {
+        source.setData({ type: 'FeatureCollection', features });
+      }
+    }
+  } catch (err) {
+    console.error('[Map] Failed to fetch stops:', err);
+  }
+};
 
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
@@ -136,6 +201,23 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
+      mapInstance!.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addLayer({
+        id: 'stops-layer',
+        type: 'symbol',
+        source: 'stops',
+        minzoom: 14,
+        layout: {
+          'text-field': ['get', 'emoji'],
+          'text-size': 12,
+          'text-allow-overlap': true,
+          'text-ignore-placement': false
+        },
+        paint: {
+          'text-color': ['get', 'color']
+        }
+      });
+
       let clickTimeout: any = null;
 
       mapInstance!.on('dblclick', (e) => {
@@ -211,6 +293,17 @@ export default function MapView() {
           clickTimeout = null;
         }, 300);
       });
+
+      // Update stops on map move/zoom
+      mapInstance!.on('moveend', () => {
+        if (mapInstance) updateStops(mapInstance);
+      });
+      mapInstance!.on('zoomend', () => {
+        if (mapInstance) updateStops(mapInstance);
+      });
+
+      // Initial load of stops
+      updateStops(mapInstance!);
 
       startAnimationLoop();
     });

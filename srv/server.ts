@@ -42,8 +42,7 @@ type Room = {
 };
 
 const rooms = new Map<string, Room>();
-const BASE_SPEED = 0.0000005;
-// Degrees per Virtual Millisecond
+const BASE_SPEED = 0.0000005 * 0.025; // walking speed, approx 5km/h
 
 // Helper: Distance
 function dist(p1: { x: number, y: number }, p2: { x: number, y: number }) {
@@ -217,7 +216,7 @@ const server = serve<WSData>({
         let finalArrival = arrivalTime;
         if (finalArrival === undefined) {
           const distance = dist(lastPoint, { x, y });
-          const duration = distance / (BASE_SPEED * speedFactor);
+          const duration = distance / BASE_SPEED;
           finalArrival = start + duration;
         }
 

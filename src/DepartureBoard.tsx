@@ -3,74 +3,75 @@ import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $p
 import { Show, For, createEffect, createSignal } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor } from './timezone';
+import { getRouteEmoji } from './getRouteEmoji';
 
 export default function DepartureBoard() {
-    const results = useStore($departureBoardResults);
-    const currentTime = useStore($clock);
+  const results = useStore($departureBoardResults);
+  const currentTime = useStore($clock);
 
-    const stopZone = useStore($stopTimeZone);
-    const isMinimized = useStore($boardMinimized);
-    const [filterType, setFilterType] = createSignal<string | null>(null);
+  const stopZone = useStore($stopTimeZone);
+  const isMinimized = useStore($boardMinimized);
+  const [filterType, setFilterType] = createSignal<string | null>(null);
 
-    // Auto-unminimize when results are lost (empty) or closed
-    createEffect(() => {
-        if (!results() || results()!.length === 0) {
-            $boardMinimized.set(false);
-        }
+  // Auto-unminimize when results are lost (empty) or closed
+  createEffect(() => {
+    if (!results() || results()!.length === 0) {
+      $boardMinimized.set(false);
+    }
+  });
+
+  // Auto-expand when results appear
+  createEffect(() => {
+    if (results() && results()!.length > 0) {
+      $boardMinimized.set(false);
+    }
+  });
+
+  const deduplicatedResults = () => {
+    const raw = results();
+    if (!raw) return [];
+
+    const now = currentTime();
+    const zone = stopZone();
+    const seen = new Set<string>();
+
+    // Convert current simulation time to local STOP wall-time
+    const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+    const localDate = new Date(localDateStr);
+    const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+
+    return raw.filter(row => {
+      // 1. Filter out past departures (Local time of day only)
+      const depDate = new Date(row.departure_time);
+      const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+
+      if (depSeconds < localSeconds) return false;
+
+      // 2. Deduplicate
+      const key = `${row.departure_time}|${row.route_short_name}|${row.trip_headsign}|${row.stop_name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
+  };
 
-    // Auto-expand when results appear
-    createEffect(() => {
-        if (results() && results()!.length > 0) {
-            $boardMinimized.set(false);
-        }
-    });
+  // Clear preview whenever the displayed results change (e.g. closing board, new station)
+  createEffect(() => {
+    results(); // Track dependency
+    clearPreviewRoute();
+  });
 
-    const deduplicatedResults = () => {
-        const raw = results();
-        if (!raw) return [];
+  const close = () => {
+    $departureBoardResults.set([]);
+    $boardMinimized.set(false);
+    setFilterType(null);
+  };
 
-        const now = currentTime();
-        const zone = stopZone();
-        const seen = new Set<string>();
+  const handlePreviewClick = (row: any) => {
+    console.log(`[DepartureBoard] Preview Clicked: ${row.trip_headsign}`);
 
-        // Convert current simulation time to local STOP wall-time
-        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
-        const localDate = new Date(localDateStr);
-        const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
-
-        return raw.filter(row => {
-            // 1. Filter out past departures (Local time of day only)
-            const depDate = new Date(row.departure_time);
-            const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
-
-            if (depSeconds < localSeconds) return false;
-
-            // 2. Deduplicate
-            const key = `${row.departure_time}|${row.route_short_name}|${row.trip_headsign}|${row.stop_name}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-    };
-
-    // Clear preview whenever the displayed results change (e.g. closing board, new station)
-    createEffect(() => {
-        results(); // Track dependency
-        clearPreviewRoute();
-    });
-
-    const close = () => {
-        $departureBoardResults.set([]);
-        $boardMinimized.set(false);
-        setFilterType(null);
-    };
-
-    const handlePreviewClick = (row: any) => {
-        console.log(`[DepartureBoard] Preview Clicked: ${row.trip_headsign}`);
-
-        // Query ClickHouse for all stops of this trip starting from THIS departure
-        const query = `
+    // Query ClickHouse for all stops of this trip starting from THIS departure
+    const query = `
           SELECT stop_lat, stop_lon
           FROM transitous_everything_stop_times_one_day_even_saner
           WHERE "ru.source" = '${row['ru.source']}'
@@ -81,33 +82,33 @@ export default function DepartureBoard() {
           LIMIT 100
         `;
 
-        chQuery(query)
-            .then(res => {
-                if (res && res.data && res.data.length > 0) {
-                    const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
-                    $previewRoute.set({
-                        id: row['ru.trip_id'],
-                        color: row.route_color ? `#${row.route_color}` : '#333',
-                        coordinates: coords as [number, number][]
-                    });
-                    console.log($previewRoute.get());
-                    // Auto-minimize when previewing
-                    $boardMinimized.set(true);
-                }
-            })
-            .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
-    };
+    chQuery(query)
+      .then(res => {
+        if (res && res.data && res.data.length > 0) {
+          const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
+          $previewRoute.set({
+            id: row['ru.trip_id'],
+            color: row.route_color ? `#${row.route_color}` : '#333',
+            coordinates: coords as [number, number][]
+          });
+          console.log($previewRoute.get());
+          // Auto-minimize when previewing
+          $boardMinimized.set(true);
+        }
+      })
+      .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
+  };
 
-    const handleTripClick = (row: any) => {
-        console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
-        // (Existing single-click logic just logs for now)
-    };
+  const handleTripClick = (row: any) => {
+    console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
+    // (Existing single-click logic just logs for now)
+  };
 
-    const handleTripDoubleClick = (row: any) => {
-        console.log(`[DepartureBoard] Trip Double-Clicked! Following: ${row.trip_headsign}`);
+  const handleTripDoubleClick = (row: any) => {
+    console.log(`[DepartureBoard] Trip Double-Clicked! Following: ${row.trip_headsign}`);
 
-        // Fetch same data as single click but process it as points
-        const query = `
+    // Fetch same data as single click but process it as points
+    const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
       WHERE "ru.source" = '${row['ru.source']}'
@@ -118,220 +119,189 @@ export default function DepartureBoard() {
       LIMIT 100
     `;
 
-        chQuery(query)
-            .then(res => {
-                if (res && res.data && res.data.length > 0) {
-                    const points = res.data.map((r: any, idx: number) => ({
-                        lng: r.stop_lon,
-                        lat: r.stop_lat,
-                        // Use departure_time for the first stop, arrival_time for subsequent ones
-                        time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime(),
-                        stopName: r.stop_name
-                    }));
-                    submitWaypointsBatch(points);
-                    console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);
-                    close(); // Auto-close on successful follow
-                }
-            })
-            .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
-    };
-
-    const formatClockTime = (time: string | number, showSeconds = false) => {
-        if (!time) return '--:--';
-        const date = new Date(time);
-        const timestamp = date.getTime();
-        if (isNaN(timestamp)) return '--:--';
-        try {
-            return formatInTimeZone(timestamp, stopZone() || 'UTC', showSeconds);
-        } catch (e) {
-            return date.toLocaleTimeString([], {
-                hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined
-            });
+    chQuery(query)
+      .then(res => {
+        if (res && res.data && res.data.length > 0) {
+          const points = res.data.map((r: any, idx: number) => ({
+            lng: r.stop_lon,
+            lat: r.stop_lat,
+            // Use departure_time for the first stop, arrival_time for subsequent ones
+            time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime(),
+            stopName: r.stop_name
+          }));
+          submitWaypointsBatch(points);
+          console.log(`[DepartureBoard] Batch submitted: ${points.length} waypoints.`);
+          close(); // Auto-close on successful follow
         }
-    };
+      })
+      .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
+  };
 
-    const formatRowTime = (timeStr: string) => {
-        if (!timeStr) return '--:--';
-        // The DB returns local "wall time" string e.g. "2023-10-10 14:00:00"
-        // We just want to extract "14:00" without any timezone logic
-        try {
-            // Check if it matches YYYY-MM-DD HH:mm:ss format roughly
-            if (timeStr.length >= 16) {
-                return timeStr.substring(11, 16);
-            }
-            // Fallback
-            const d = new Date(timeStr);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        } catch (e) {
-            return '--:--';
-        }
-    };
+  const formatClockTime = (time: string | number, showSeconds = false) => {
+    if (!time) return '--:--';
+    const date = new Date(time);
+    const timestamp = date.getTime();
+    if (isNaN(timestamp)) return '--:--';
+    try {
+      return formatInTimeZone(timestamp, stopZone() || 'UTC', showSeconds);
+    } catch (e) {
+      return date.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined
+      });
+    }
+  };
 
-    const getRouteEmoji = (type: number) => {
-        // Extended GTFS
-        if (type >= 100 && type <= 117) return '🚆'; // Rail
-        if (type >= 200 && type <= 209) return '🚍'; // Coach
-        if (type >= 400 && type <= 405) return '🚇'; // Subway/Metro
-        if (type >= 700 && type <= 716) return '🚌'; // Bus
-        if (type === 800) return '🚎';               // Trolleybus
-        if (type >= 900 && type <= 906) return '🚋'; // Tram
-        if (type === 1000 || type === 1200) return '⛴️'; // Ferry
-        if (type === 1100) return '✈️';               // Air
-        if (type >= 1300 && type <= 1307) return '🚠'; // Aerial Lift
-        if (type === 1400) return '🚠';               // Funicular
-        if (type >= 1500 && type <= 1507) return '🚕'; // Taxi
-        if (type >= 1700) return '🐎';                // Misc
+  const formatRowTime = (timeStr: string) => {
+    if (!timeStr) return '--:--';
+    // The DB returns local "wall time" string e.g. "2023-10-10 14:00:00"
+    // We just want to extract "14:00" without any timezone logic
+    try {
+      // Check if it matches YYYY-MM-DD HH:mm:ss format roughly
+      if (timeStr.length >= 16) {
+        return timeStr.substring(11, 16);
+      }
+      // Fallback
+      const d = new Date(timeStr);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch (e) {
+      return '--:--';
+    }
+  };
 
-        // Standard GTFS
-        switch (type) {
-            case 0: return '🚋'; // Tram
-            case 1: return '🚇'; // Subway
-            case 2: return '🚆'; // Rail
-            case 3: return '🚌'; // Bus
-            case 4: return '⛴️'; // Ferry
-            case 5: return '🚋'; // Cable Tram
-            case 6: return '🚠'; // Aerial Lift
-            case 7: return '🚠'; // Funicular
-            case 11: return '🚎'; // Trolleybus
-            case 12: return '🚝'; // Monorail
-            default: return '🔘';
-        }
-    };
-
-    return (
-        <Show when={results() && results()!.length > 0}>
-            <div
-                class="departure-board-overlay"
-                classList={{ minimized: isMinimized() }}
-                onClick={close}
-            >
-                <div
-                    class="departure-board"
-                    classList={{ minimized: isMinimized() }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div class="board-header">
-                        <div class="header-main">
-                            <h1>Departures</h1>
-                            <div class="stop-name" style={{ color: '#ffed02', "font-weight": "900", }}>
-                                {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
-                            </div>
-                        </div>
-                        <div class="header-controls">
-                            <button
-                                class="control-btn minimize-btn"
-                                onClick={() => $boardMinimized.set(!isMinimized())}
-                                title={isMinimized() ? "Expand" : "Minimize"}
-                            >
-                                <span class="cross-line" style={{ transform: isMinimized() ? 'rotate(90deg)' : 'none' }}></span>
-                                <span class="cross-line"></span>
-                            </button>
-                            <button class="control-btn close-btn" onClick={close} title="Close Board">✕</button>
-                        </div>
-                        <div class="header-clock" style={{ background: getTimeZoneColor(stopZone()) }}>
-                            <div class="clock-time">{formatClockTime(currentTime(), true)}</div>
-                            <div class="clock-zone">{stopZone()}</div>
-                        </div>
-                    </div>
-
-                    {/* Type Filter Toolbar */}
-                    <div style={{ padding: '0 20px', 'background': '#003a79', display: 'flex', gap: '8px', 'overflow-x': 'auto', 'padding-bottom': '8px' }}>
-                        <For each={[...new Set(deduplicatedResults().map(r => getRouteEmoji(r.route_type)))]}>
-                            {(emoji) => (
-                                <button
-                                    onClick={() => setFilterType(filterType() === emoji ? null : emoji)}
-                                    style={{
-                                        background: filterType() === emoji ? '#ffed02' : 'rgba(255,255,255,0.1)',
-                                        color: filterType() === emoji ? '#000' : '#fff',
-                                        border: '1px solid rgba(255,255,255,0.2)',
-                                        'border-radius': '4px',
-                                        padding: '4px 8px',
-                                        cursor: 'pointer',
-                                        'font-size': '1.2em'
-                                    }}
-                                    title={filterType() === emoji ? 'Clear Filter' : `Filter by ${emoji}`}
-                                >
-                                    {emoji}
-                                </button>
-                            )}
-                        </For>
-                    </div>
-
-                    <div class="table-container">
-                        <div class="table-head">
-                            <div class="col-status"></div>
-                            <div class="col-time">Time</div>
-                            <div class="col-route">Line</div>
-                            <div class="col-dest">Destination</div>
-                            <div class="col-type">Type</div>
-                            <div class="col-preview"></div>
-                        </div>
-                        <div class="table-body">
-                            <For each={deduplicatedResults().filter(r => !filterType() || getRouteEmoji(r.route_type) === filterType())}>
-                                {(row) => {
-                                    const depDate = new Date(row.departure_time);
-                                    const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
-
-                                    const isImminent = () => {
-                                        const now = currentTime();
-                                        const zone = stopZone();
-                                        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
-                                        const localDate = new Date(localDateStr);
-                                        const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
-                                        const diff = depSeconds - localSeconds;
-                                        return diff > 0 && diff <= 120;
-                                    };
-
-                                    return (
-                                        <div
-                                            class="table-row"
-                                            style={{ cursor: 'pointer' }}
-                                            onClick={() => handleTripClick(row)}
-                                            onDblClick={() => handleTripDoubleClick(row)}
-                                        >
-                                            <div class="col-status">
-                                                <Show when={isImminent()}>
-                                                    <span class="status-dot imminent"></span>
-                                                </Show>
-                                            </div>
-                                            <div class="col-time">
-                                                {formatRowTime(row.departure_time)}
-                                            </div>
-                                            <div class="col-route">
-                                                <span
-                                                    class="route-pill"
-                                                    style={{
-                                                        "background-color": row.route_color ? `#${row.route_color}` : '#333',
-                                                        "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
-                                                    }}
-                                                >
-                                                    {row.route_short_name || '??'}
-                                                </span>
-                                            </div>
-                                            <div class="col-dest">
-                                                <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
-                                                <div class="route-long">{row.route_long_name}</div>
-                                            </div>
-                                            <div class="col-type">{getRouteEmoji(row.route_type)}</div>
-                                            <div class="col-preview">
-                                                <button
-                                                    class="preview-btn"
-                                                    onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
-                                                    title="Preview Trip Route"
-                                                >
-                                                    🔍
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                }}
-                            </For>
-                        </div>
-                    </div>
-                </div>
+  return (
+    <Show when={results() && results()!.length > 0}>
+      <div
+        class="departure-board-overlay"
+        classList={{ minimized: isMinimized() }}
+        onClick={close}
+      >
+        <div
+          class="departure-board"
+          classList={{ minimized: isMinimized() }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div class="board-header">
+            <div class="header-main">
+              <h1>Departures</h1>
+              <div class="stop-name" style={{ color: '#ffed02', "font-weight": "900", }}>
+                {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
+              </div>
             </div>
+            <div class="header-controls">
+              <button
+                class="control-btn minimize-btn"
+                onClick={() => $boardMinimized.set(!isMinimized())}
+                title={isMinimized() ? "Expand" : "Minimize"}
+              >
+                <span class="cross-line" style={{ transform: isMinimized() ? 'rotate(90deg)' : 'none' }}></span>
+                <span class="cross-line"></span>
+              </button>
+              <button class="control-btn close-btn" onClick={close} title="Close Board">✕</button>
+            </div>
+            <div class="header-clock" style={{ background: getTimeZoneColor(stopZone()) }}>
+              <div class="clock-time">{formatClockTime(currentTime(), true)}</div>
+              <div class="clock-zone">{stopZone()}</div>
+            </div>
+          </div>
 
-            <style>{`
+          {/* Type Filter Toolbar */}
+          <div style={{ padding: '0 20px', 'background': '#003a79', display: 'flex', gap: '8px', 'overflow-x': 'auto', 'padding-bottom': '8px' }}>
+            <For each={[...new Set(deduplicatedResults().map(r => getRouteEmoji(r.route_type)))]}>
+              {(emoji) => (
+                <button
+                  onClick={() => setFilterType(filterType() === emoji ? null : emoji)}
+                  style={{
+                    background: filterType() === emoji ? '#ffed02' : 'rgba(255,255,255,0.1)',
+                    color: filterType() === emoji ? '#000' : '#fff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    'border-radius': '4px',
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    'font-size': '1.2em'
+                  }}
+                  title={filterType() === emoji ? 'Clear Filter' : `Filter by ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              )}
+            </For>
+          </div>
+
+          <div class="table-container">
+            <div class="table-head">
+              <div class="col-status"></div>
+              <div class="col-time">Time</div>
+              <div class="col-route">Line</div>
+              <div class="col-dest">Destination</div>
+              <div class="col-type">Type</div>
+              <div class="col-preview"></div>
+            </div>
+            <div class="table-body">
+              <For each={deduplicatedResults().filter(r => !filterType() || getRouteEmoji(r.route_type) === filterType())}>
+                {(row) => {
+                  const depDate = new Date(row.departure_time);
+                  const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+
+                  const isImminent = () => {
+                    const now = currentTime();
+                    const zone = stopZone();
+                    const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+                    const localDate = new Date(localDateStr);
+                    const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+                    const diff = depSeconds - localSeconds;
+                    return diff > 0 && diff <= 120;
+                  };
+
+                  return (
+                    <div
+                      class="table-row"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleTripClick(row)}
+                      onDblClick={() => handleTripDoubleClick(row)}
+                    >
+                      <div class="col-status">
+                        <Show when={isImminent()}>
+                          <span class="status-dot imminent"></span>
+                        </Show>
+                      </div>
+                      <div class="col-time">
+                        {formatRowTime(row.departure_time)}
+                      </div>
+                      <div class="col-route">
+                        <span
+                          class="route-pill"
+                          style={{
+                            "background-color": row.route_color ? `#${row.route_color}` : '#333',
+                            "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
+                          }}
+                        >
+                          {row.route_short_name || '??'}
+                        </span>
+                      </div>
+                      <div class="col-dest">
+                        <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
+                        <div class="route-long">{row.route_long_name}</div>
+                      </div>
+                      <div class="col-type">{getRouteEmoji(row.route_type)}</div>
+                      <div class="col-preview">
+                        <button
+                          class="preview-btn"
+                          onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
+                          title="Preview Trip Route"
+                        >
+                          🔍
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
         /* Imminent Departure Indicator */
         .status-dot {
           display: inline-block;
@@ -710,6 +680,6 @@ export default function DepartureBoard() {
           border-radius: 4px;
         }
       `}</style>
-        </Show>
-    );
+    </Show>
+  );
 }
