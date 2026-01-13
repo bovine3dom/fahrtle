@@ -274,35 +274,41 @@ export default function MapView() {
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const query = `
-            SELECT * 
-            FROM transitous_everything_stop_times_one_day_even_saner  -- switch to _edgelist_fahrtle
+            SELECT *
+            -- FROM transitous_everything_stop_times_one_day_even_saner  -- switch to _edgelist_fahrtle
+            FROM transitous_everything_edgelist_fahrtle
             WHERE h3 IN (${h3Conditions})
               AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
             ORDER by departure_time asc
             LIMIT 40
           `;
+
           // ideally would check if there is only one stop on the service (i.e. ours) and exclude them
-          // function toRad(deg) {
-          //   return deg * Math.PI / 180;
-          // }
+          function toRad(deg: number) {
+            return deg * Math.PI / 180;
+          }
 
-          // function toDeg(rad) {
-          //   return rad * 180 / Math.PI;
-          // }
+          function toDeg(rad: number) {
+            return rad * 180 / Math.PI;
+          }
 
-          // function getBearing(startLat, startLon, destLat, destLon) {
-          //   const y = Math.sin(toRad(destLon - startLon)) * Math.cos(toRad(destLat));
-          //   const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
-          //     Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLon - startLon));
+          function getBearing(startLat: number, startLon: number, destLat: number, destLon: number) {
+            const y = Math.sin(toRad(destLon - startLon)) * Math.cos(toRad(destLat));
+            const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
+              Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLon - startLon));
 
-          //   let brng = toDeg(Math.atan2(y, x));
-          //   return (brng + 360) % 360; // Normalize to 0-360
-          // }
+            let brng = toDeg(Math.atan2(y, x));
+            return (brng + 360) % 360; // Normalize to 0-360
+          }
 
           chQuery(query)
             .then(res => {
               if (res && res.data) {
-                $departureBoardResults.set(res.data);
+                const data = res.data.map(row => {
+                  row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
+                  return row;
+                })
+                $departureBoardResults.set(data);
                 $boardMinimized.set(false);
               }
             })

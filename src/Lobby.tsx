@@ -53,7 +53,7 @@ export default function Lobby() {
         'backdrop-filter': 'blur(10px)',
         padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.5)'
       }}>
-        <h2 style={{ margin: 0, 'text-align': 'center' }}>Mission Control</h2>
+        <h2 style={{ margin: 0, 'text-align': 'center' }}>Fahrtle</h2>
 
         <div>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>

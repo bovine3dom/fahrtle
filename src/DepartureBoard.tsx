@@ -74,8 +74,8 @@ export default function DepartureBoard() {
     const query = `
           SELECT stop_lat, stop_lon
           FROM transitous_everything_stop_times_one_day_even_saner
-          WHERE "ru.source" = '${row['ru.source']}'
-            AND "ru.trip_id" = '${row['ru.trip_id']}'
+          WHERE "ru.source" = '${row['source']}'
+            AND "ru.trip_id" = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
             AND departure_time >= '${row.departure_time}'
           ORDER BY departure_time ASC
@@ -111,8 +111,8 @@ export default function DepartureBoard() {
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
-      WHERE "ru.source" = '${row['ru.source']}'
-        AND "ru.trip_id" = '${row['ru.trip_id']}'
+      WHERE "ru.source" = '${row['source']}'
+        AND "ru.trip_id" = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'
         AND departure_time >= '${row.departure_time}'
       ORDER BY departure_time ASC
@@ -233,6 +233,7 @@ export default function DepartureBoard() {
               <div class="col-time">Time</div>
               <div class="col-route">Line</div>
               <div class="col-dest">Destination</div>
+              <div class="col-dir">Dir</div> {/* New Header */}
               <div class="col-type">Type</div>
               <div class="col-preview"></div>
             </div>
@@ -282,6 +283,19 @@ export default function DepartureBoard() {
                         <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
                         <div class="route-long">{row.route_long_name}</div>
                       </div>
+
+                      <div class="col-dir">
+                        <svg
+                          class="dir-icon"
+                          viewBox="0 0 24 24"
+                          style={{
+                            transform: `rotate(${row.bearing || 0}deg)`
+                          }}
+                        >
+                          <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
+                        </svg>
+                      </div>
+
                       <div class="col-type">{getRouteEmoji(row.route_type)}</div>
                       <div class="col-preview">
                         <button
@@ -615,7 +629,23 @@ export default function DepartureBoard() {
           font-weight: 900; 
           font-size: 1.8rem; 
         }
-          /* add a white rounded border to the cell but not the header*/
+          
+        .col-dir {
+          width: 50px;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .dir-icon {
+          width: 24px;
+          height: 24px;
+          fill: rgba(255, 255, 255, 0.9);
+          filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+          transition: transform 0.2s ease;
+        }
+
         .table-body .col-type { width: 80px; text-align: center; flex-shrink: 0; border: 1px solid #fff; border-radius: 4px; background: rgba(255,255,255,0.8); }
         .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
 
