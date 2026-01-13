@@ -183,7 +183,7 @@ export default function MapView() {
           $stopTimeZone.set(stopZone);
 
           const simTime = $clock.get();
-          const localDateStr = new Date(simTime).toLocaleString('en-GB', { timeZone: stopZone });
+          const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
           const localDate = new Date(localDateStr);
           const hour = localDate.getHours();
           const minute = localDate.getMinutes();

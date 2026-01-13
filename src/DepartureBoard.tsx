@@ -35,7 +35,7 @@ export default function DepartureBoard() {
         const seen = new Set<string>();
 
         // Convert current simulation time to local STOP wall-time
-        const localDateStr = new Date(now).toLocaleString('en-GB', { timeZone: zone });
+        const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
         const localDate = new Date(localDateStr);
         const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
 
