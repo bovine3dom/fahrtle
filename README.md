@@ -19,10 +19,6 @@ ls srv/* | entr -r barn run srv/server.ts
 
 - trophies? most modes of transport? highest max speed? most departures? opposites of that?
 
-- improve lobby screen
-
 - think about how to store route history in a human-readable way
 
 - fix nginx root
-
-- switch to / make fahrtle edge list

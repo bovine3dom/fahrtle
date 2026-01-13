@@ -280,7 +280,7 @@ export default function MapView() {
             WHERE h3 IN (${h3Conditions})
               AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
             ORDER by departure_time asc
-            LIMIT 40
+            LIMIT 100
           `;
 
           // ideally would check if there is only one stop on the service (i.e. ours) and exclude them
