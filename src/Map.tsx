@@ -214,7 +214,9 @@ export default function MapView() {
           'text-ignore-placement': false
         },
         paint: {
-          'text-color': ['get', 'color']
+          'text-color': ['get', 'color'],
+          'text-halo-color': '#000',
+          'text-halo-width': 0.1,
         }
       });
 
