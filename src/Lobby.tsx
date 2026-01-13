@@ -33,14 +33,25 @@ export default function Lobby() {
     setRoom(randomId);
   };
 
+  const bgImage = "/assets/h3_hero.png";
+
   return (
     <div style={{
-      display: 'flex', height: '100vh', 'justify-content': 'center', 'align-items': 'center',
-      background: '#1e293b', color: 'white'
+      display: 'flex',
+      height: '100vh',
+      'justify-content': 'center',
+      'align-items': 'center',
+      color: 'white',
+      background: `linear-gradient(rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.7)), url('${bgImage}')`,
+      'background-size': 'cover',
+      'background-position': 'center',
+      'background-repeat': 'no-repeat'
     }}>
       <form onSubmit={handleJoin} style={{
         display: 'flex', 'flex-direction': 'column', gap: '16px',
-        background: '#334155', padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.5)'
+        background: 'rgba(51, 65, 85, 0.9)',
+        'backdrop-filter': 'blur(10px)',
+        padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.5)'
       }}>
         <h2 style={{ margin: 0, 'text-align': 'center' }}>Mission Control</h2>
 
