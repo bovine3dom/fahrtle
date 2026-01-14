@@ -190,6 +190,49 @@ export default function MapView() {
         paint: { 'raster-opacity': 1 }
       });
 
+      mapInstance!.addSource('course-markers', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      // Icon Layer
+      mapInstance!.addLayer({
+        id: 'course-markers-icon',
+        type: 'symbol',
+        source: 'course-markers',
+        layout: {
+          'text-field': ['get', 'icon'],
+          'text-size': 32,
+          'text-allow-overlap': true,
+          'text-offset': [0, -0.2]
+        },
+        paint: {
+          // chill green
+          'text-color': '#10b981',
+          'text-halo-color': '#000000',
+          'text-halo-width': 2,
+        }
+      });
+      // Label Layer
+      mapInstance!.addLayer({
+        id: 'course-markers-label',
+        type: 'symbol',
+        source: 'course-markers',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 14,
+          'text-font': ['Open Sans Bold'],
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-allow-overlap': true
+        },
+        paint: {
+          'text-color': '#000000',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        }
+      });
+
       mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       mapInstance!.addLayer({
@@ -238,43 +281,6 @@ export default function MapView() {
           'line-dasharray': [2, 1]
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
-
-      mapInstance!.addSource('course-markers', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      });
-
-      // Icon Layer
-      mapInstance!.addLayer({
-        id: 'course-markers-icon',
-        type: 'symbol',
-        source: 'course-markers',
-        layout: {
-          'text-field': ['get', 'icon'],
-          'text-size': 32,
-          'text-allow-overlap': true,
-          'text-offset': [0, -0.2]
-        }
-      });
-      // Label Layer
-      mapInstance!.addLayer({
-        id: 'course-markers-label',
-        type: 'symbol',
-        source: 'course-markers',
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': 14,
-          'text-font': ['Open Sans Bold'],
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-allow-overlap': true
-        },
-        paint: {
-          'text-color': '#000000',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2,
-        }
       });
 
       mapInstance!.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
