@@ -115,7 +115,7 @@ const server = serve<WSData>({
             state: 'JOINING',
             countdownEnd: null,
             startPos: [55.9533, -3.1883], // Edinburgh, Scotland
-            finishPos: null,
+            finishPos: [43.7101, 7.2660], // Nice, France
             emptySince: null,
             virtualTime: now,
             lastRealTime: now,
