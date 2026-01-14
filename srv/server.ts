@@ -31,6 +31,7 @@ type Room = {
   state: 'JOINING' | 'COUNTDOWN' | 'RUNNING';
   countdownEnd: number | null;
   emptySince: number | null; // For cleanup
+  gameStartTime: number | null;
 
   startPos: [number, number];
   finishPos: [number, number] | null;
@@ -117,6 +118,7 @@ const server = serve<WSData>({
             startPos: [55.9533, -3.1883], // Edinburgh, Scotland
             finishPos: [43.7101, 7.2660], // Nice, France
             emptySince: null,
+            gameStartTime: null,
             virtualTime: now,
             lastRealTime: now,
             playbackRate: 1.0,
@@ -159,6 +161,7 @@ const server = serve<WSData>({
           type: 'ROOM_STATE',
           state: room.state,
           countdownEnd: room.countdownEnd,
+          gameStartTime: room.gameStartTime,
           serverTime: room.virtualTime,
           startPos: room.startPos,
           finishPos: room.finishPos,
@@ -386,6 +389,7 @@ function broadcastRoomState(room: Room) {
     type: 'ROOM_STATE_UPDATE',
     state: room.state,
     countdownEnd: room.countdownEnd,
+    gameStartTime: room.gameStartTime,
     startPos: room.startPos,
     finishPos: room.finishPos,
     serverTime: room.virtualTime,
@@ -414,6 +418,7 @@ function updateRoom(roomId: string) {
   // Handle countdown completion
   if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
     room.state = 'RUNNING';
+    room.gameStartTime = room.virtualTime;
     room.countdownEnd = null;
     broadcastRoomState(room);
   }

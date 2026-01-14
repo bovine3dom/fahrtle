@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -22,6 +22,7 @@ function App() {
   const bounds = useStore($gameBounds);
   const pickerMode = useStore($pickerMode);
   const pickedPoint = useStore($pickedPoint);
+  const startTime = useStore($gameStartTime);
 
   // New state for UI toggle
   const [minimized, setMinimized] = createSignal(false);
@@ -50,6 +51,24 @@ function App() {
       }
     }
   });
+
+  const formatDuration = (ms: number) => {
+    if (ms < 0) return "0s";
+    const seconds = Math.floor(ms / 1000);
+    const m = Math.floor(seconds / 60);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    const w = Math.floor(d / 7);
+
+    const parts = [];
+    if (w > 0) parts.push(`${w}w`);
+    if (d % 7 > 0) parts.push(`${d % 7}d`);
+    if (h % 24 > 0) parts.push(`${h % 24}h`);
+    if (m % 60 > 0) parts.push(`${m % 60}m`);
+    parts.push(`${seconds % 60}s`);
+
+    return parts.join(' ');
+  };
 
   const parseCoords = (s: string): [number, number] | null => {
     const parts = s.split(',');
@@ -130,6 +149,15 @@ function App() {
   const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
   const [leaveConfirm, setLeaveConfirm] = createSignal(false);
 
+  const elapsedTime = createMemo(() => {
+    const start = startTime();
+    const now = time();
+    if (start && now >= start) {
+      return formatDuration(now - start);
+    }
+    return null;
+  });
+
   // Auto-reset leave confirmation
   createEffect(() => {
     if (leaveConfirm()) {
@@ -206,6 +234,11 @@ function App() {
                   <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
                     Time Dilation: {rate().toFixed(2)}x
                   </div>
+                  <Show when={elapsedTime()}>
+                    <div style={{ 'font-size': '0.85em', 'color': '#059669', 'margin-top': '2px', 'font-weight': 'bold' }}>
+                      Elapsed: {elapsedTime()}
+                    </div>
+                  </Show>
                 </div>
 
                <Show when={roomState() === 'JOINING'}>

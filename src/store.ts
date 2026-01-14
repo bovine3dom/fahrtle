@@ -74,6 +74,7 @@ export const $playerSpeeds = map<Record<string, number>>({});
 export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null }>({ start: null, finish: null });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
+export const $gameStartTime = atom<number | null>(null);
 
 let ws: WebSocket | null = null;
 
@@ -133,6 +134,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
       $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
+      $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
 
@@ -140,6 +142,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
       $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
+      $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
 
