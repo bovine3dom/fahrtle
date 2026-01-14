@@ -21,6 +21,7 @@ type Player = {
   isReady: boolean;
   waypoints: Waypoint[];
   desiredRate: number; // 1.0 or 500.0
+  finishTime: number | null;
 };
 
 type Room = {
@@ -336,6 +337,25 @@ const server = serve<WSData>({
         } else {
           console.log(`[Server] No future waypoints to cancel or already at last waypoint.`);
         }
+      }
+
+      if (message.type === 'PLAYER_FINISHED') {
+        const d = ws.data;
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room || room.state !== 'RUNNING') return;
+        
+        const player = room.players[d.playerId];
+        if (!player || player.finishTime) return; // Ignore if already finished
+
+        console.log(`[Room ${d.roomId}] Player ${d.playerId} finished at ${message.finishTime}ms`);
+        player.finishTime = message.finishTime;
+
+        // Broadcast the finish to everyone (triggers leaderboard update)
+        server.publish(d.roomId, JSON.stringify({
+          type: 'PLAYER_JOINED',
+          player: player
+        }));
       }
     },
 

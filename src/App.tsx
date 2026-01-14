@@ -158,6 +158,33 @@ function App() {
     return null;
   });
 
+  const sortedPlayerIds = createMemo(() => {
+    const all = players();
+    return Object.keys(all).sort((idA, idB) => {
+      const a = all[idA];
+      const b = all[idB];
+      
+      // 1. Finished players first
+      if (a.finishTime != null && b.finishTime == null) return -1;
+      if (a.finishTime == null && b.finishTime != null) return 1;
+      
+      // 2. Sort by finish time (asc)
+      if (a.finishTime != null && b.finishTime != null) {
+        return a.finishTime - b.finishTime;
+      }
+
+      // 3. Fallback to ID
+      return a.id.localeCompare(b.id);
+    });
+  });
+
+  const getMedal = (rankIndex: number) => {
+    if (rankIndex === 0) return '🥇';
+    if (rankIndex === 1) return '🥈';
+    if (rankIndex === 2) return '🥉';
+    return '';
+  };
+
   // Auto-reset leave confirmation
   createEffect(() => {
     if (leaveConfirm()) {
@@ -327,71 +354,88 @@ function App() {
                     Active Pilots
                   </div>
                   <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
-                    <For each={Object.values(players()).sort((a, b) => a.id.localeCompare(b.id))}>
-                      {(p) => (
-                        <div
-                          onClick={() => flyToPlayer(p.id)}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                          style={{
-                            display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
-                            'font-weight': p.id === myId() ? '800' : '400',
-                            'color': p.id === myId() ? '#0f172a' : '#334155',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            'border-radius': '4px',
-                            transition: 'background 0.2s',
-                          }}>
-                          <div style={{
-                            width: '10px', height: '10px', 'border-radius': '50%',
-                            background: p.color, 'flex-shrink': 0,
-                            'border': '1px solid rgba(0,0,0,0.2)'
-                          }} />
-                          <div style={{ 'flex': 1, 'min-width': 0 }}>
+                    <For each={sortedPlayerIds()}>
+                      {(id, index) => {
+                        // Access player reactively by ID
+                        const p = () => players()[id]; 
+                        const isFinished = () => p().finishTime != null;
+                        
+                        return (
+                          <div
+                            onClick={() => flyToPlayer(p().id)}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            style={{
+                              display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
+                              'font-weight': p().id === myId() ? '800' : '400',
+                              'color': p().id === myId() ? '#0f172a' : '#334155',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              'border-radius': '4px',
+                              transition: 'background 0.2s',
+                              'background': isFinished() ? 'rgba(255, 237, 74, 0.1)' : 'transparent',
+                              'border': isFinished() ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid transparent'
+                            }}>
                             <div style={{
-                              'font-size': '0.9em',
-                              'white-space': 'nowrap',
-                              'overflow': 'hidden',
-                              'text-overflow': 'ellipsis',
-                            }}>
-                              {p.id} {p.id === myId() ? '(You)' : ''} {(p.desiredRate || 1) > 1 ? '💤' : ''}
+                              width: '10px', height: '10px', 'border-radius': '50%',
+                              background: p().color, 'flex-shrink': 0,
+                              'border': '1px solid rgba(0,0,0,0.2)'
+                            }} />
+                            <div style={{ 'flex': 1, 'min-width': 0 }}>
+                              <div style={{
+                                'font-size': '0.9em',
+                                'white-space': 'nowrap',
+                                'overflow': 'hidden',
+                                'text-overflow': 'ellipsis',
+                              }}>
+                                <Show when={isFinished()}>
+                                  <span style={{ "margin-right": "4px" }}>{getMedal(index())}</span>
+                                </Show>
+                                {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && !isFinished() ? '💤' : ''}
+                              </div>
+                              {(() => {
+                                if (isFinished()) {
+                                   return (
+                                     <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
+                                       Finished in {formatDuration(p().finishTime!)}
+                                     </div>
+                                   );
+                                }
+                                const nextWp = p().waypoints.find((wp: any) => wp.arrivalTime > time());
+                                if (nextWp && nextWp.stopName) {
+                                  return (
+                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
+                                      &rarr; {nextWp.stopName}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
-                            {(() => {
-                              // Find next waypoint
-                              const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
-                              if (nextWp && nextWp.stopName) {
-                                return (
-                                  <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
-                                    &rarr; {nextWp.stopName}
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()}
-                          </div>
 
-                          {/* Speed Indicator */}
-                          {roomState() === 'RUNNING' && (
-                            <span style={{
-                              'font-size': '0.75em',
-                              'font-family': 'monospace',
-                              'color': '#64748b',
-                              'margin-right': '6px',
-                              'min-width': '60px',
-                              'text-align': 'right'
-                            }}>
-                              {(speeds()[p.id] || 0).toFixed(0)} km/h
-                            </span>
-                          )}
-                          {roomState() !== 'RUNNING' && (
-                            p.isReady ? (
-                              <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
-                            ) : (
-                              <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
-                            )
-                          )}
-                        </div>
-                      )}
+                            {/* Speed / Ready Status */}
+                            {roomState() === 'RUNNING' && !isFinished() && (
+                              <span style={{
+                                'font-size': '0.75em',
+                                'font-family': 'monospace',
+                                'color': '#64748b',
+                                'margin-right': '6px',
+                                'min-width': '60px',
+                                'text-align': 'right'
+                              }}>
+                                {(speeds()[p().id] || 0).toFixed(0)} km/h
+                              </span>
+                            )}
+                            {roomState() !== 'RUNNING' && (
+                              p().isReady ? (
+                                <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
+                              ) : (
+                                <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
+                              )
+                            )}
+                          </div>
+                        );
+                      }}
                     </For>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-j
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds, $roomState } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -453,8 +453,21 @@ export default function MapView() {
     return currentState;
   });
 
+  let finishCells: string[] = [];
   createEffect(() => {
     const b = bounds();
+    if (b.finish) {
+      try {
+        const center = latLngToCell(b.finish[0], b.finish[1], 11);
+        finishCells = gridDisk(center, 1);
+      } catch (e) {
+        console.error("Error calculating H3 finish cells", e);
+        finishCells = [];
+      }
+    } else {
+      finishCells = [];
+    }
+
     // Use mapInstance directly if possible, or wait for mapReady
     if (!mapReady() || !mapInstance) return;
 
@@ -551,6 +564,10 @@ const startAnimationLoop = () => {
     const currentSpeeds: Record<string, number> = {};
     const vehicleFeatures: any[] = [];
 
+    const myId = $myPlayerId.get();
+    const isRunning = $roomState.get() === 'RUNNING';
+    const startTime = $gameStartTime.get();
+
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
 
@@ -599,6 +616,17 @@ const startAnimationLoop = () => {
             if ($playerTimeZone.get() !== zone) {
               $playerTimeZone.set(zone);
             }
+            if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
+                // only check every 10th frame
+                if (frameCount % 10 !== 0) return; // dangerous because code below might not execute
+                try {
+                  const myCell = latLngToCell(currentPos[1], currentPos[0], 11);
+                  if (finishCells.includes(myCell)) {
+                    console.log("[Client] Crossed finish line!");
+                    finishRace(now - startTime);
+                  }
+                } catch(e) { /* ignore H3 errors */ }
+             }
           }
         }
       }

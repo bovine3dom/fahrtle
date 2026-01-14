@@ -42,6 +42,7 @@ export type Player = {
   isReady: boolean;
   waypoints: Waypoint[];
   renderableSegments?: AnimationSegment[]; // Client-side computed
+  finishTime?: number;
   desiredRate?: number;
 };
 
@@ -316,4 +317,14 @@ export function setGameBounds(start: [number, number] | null, finish: [number, n
       finishPos: finish
     }));
   }
+}
+
+export function finishRace(finishTime: number) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  
+  console.log(`[Store] Finishing race at ${finishTime}ms`);
+  ws.send(JSON.stringify({
+    type: 'PLAYER_FINISHED',
+    finishTime: finishTime
+  }));
 }
