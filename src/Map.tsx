@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -221,6 +221,14 @@ export default function MapView() {
         }
       });
 
+      const pickerMode = useStore($pickerMode);
+      createEffect(() => {
+        const mode = pickerMode();
+        if (mapInstance && mapInstance.getCanvas()) {
+           mapInstance.getCanvas().style.cursor = mode ? 'crosshair' : 'grab';
+        }
+      });
+
       let clickTimeout: any = null;
 
       mapInstance!.on('dblclick', (e) => {
@@ -228,6 +236,7 @@ export default function MapView() {
           clearTimeout(clickTimeout);
           clickTimeout = null;
         }
+        if ($pickerMode.get()) return;
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
@@ -235,6 +244,13 @@ export default function MapView() {
         if (clickTimeout) clearTimeout(clickTimeout);
 
         clickTimeout = setTimeout(() => {
+          const mode = $pickerMode.get();
+          if (mode) {
+             console.log(`[Map] Picked point for ${mode}:`, e.lngLat);
+             $pickedPoint.set({ lat: e.lngLat.lat, lng: e.lngLat.lng, target: mode });
+             $pickerMode.set(null);
+             return;
+          }
           const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
           const neighborhood = gridDisk(h3Index, 2);
 

@@ -72,6 +72,8 @@ export const $previewRoute = atom<{ id: string, color: string, coordinates: [num
 export const $boardMinimized = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
 export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null }>({ start: null, finish: null });
+export const $pickerMode = atom<'start' | 'finish' | null>(null);
+export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 
 let ws: WebSocket | null = null;
 

@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -20,6 +20,8 @@ function App() {
   const speeds = useStore($playerSpeeds);
   const time = useStore($clock);
   const bounds = useStore($gameBounds);
+  const pickerMode = useStore($pickerMode);
+  const pickedPoint = useStore($pickedPoint);
 
   // New state for UI toggle
   const [minimized, setMinimized] = createSignal(false);
@@ -27,6 +29,15 @@ function App() {
   // Local state for inputs
   const [startStr, setStartStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
+
+  createEffect(() => {
+    const p = pickedPoint();
+    if (p) {
+      const coordStr = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+      if (p.target === 'start') setStartStr(coordStr);
+      if (p.target === 'finish') setFinishStr(coordStr);
+    }
+  });
 
   const parseCoords = (s: string): [number, number] | null => {
     const parts = s.split(',');
@@ -87,6 +98,14 @@ function App() {
 
   const updateBounds = () => {
     setGameBounds(parseCoords(startStr()), parseCoords(finishStr()));
+  };
+
+  const togglePicker = (mode: 'start' | 'finish') => {
+    if (pickerMode() === mode) {
+      $pickerMode.set(null); // Cancel
+    } else {
+      $pickerMode.set(mode); // Activate
+    }
   };
 
   const canCancel = createMemo(() => {
@@ -188,24 +207,50 @@ function App() {
                     
                     <div style={{ 'margin-bottom': '6px' }}>
                       <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng)</label>
-                      <input 
-                        type="text" 
-                        value={startStr()} 
-                        onInput={(e) => setStartStr(e.currentTarget.value)}
-                        placeholder="e.g. 55.953, -3.188"
-                        style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                      />
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input 
+                          type="text" 
+                          value={startStr()} 
+                          onInput={(e) => setStartStr(e.currentTarget.value)}
+                          placeholder="e.g. 55.953, -3.188"
+                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                        />
+                        <button
+                          onClick={() => togglePicker('start')}
+                          title="Pick on Map"
+                          style={{
+                            background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
+                            color: pickerMode() === 'start' ? 'white' : '#475569',
+                            border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
+                          }}
+                        >
+                          🧭
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ 'margin-bottom': '6px' }}>
                       <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
-                      <input 
-                        type="text" 
-                        value={finishStr()} 
-                        onInput={(e) => setFinishStr(e.currentTarget.value)}
-                        placeholder="e.g. 51.507, -0.127"
-                        style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                      />
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input 
+                          type="text" 
+                          value={finishStr()} 
+                          onInput={(e) => setFinishStr(e.currentTarget.value)}
+                          placeholder="e.g. 51.507, -0.127"
+                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                        />
+                        <button
+                          onClick={() => togglePicker('finish')}
+                          title="Pick on Map"
+                          style={{
+                            background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
+                            color: pickerMode() === 'start' ? 'white' : '#475569',
+                            border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
+                          }}
+                        >
+                          🧭
+                        </button>
+                      </div>
                     </div>
 
                     <button 
