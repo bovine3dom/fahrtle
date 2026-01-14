@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect } from 'solid-js';
+import { onMount, onCleanup, createEffect, createSignal } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -102,6 +102,7 @@ const updateStops = async (map: maplibregl.Map) => {
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let frameId: number;
+  const [mapReady, setMapReady] = createSignal(false);
 
   onMount(() => {
     console.log('[Map] Component Mounted. Container Ref:', mapContainer);
@@ -330,12 +331,13 @@ export default function MapView() {
       // Initial load of stops
       updateStops(mapInstance!);
 
+      setMapReady(true);
       startAnimationLoop();
     });
   });
 
   createEffect(() => {
-    const preview = useStore($previewRoute)();
+    const preview = useStore($previewRoute)(); // todo: don't think this should be here
     if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
     const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
@@ -358,32 +360,56 @@ export default function MapView() {
     }
   });
 
-  const startAnimationLoop = () => {
-    let frameCount = 0;
-    let lastSpeedUpdate = 0;
+  const players = useStore($players);
+  createEffect(() => {
+    const isReady = mapReady();
+    const allPlayers = players();
+    if (!mapInstance || !isReady || !allPlayers) return;
 
-    const loop = () => {
-      if (!mapInstance) return;
+    const routeFeatures = [];
 
-      const now = getServerTime();
-      const allPlayers = $players.get();
-      const currentSpeeds: Record<string, number> = {};
+    for (const pid in allPlayers) {
+      const player = allPlayers[pid];
+      const coords = player.waypoints.map(wp => [wp.x, wp.y]);
+      if (coords.length > 1) {
+        routeFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: { color: player.color }
+        });
+      }
+    }
 
-      const vehicleFeatures: any[] = [];
-      const routeFeatures: any[] = [];
+    const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
+    if (rSource) {
+      rSource.setData({ type: 'FeatureCollection', features: routeFeatures as any });
+    }
+  });
+
+const startAnimationLoop = () => {
+  let lastFrameTime = 0;
+  const FRAME_INTERVAL = 1000 / 30;  // 30 FPS
+  let frameCount = 0;
+
+  const loop = (timestamp: number) => {
+    frameId = requestAnimationFrame(loop);
+    frameCount++;
+
+    // Throttle rendering
+    if (timestamp - lastFrameTime < FRAME_INTERVAL) return;
+    lastFrameTime = timestamp; 
+
+    if (!mapInstance) return;
+
+    const now = getServerTime();
+    const allPlayers = $players.get(); // Use .get() to avoid subscription overhead
+    const currentSpeeds: Record<string, number> = {};
+    const vehicleFeatures: any[] = [];
 
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
 
         const coords = player.waypoints.map(wp => [wp.x, wp.y]);
-        if (coords.length > 1) {
-          routeFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: coords },
-            properties: { color: player.color }
-          });
-        }
-
         let currentPos = null;
 
         if (player.segments.length === 0) {
@@ -431,23 +457,14 @@ export default function MapView() {
           }
         }
       }
-      frameCount++;
 
       const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
-      const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
 
       if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
-      if (rSource) rSource.setData({ type: 'FeatureCollection', features: routeFeatures });
 
-      // Throttle speed updates to 500ms
-      if (Date.now() - lastSpeedUpdate > 500) {
-        $playerSpeeds.set(currentSpeeds);
-        lastSpeedUpdate = Date.now();
-      }
-
-      frameId = requestAnimationFrame(loop);
+      $playerSpeeds.set(currentSpeeds);
     };
-    loop();
+    requestAnimationFrame(loop);
   };
 
   onCleanup(() => {

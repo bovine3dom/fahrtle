@@ -16,9 +16,14 @@ export default function Clock() {
   };
 
   onMount(() => {
+    let lastStoreUpdate = Date.now();
     const update = () => {
       const now = getServerTime();
-      $clock.set(now);
+      const realNow = Date.now();
+      if (realNow - lastStoreUpdate > 1000) {
+        $clock.set(now);
+        lastStoreUpdate = realNow;
+      }
 
       // Format to local time
       const timeString = formatInTimeZone(now, zone(), true);

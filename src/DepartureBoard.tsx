@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized } from './store';
-import { Show, For, createEffect, createSignal } from 'solid-js';
+import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
@@ -27,10 +27,11 @@ export default function DepartureBoard() {
     }
   });
 
-  const deduplicatedResults = () => {
+  const deduplicatedResults = createMemo(() => {
     const raw = results();
     if (!raw) return [];
 
+    // const now = $clock.get(); // fixes thrashing but breaks the departures leaving
     const now = currentTime();
     const zone = stopZone();
 
@@ -39,13 +40,28 @@ export default function DepartureBoard() {
     const localDate = new Date(localDateStr);
     const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
 
-    return raw.map(row => {
+    const interim = raw.map(row => {
       const depDate = new Date(row.departure_time);
       const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
       const isTomorrow = depSeconds < localSeconds;
       return { ...row, isTomorrow };
     });
-  };
+
+    // filter out and isTomorrow that are before non-isTomorrow
+    const filtered = []
+    let seenNonTomorrow = false;
+    for (const row of interim) {
+      if (row.isTomorrow) {
+        if (seenNonTomorrow) {
+          filtered.push(row);
+        }
+      } else {
+        seenNonTomorrow = true;
+        filtered.push(row);
+      }
+    }
+    return filtered.length > 0 ? filtered : interim; // tiny bug here: if all results are tomorrow, order is wrong
+  });
 
   // Clear preview whenever the displayed results change (e.g. closing board, new station)
   createEffect(() => {
