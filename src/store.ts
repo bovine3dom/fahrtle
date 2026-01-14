@@ -209,44 +209,50 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
 
   if (!player || points.length === 0) return;
 
-  // 1. Calculate relative timings and distances
-  let lastX = player.waypoints[player.waypoints.length - 1].x;
-  let lastY = player.waypoints[player.waypoints.length - 1].y;
-  let lastTime = $clock.get(); // Start from current game time
+  // 1. Calculate relative timings based on absolute timestamps
+  let lastTime = $clock.get(); // Current Sim Time
 
   const legs = [];
   let totalVirtualTime = 0;
 
-  for (const p of points) {
-    const d = Math.sqrt(Math.pow(p.lng - lastX, 2) + Math.pow(p.lat - lastY, 2));
-    // Use the GTFS delta if possible, else a minimum 1s to avoid div/0
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    
+    // Delta = Time difference from previous point (or NOW for the first point)
+    // We clamp to 1000ms minimum to avoid zero/negative math issues if schedule is slightly behind
     const delta = Math.max(1000, p.time - lastTime);
 
-    legs.push({ x: p.lng, y: p.lat, dist: d, delta, stopName: p.stopName });
-    totalVirtualTime += delta;
+    legs.push({ 
+        x: p.lng, 
+        y: p.lat, 
+        delta, 
+        stopName: p.stopName,
+        time: p.time
+    });
 
-    lastX = p.lng;
-    lastY = p.lat;
+    totalVirtualTime += delta;
     lastTime = p.time;
   }
 
   // 2. Solve for factor: VirtualDuration / factor = 30 seconds
   const targetRealTime = 30000;
   let M = totalVirtualTime / targetRealTime;
-  if (M < 1.0) M = 1.0; // Respect 1x floor for realism
+  if (M < 1.0) M = 1.0; 
 
-  console.log(`[Store] Trip: ${(totalVirtualTime / 60000).toFixed(1)} virtual minutes. Compressing with ${M.toFixed(2)}x rate to hit 30s real-time.`);
+  console.log(`[Store] Trip: ${(totalVirtualTime / 60000).toFixed(1)} virtual minutes. Compressing with ${M.toFixed(2)}x rate.`);
 
-  // 3. Send waypoints with explicit arrival times
+  // 3. Send waypoints
   let currentTime = $clock.get();
+  console.log(currentTime, points, legs);
   for (const l of legs) {
-    currentTime += l.delta; // Advance our target clock by the GTFS delta
+    currentTime += l.delta;
+    console.log(currentTime, l);
 
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
       x: l.x,
       y: l.y,
-      arrivalTime: currentTime,
+      arrivalTime: l.time,
       speedFactor: M,
       stopName: l.stopName
     }));
