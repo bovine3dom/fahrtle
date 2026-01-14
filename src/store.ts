@@ -243,10 +243,8 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
 
   // 3. Send waypoints
   let currentTime = $clock.get();
-  console.log(currentTime, points, legs);
   for (const l of legs) {
     currentTime += l.delta;
-    console.log(currentTime, l);
 
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
