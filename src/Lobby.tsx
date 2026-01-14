@@ -49,11 +49,26 @@ export default function Lobby() {
     }}>
       <form onSubmit={handleJoin} style={{
         display: 'flex', 'flex-direction': 'column', gap: '16px',
-        background: 'rgba(51, 65, 85, 0.9)',
-        'backdrop-filter': 'blur(10px)',
-        padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.5)'
+        background: 'rgba(51, 65, 85, 0.6)',
+        'backdrop-filter': 'blur(1px)',
+        padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.3)'
       }}>
-        <h2 style={{ margin: 0, 'text-align': 'center' }}>Fahrtle</h2>
+        <div style={{ 
+          display: 'flex', 
+          'align-items': 'center', 
+          'justify-content': 'center', 
+          gap: '12px',
+          'margin-bottom': '8px'
+        }}>
+          <img 
+            src="/favicon.svg" 
+            alt="Logo" 
+            style={{ width: '72px', height: '72px' }}
+          />
+          <h2 style={{ margin: 0, 'text-align': 'center', 'font-size': '1.8rem', 'letter-spacing': '1px' }}>
+            fahrtle
+          </h2>
+        </div>
 
         <div>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
