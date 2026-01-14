@@ -32,7 +32,7 @@ type Room = {
   countdownEnd: number | null;
   emptySince: number | null; // For cleanup
 
-  startPos: [number, number] | null;
+  startPos: [number, number];
   finishPos: [number, number] | null;
 
   // Time State
@@ -50,6 +50,18 @@ const BASE_SPEED = 0.0000005 * 0.025; // walking speed, approx 5km/h
 // Helper: Distance
 function dist(p1: { x: number, y: number }, p2: { x: number, y: number }) {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+}
+
+// Helper: Generate a random point within ~50m of a center
+function getSpawnPoint(centerLat: number, centerLng: number) {
+  const spreadMeters = 50;
+  const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
+  const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(centerLat * Math.PI / 180)));
+  
+  return {
+    x: centerLng + lngOffset,
+    y: centerLat + latOffset
+  };
 }
 
 const server = serve<WSData>({
@@ -102,7 +114,7 @@ const server = serve<WSData>({
             players: {},
             state: 'JOINING',
             countdownEnd: null,
-            startPos: null,
+            startPos: [55.9533, -3.1883], // Edinburgh, Scotland
             finishPos: null,
             emptySince: null,
             virtualTime: now,
@@ -118,18 +130,18 @@ const server = serve<WSData>({
         room.emptySince = null;
 
         if (!room.players[playerId]) {
-          const spreadMeters = 50;
-          const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
-          const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(55.9533 * Math.PI / 180)));
+          const centerLat = room.startPos[0];
+          const centerLng = room.startPos[1];
+
+          const spawn = getSpawnPoint(centerLat, centerLng);
 
           room.players[playerId] = {
             id: playerId,
             color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
-            // Initial position: Edinburgh, Scotland [-3.1883, 55.9533]
             waypoints: [{
-              x: -3.1883 + lngOffset,
-              y: 55.9533 + latOffset,
+              x: spawn.x,
+              y: spawn.y,
               startTime: 0,
               arrivalTime: 0,
               speedFactor: 1
@@ -206,8 +218,39 @@ const server = serve<WSData>({
         const room = rooms.get(d.roomId);
         if (!room || room.state !== 'JOINING') return; // Only allow editing in lobby
 
+        const prevStart = room.startPos;
         room.startPos = message.startPos; // Expecting [lat, lng] or null
         room.finishPos = message.finishPos;
+
+        if (room.startPos) {
+          const [newLat, newLng] = room.startPos;
+
+          const changed = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+
+          if (changed) {
+            console.log(`[Room ${d.roomId}] Start moved to ${newLat}, ${newLng}. Repositioning players.`);
+
+            for (const pid in room.players) {
+              const p = room.players[pid];
+              const spawn = getSpawnPoint(newLat, newLng);
+
+              // Reset waypoints to the new start
+              p.waypoints = [{
+                x: spawn.x,
+                y: spawn.y,
+                startTime: room.virtualTime, // Use current virtual time
+                arrivalTime: room.virtualTime,
+                speedFactor: 1
+              }];
+
+              // Broadcast the update for this player
+              server.publish(d.roomId, JSON.stringify({
+                type: 'PLAYER_JOINED', // Reuse JOINED as "Update Full Player State"
+                player: p
+              }));
+            }
+          }
+        }
 
         broadcastRoomState(room);
       }
