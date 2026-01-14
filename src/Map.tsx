@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -202,6 +202,43 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
+      mapInstance!.addSource('course-markers', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      // Icon Layer
+      mapInstance!.addLayer({
+        id: 'course-markers-icon',
+        type: 'symbol',
+        source: 'course-markers',
+        layout: {
+          'text-field': ['get', 'icon'],
+          'text-size': 32,
+          'text-allow-overlap': true,
+          'text-offset': [0, -0.2]
+        }
+      });
+      // Label Layer
+      mapInstance!.addLayer({
+        id: 'course-markers-label',
+        type: 'symbol',
+        source: 'course-markers',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 14,
+          'text-font': ['Open Sans Bold'],
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-allow-overlap': true
+        },
+        paint: {
+          'text-color': '#000000',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        }
+      });
+
       mapInstance!.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance!.addLayer({
         id: 'stops-layer',
@@ -350,6 +387,34 @@ export default function MapView() {
       setMapReady(true);
       startAnimationLoop();
     });
+  });
+  
+  const bounds = useStore($gameBounds);
+  createEffect(() => {
+    const b = bounds();
+    // Use mapInstance directly if possible, or wait for mapReady
+    if (!mapReady() || !mapInstance) return;
+
+    const source = mapInstance.getSource('course-markers') as maplibregl.GeoJSONSource;
+    if (!source) return;
+
+    const features = [];
+    if (b.start) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [b.start[1], b.start[0]] }, // GeoJSON: [lng, lat]
+        properties: { icon: '🟢', label: 'Start' }
+      });
+    }
+    if (b.finish) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [b.finish[1], b.finish[0]] }, // GeoJSON: [lng, lat]
+        properties: { icon: '🏁', label: 'Finish' }
+      });
+    }
+
+    source.setData({ type: 'FeatureCollection', features: features as any });
   });
 
   const Preview = useStore($previewRoute);

@@ -33,9 +33,21 @@ function App() {
   createEffect(() => {
     const p = pickedPoint();
     if (p) {
-      const coordStr = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
-      if (p.target === 'start') setStartStr(coordStr);
-      if (p.target === 'finish') setFinishStr(coordStr);
+      // 1. Get the parsed values of whatever is currently in the boxes.
+      // We do this to ensure that if the user typed manually in the OTHER box
+      // (and hasn't synced yet), we don't overwrite their work with the old server state.
+      const currentStart = parseCoords(startStr());
+      const currentFinish = parseCoords(finishStr());
+
+      const newPoint: [number, number] = [p.lat, p.lng];
+
+      if (p.target === 'start') {
+        // Update Start with pick, keep Finish as is (local or server)
+        setGameBounds(newPoint, currentFinish);
+      } else if (p.target === 'finish') {
+        // Update Finish with pick, keep Start as is (local or server)
+        setGameBounds(currentStart, newPoint);
+      }
     }
   });
 
