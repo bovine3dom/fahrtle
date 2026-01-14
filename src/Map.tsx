@@ -1,8 +1,8 @@
-import { onMount, onCleanup, createEffect, createSignal } from 'solid-js';
+import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds, $roomState } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -428,6 +428,25 @@ export default function MapView() {
   });
   
   const bounds = useStore($gameBounds);
+  const roomState = useStore($roomState);
+  createEffect((prevState) => {
+    const currentState = roomState();
+
+    if (prevState === 'COUNTDOWN' && currentState === 'RUNNING') {
+      const b = untrack(() => bounds());
+      if (b.start && mapInstance) {
+        console.log('[Map] Race started! Zooming to start line.');
+        mapInstance.flyTo({
+          center: [b.start[1], b.start[0]],
+          zoom: 14,
+          duration: 2000,
+          essential: true
+        });
+      }
+    }
+    return currentState;
+  });
+
   createEffect(() => {
     const b = bounds();
     // Use mapInstance directly if possible, or wait for mapReady
