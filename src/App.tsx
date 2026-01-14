@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -19,9 +19,75 @@ function App() {
   const countdownEnd = useStore($countdownEnd);
   const speeds = useStore($playerSpeeds);
   const time = useStore($clock);
+  const bounds = useStore($gameBounds);
 
   // New state for UI toggle
   const [minimized, setMinimized] = createSignal(false);
+
+  // Local state for inputs
+  const [startStr, setStartStr] = createSignal("");
+  const [finishStr, setFinishStr] = createSignal("");
+
+  const parseCoords = (s: string): [number, number] | null => {
+    const parts = s.split(',');
+    if (parts.length !== 2) return null;
+
+    const latStr = parts[0].trim();
+    const lngStr = parts[1].trim();
+
+    // Prevent empty strings from becoming 0
+    if (latStr === '' || lngStr === '') return null;
+
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return [lat, lng];
+    }
+    return null;
+
+  };
+
+  createEffect(() => {
+    const b = bounds();
+    // Only update if the store actually has values, to allow user to clear/type initially
+    // We compare with current parsed value to avoid blowing away user typing if it matches numerically
+    // But primarily this effect runs when *server* sends an update.
+    if (b.start) setStartStr(`${b.start[0]}, ${b.start[1]}`);
+    else if (!b.start && !startStr()) setStartStr("");
+
+    if (b.finish) setFinishStr(`${b.finish[0]}, ${b.finish[1]}`);
+    else if (!b.finish && !finishStr()) setFinishStr("");
+  });
+
+  // Check if local inputs match the store (saved state)
+  const isSaved = createMemo(() => {
+    const b = bounds();
+    const s = parseCoords(startStr());
+    const f = parseCoords(finishStr());
+
+    const compare = (p1: [number, number] | null, p2: [number, number] | null) => {
+      if (!p1 && !p2) return true;
+      if (!p1 || !p2) return false;
+      // Use epsilon for float comparison safety
+      return Math.abs(p1[0] - p2[0]) < 0.000001 && Math.abs(p1[1] - p2[1]) < 0.000001;
+    };
+    const checkField = (str: string, serverVal: [number, number] | null) => {
+      const parsed = parseCoords(str);
+      
+      if (parsed === null && str.trim() !== "") {
+        return false;
+      }
+      
+      return compare(parsed, serverVal);
+    };
+
+    return checkField(startStr(), b.start) && checkField(finishStr(), b.finish);
+  });
+
+  const updateBounds = () => {
+    setGameBounds(parseCoords(startStr()), parseCoords(finishStr()));
+  };
 
   const canCancel = createMemo(() => {
     const p = players()[myId()!];
@@ -110,6 +176,56 @@ function App() {
                     Time Dilation: {rate().toFixed(2)}x
                   </div>
                 </div>
+
+               <Show when={roomState() === 'JOINING'}>
+                  <div style={{
+                    'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
+                    'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
+                  }}>
+                    <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
+                      COURSE SETTINGS
+                    </div>
+                    
+                    <div style={{ 'margin-bottom': '6px' }}>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng)</label>
+                      <input 
+                        type="text" 
+                        value={startStr()} 
+                        onInput={(e) => setStartStr(e.currentTarget.value)}
+                        placeholder="e.g. 55.953, -3.188"
+                        style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                      />
+                    </div>
+
+                    <div style={{ 'margin-bottom': '6px' }}>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
+                      <input 
+                        type="text" 
+                        value={finishStr()} 
+                        onInput={(e) => setFinishStr(e.currentTarget.value)}
+                        placeholder="e.g. 51.507, -0.127"
+                        style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                      />
+                    </div>
+
+                    <button 
+                      onClick={updateBounds}
+                      disabled={isSaved()}
+                      style={{
+                        width: '100%', padding: '4px', 
+                        'background': isSaved() ? '#10b981' : '#0f172a', 
+                        'color': 'white',
+                        border: 'none', 'border-radius': '4px', 
+                        'cursor': isSaved() ? 'default' : 'pointer', 
+                        'font-size': '0.8em',
+                        'font-weight': 'bold',
+                        'transition': 'all 0.2s'
+                      }}
+                    >
+                      {isSaved() ? 'Synced ✓' : 'Set Course'}
+                    </button>
+                  </div>
+                </Show>
 
                 {/* Player List */}
                 <div style={{

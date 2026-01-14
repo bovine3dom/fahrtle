@@ -32,6 +32,9 @@ type Room = {
   countdownEnd: number | null;
   emptySince: number | null; // For cleanup
 
+  startPos: [number, number] | null;
+  finishPos: [number, number] | null;
+
   // Time State
   virtualTime: number;
   lastRealTime: number;
@@ -99,6 +102,8 @@ const server = serve<WSData>({
             players: {},
             state: 'JOINING',
             countdownEnd: null,
+            startPos: null,
+            finishPos: null,
             emptySince: null,
             virtualTime: now,
             lastRealTime: now,
@@ -143,6 +148,8 @@ const server = serve<WSData>({
           state: room.state,
           countdownEnd: room.countdownEnd,
           serverTime: room.virtualTime,
+          startPos: room.startPos,
+          finishPos: room.finishPos,
           realTime: now,
           rate: room.state === 'RUNNING' ? room.playbackRate : 0,
           players: room.players
@@ -191,6 +198,18 @@ const server = serve<WSData>({
             player: player
           }));
         }
+      }
+
+      if (message.type === 'SET_GAME_BOUNDS') {
+        const d = ws.data;
+        if (!d.roomId) return;
+        const room = rooms.get(d.roomId);
+        if (!room || room.state !== 'JOINING') return; // Only allow editing in lobby
+
+        room.startPos = message.startPos; // Expecting [lat, lng] or null
+        room.finishPos = message.finishPos;
+
+        broadcastRoomState(room);
       }
 
       // --- ADD WAYPOINT ---
@@ -324,6 +343,8 @@ function broadcastRoomState(room: Room) {
     type: 'ROOM_STATE_UPDATE',
     state: room.state,
     countdownEnd: room.countdownEnd,
+    startPos: room.startPos,
+    finishPos: room.finishPos,
     serverTime: room.virtualTime,
     realTime: Date.now(),
     rate: room.state === 'RUNNING' ? room.playbackRate : 0

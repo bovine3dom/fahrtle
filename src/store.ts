@@ -71,6 +71,7 @@ export const $clock = atom(0);
 export const $previewRoute = atom<{ id: string, color: string, coordinates: [number, number][] } | null>(null);
 export const $boardMinimized = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
+export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null }>({ start: null, finish: null });
 
 let ws: WebSocket | null = null;
 
@@ -129,12 +130,14 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
       $players.set(renderables);
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
 
     if (msg.type === 'ROOM_STATE_UPDATE') {
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
 
@@ -294,4 +297,14 @@ function processPlayer(raw: Player): RenderablePlayer {
 
 export function clearPreviewRoute() {
   $previewRoute.set(null);
+}
+
+export function setGameBounds(start: [number, number] | null, finish: [number, number] | null) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'SET_GAME_BOUNDS',
+      startPos: start,
+      finishPos: finish
+    }));
+  }
 }
