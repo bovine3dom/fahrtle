@@ -336,8 +336,9 @@ export default function MapView() {
     });
   });
 
+  const Preview = useStore($previewRoute);
   createEffect(() => {
-    const preview = useStore($previewRoute)(); // todo: don't think this should be here
+    const preview = Preview();
     if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
     const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
