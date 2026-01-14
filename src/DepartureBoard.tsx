@@ -130,9 +130,10 @@ export default function DepartureBoard() {
     chQuery(query)
       .then(res => {
         if (res && res.data && res.data.length > 0) {
+          // add small amount of randomness to avoid totally overlapping routes
           const points = res.data.map((r: any, idx: number) => ({
-            lng: r.stop_lon,
-            lat: r.stop_lat,
+            lng: r.stop_lon + Math.random() * 0.0001,
+            lat: r.stop_lat + Math.random() * 0.0001,
             // Use departure_time for the first stop, arrival_time for subsequent ones
             time: new Date(idx === 0 ? r.departure_time : r.arrival_time).getTime(),
             stopName: r.stop_name
