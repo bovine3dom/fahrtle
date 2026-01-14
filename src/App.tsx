@@ -1,11 +1,11 @@
 // ==> src/App.tsx <==
-import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect } from 'solid-js';
+import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint } from './store';
 import { getServerTime, getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
-import { flyToPlayer } from './Map';
+import { flyToPlayer, fitGameBounds } from './Map';
 import DepartureBoard from './DepartureBoard';
 
 const MapView = lazy(() => import('./Map'));
@@ -36,8 +36,8 @@ function App() {
       // 1. Get the parsed values of whatever is currently in the boxes.
       // We do this to ensure that if the user typed manually in the OTHER box
       // (and hasn't synced yet), we don't overwrite their work with the old server state.
-      const currentStart = parseCoords(startStr());
-      const currentFinish = parseCoords(finishStr());
+      const currentStart = untrack(() => parseCoords(startStr()));
+      const currentFinish = untrack(() => parseCoords(finishStr()));
 
       const newPoint: [number, number] = [p.lat, p.lng];
 
@@ -389,7 +389,10 @@ function App() {
                   </Show>
                   {roomState() !== 'RUNNING' && (
                     <button
-                      onClick={() => toggleReady()}
+                      onClick={() => {
+                        toggleReady();
+                        !players()[myId()!].isReady ? fitGameBounds() : null;
+                      }}
                       style={{
                         width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
                         color: players()[myId()!]?.isReady ? '#475569' : 'white',

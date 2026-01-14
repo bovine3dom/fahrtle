@@ -36,6 +36,44 @@ export function flyToPlayer(playerId: string) {
   }
 }
 
+export function fitGameBounds() {
+ const bounds = $gameBounds.get();
+  if (!mapInstance) return;
+
+  if (bounds.start && bounds.finish) {
+    const box = new maplibregl.LngLatBounds();
+    box.extend([bounds.start[1], bounds.start[0]]);   // [lng, lat]
+    box.extend([bounds.finish[1], bounds.finish[0]]); // [lng, lat]
+    
+    mapInstance.fitBounds(box, { 
+      padding: 200, 
+      maxZoom: 14,
+      duration: 1500,
+      essential: true
+    });
+    return;
+  }
+
+  if (bounds.start) {
+    mapInstance.flyTo({
+      center: [bounds.start[1], bounds.start[0]],
+      zoom: 14,
+      duration: 1500,
+      essential: true
+    });
+    return;
+  }
+
+  if (bounds.finish) {
+    mapInstance.flyTo({
+      center: [bounds.finish[1], bounds.finish[0]],
+      zoom: 14,
+      duration: 1500,
+      essential: true
+    });
+  }
+}
+
 // Convert crow_km to color (0-100km range)
 // Higher km = better connectivity = cooler colors (purple/blue)
 // Lower km = worse connectivity = warmer colors (red/orange)
