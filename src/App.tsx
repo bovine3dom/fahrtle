@@ -20,6 +20,9 @@ function App() {
   const speeds = useStore($playerSpeeds);
   const time = useStore($clock);
 
+  // New state for UI toggle
+  const [minimized, setMinimized] = createSignal(false);
+
   const canCancel = createMemo(() => {
     const p = players()[myId()!];
     if (!p) return false;
@@ -62,178 +65,214 @@ function App() {
           <div style={{
             position: 'absolute', top: '10px', left: '10px', 'z-index': 10,
             background: 'rgba(255,255,255,0.9)', padding: '12px', 'border-radius': '8px',
-            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)', 'min-width': '200px'
+            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+            // Layout adjustments for mobile/minimizing
+            'min-width': minimized() ? 'auto' : '200px',
+            'max-width': 'calc(100vw - 20px)',
+            'max-height': 'calc(100vh - 100px)',
+            'display': 'flex',
+            'flex-direction': 'column',
+            transition: 'all 0.2s ease-in-out'
           }}>
-            {/* Header Info */}
-            <div style={{ 'margin-bottom': '8px' }}>
-              <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>Room: {room()}</div>
-              <Clock />
-              <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
-                Time Dilation: {rate().toFixed(2)}x
-              </div>
-            </div>
-
-            {/* Player List */}
-            <div style={{
-              'margin-top': '10px',
-              'padding-top': '8px',
-              'border-top': '1px solid #ccc'
+            
+            {/* Header Row with Toggle */}
+            <div style={{ 
+              display: 'flex', 
+              'justify-content': 'space-between', 
+              'align-items': 'center', 
+              'margin-bottom': minimized() ? '0' : '8px' 
             }}>
-              <div style={{ 'font-size': '0.75em', 'text-transform': 'uppercase', 'color': '#666', 'margin-bottom': '6px', 'letter-spacing': '0.5px' }}>
-                Active Pilots
-              </div>
-              <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
-                <For each={Object.values(players()).sort((a, b) => a.id.localeCompare(b.id))}>
-                  {(p) => (
-                    <div
-                      onClick={() => flyToPlayer(p.id)}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                      style={{
-                        display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
-                        'font-weight': p.id === myId() ? '800' : '400',
-                        'color': p.id === myId() ? '#0f172a' : '#334155',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        'border-radius': '4px',
-                        transition: 'background 0.2s',
-                      }}>
-                      <div style={{
-                        width: '10px', height: '10px', 'border-radius': '50%',
-                        background: p.color, 'flex-shrink': 0,
-                        'border': '1px solid rgba(0,0,0,0.2)'
-                      }} />
-                      <div style={{ 'flex': 1, 'min-width': 0 }}>
-                        <div style={{
-                          'font-size': '0.9em',
-                          'white-space': 'nowrap',
-                          'overflow': 'hidden',
-                          'text-overflow': 'ellipsis',
-                        }}>
-                          {p.id} {p.id === myId() ? '(You)' : ''} {(p.desiredRate || 1) > 1 ? '💤' : ''}
-                        </div>
-                        {(() => {
-                          // Find next waypoint
-                          const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
-                          if (nextWp && nextWp.stopName) {
-                            return (
-                              <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
-                                &rarr; {nextWp.stopName}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-
-                      {/* Speed Indicator */}
-                      {roomState() === 'RUNNING' && (
-                        <span style={{
-                          'font-size': '0.75em',
-                          'font-family': 'monospace',
-                          'color': '#64748b',
-                          'margin-right': '6px',
-                          'min-width': '60px',
-                          'text-align': 'right'
-                        }}>
-                          {(speeds()[p.id] || 0).toFixed(0)} km/h
-                        </span>
-                      )}
-                      {roomState() !== 'RUNNING' && (
-                        p.isReady ? (
-                          <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
-                        ) : (
-                          <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
-                        )
-                      )}
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-
-            {/* Footer Actions */}
-            <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
-              <Show when={canCancel()}>
-                <button
-                  onClick={cancelNavigation}
-                  style={{
-                    width: '100%', padding: '8px', 'background': '#f59e0b', color: '#fff',
-                    border: '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
-                    'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
-                    'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                  }}
-                  title="Stops at the next upcoming station and cancels remaining trip"
-                >
-                  <span>🛑</span> Get Off At
-                  {(() => {
-                    // Find next waypoint
-                    const nextWp = players()[myId()!].waypoints.find((wp: any) => wp.arrivalTime > time());
-                    if (nextWp && nextWp.stopName) {
-                      return " " + nextWp.stopName;
-                    }
-                    return null;
-                  })()}
-                </button>
+              {/* If minimized, show Clock here. If expanded, show Room Name */}
+              <Show when={!minimized()} fallback={<Clock />}>
+                <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>Room: {room()}</div>
               </Show>
-              {roomState() !== 'RUNNING' && (
-                <button
-                  onClick={() => toggleReady()}
-                  style={{
-                    width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
-                    color: players()[myId()!]?.isReady ? '#475569' : 'white',
-                    border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
-                    'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
-                  }}
-                >
-                  {players()[myId()!]?.isReady ? 'Unready' : 'Ready Up'}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (leaveConfirm()) {
-                    leaveRoom();
-                  } else {
-                    setLeaveConfirm(true);
-                  }
-                }}
+
+              <button 
+                onClick={() => setMinimized(!minimized())}
                 style={{
-                  width: '100%', padding: '6px',
-                  'background': leaveConfirm() ? '#b91c1c' : '#fee2e2',
-                  'color': leaveConfirm() ? '#ffffff' : '#991b1b',
-                  border: '1px solid #fecaca', 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
-                  transition: 'all 0.2s'
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                  'margin-left': '10px'
                 }}
+                title={minimized() ? "Expand" : "Minimize"}
               >
-                {leaveConfirm() ? 'Click again to confirm' : 'Leave Room'}
+                {minimized() ? '▼' : '▲'}
               </button>
-
-              {/* Snooze Button */}
-              {roomState() === 'RUNNING' && (() => {
-                const me = players()[myId()!];
-                const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
-                return (
-                  <button
-                    onClick={() => toggleSnooze()}
-                    style={{
-                      width: '100%', padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
-                      color: isSnoozing ? 'white' : '#475569',
-                      border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                      'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                      'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                    }}
-                    title="Request 500x speed simulation"
-                  >
-                    <span>{isSnoozing ? '⏩' : '💤'}</span> {isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
-                  </button>
-                );
-              })()}
-
-              <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
-                {roomState() === 'RUNNING' ? 'Double click to set waypoint. Single click to query H3.' : 'Waiting for game to start...'}
-              </div>
-
             </div>
+
+            {/* Expanded Content */}
+            <Show when={!minimized()}>
+              <div style={{ 'overflow-y': 'auto', 'padding-right': '4px' }}>
+                {/* Header Info */}
+                <div style={{ 'margin-bottom': '8px' }}>
+                  <Clock />
+                  <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
+                    Time Dilation: {rate().toFixed(2)}x
+                  </div>
+                </div>
+
+                {/* Player List */}
+                <div style={{
+                  'margin-top': '10px',
+                  'padding-top': '8px',
+                  'border-top': '1px solid #ccc'
+                }}>
+                  <div style={{ 'font-size': '0.75em', 'text-transform': 'uppercase', 'color': '#666', 'margin-bottom': '6px', 'letter-spacing': '0.5px' }}>
+                    Active Pilots
+                  </div>
+                  <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
+                    <For each={Object.values(players()).sort((a, b) => a.id.localeCompare(b.id))}>
+                      {(p) => (
+                        <div
+                          onClick={() => flyToPlayer(p.id)}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          style={{
+                            display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
+                            'font-weight': p.id === myId() ? '800' : '400',
+                            'color': p.id === myId() ? '#0f172a' : '#334155',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            'border-radius': '4px',
+                            transition: 'background 0.2s',
+                          }}>
+                          <div style={{
+                            width: '10px', height: '10px', 'border-radius': '50%',
+                            background: p.color, 'flex-shrink': 0,
+                            'border': '1px solid rgba(0,0,0,0.2)'
+                          }} />
+                          <div style={{ 'flex': 1, 'min-width': 0 }}>
+                            <div style={{
+                              'font-size': '0.9em',
+                              'white-space': 'nowrap',
+                              'overflow': 'hidden',
+                              'text-overflow': 'ellipsis',
+                            }}>
+                              {p.id} {p.id === myId() ? '(You)' : ''} {(p.desiredRate || 1) > 1 ? '💤' : ''}
+                            </div>
+                            {(() => {
+                              // Find next waypoint
+                              const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
+                              if (nextWp && nextWp.stopName) {
+                                return (
+                                  <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
+                                    &rarr; {nextWp.stopName}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+
+                          {/* Speed Indicator */}
+                          {roomState() === 'RUNNING' && (
+                            <span style={{
+                              'font-size': '0.75em',
+                              'font-family': 'monospace',
+                              'color': '#64748b',
+                              'margin-right': '6px',
+                              'min-width': '60px',
+                              'text-align': 'right'
+                            }}>
+                              {(speeds()[p.id] || 0).toFixed(0)} km/h
+                            </span>
+                          )}
+                          {roomState() !== 'RUNNING' && (
+                            p.isReady ? (
+                              <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
+                  <Show when={canCancel()}>
+                    <button
+                      onClick={cancelNavigation}
+                      style={{
+                        width: '100%', padding: '8px', 'background': '#f59e0b', color: '#fff',
+                        border: '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
+                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                      }}
+                      title="Stops at the next upcoming station and cancels remaining trip"
+                    >
+                      <span>🛑</span> Get Off At
+                      {(() => {
+                        // Find next waypoint
+                        const nextWp = players()[myId()!].waypoints.find((wp: any) => wp.arrivalTime > time());
+                        if (nextWp && nextWp.stopName) {
+                          return " " + nextWp.stopName;
+                        }
+                        return null;
+                      })()}
+                    </button>
+                  </Show>
+                  {roomState() !== 'RUNNING' && (
+                    <button
+                      onClick={() => toggleReady()}
+                      style={{
+                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
+                        color: players()[myId()!]?.isReady ? '#475569' : 'white',
+                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
+                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
+                      }}
+                    >
+                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready Up'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (leaveConfirm()) {
+                        leaveRoom();
+                      } else {
+                        setLeaveConfirm(true);
+                      }
+                    }}
+                    style={{
+                      width: '100%', padding: '6px',
+                      'background': leaveConfirm() ? '#b91c1c' : '#fee2e2',
+                      'color': leaveConfirm() ? '#ffffff' : '#991b1b',
+                      border: '1px solid #fecaca', 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {leaveConfirm() ? 'Click again to confirm' : 'Leave Room'}
+                  </button>
+
+                  {/* Snooze Button */}
+                  {roomState() === 'RUNNING' && (() => {
+                    const me = players()[myId()!];
+                    const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
+                    return (
+                      <button
+                        onClick={() => toggleSnooze()}
+                        style={{
+                          width: '100%', padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
+                          color: isSnoozing ? 'white' : '#475569',
+                          border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                          'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                          'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                        }}
+                        title="Request 500x speed simulation"
+                      >
+                        <span>{isSnoozing ? '⏩' : '💤'}</span> {isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
+                      </button>
+                    );
+                  })()}
+
+                  <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
+                    {roomState() === 'RUNNING' ? 'Double click to set waypoint. Single click to query H3.' : 'Waiting for game to start...'}
+                  </div>
+                </div>
+              </div>
+            </Show>
           </div>
           <DepartureBoard />
 

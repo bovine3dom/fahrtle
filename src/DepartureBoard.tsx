@@ -722,6 +722,123 @@ export default function DepartureBoard() {
           background: #004a99;
           border-radius: 4px;
         }
+       @media (max-width: 768px) {
+            .departure-board-overlay {
+              align-items: flex-end; /* Align to bottom like a sheet */
+            }
+
+            .departure-board {
+              width: 100%;
+              height: 85vh; /* Leave some space at top to click out */
+              border-radius: 16px 16px 0 0; /* Rounded top only */
+              border-left: none;
+              border-right: none;
+              border-bottom: none;
+            }
+
+            /* 1. Fix Header Overlap: Switch to Flex Column */
+            .board-header {
+              flex-direction: column;
+              align-items: flex-start;
+              padding: 16px;
+              height: auto;
+              min-height: auto;
+              gap: 12px;
+            }
+
+            .header-main {
+              width: 100%;
+              padding-right: 40px; /* Make room for close button */
+            }
+
+            .header-main h1 {
+              font-size: 10px;
+            }
+
+            .stop-name {
+              font-size: 1.5rem; /* Smaller font for station name */
+              line-height: 1.1;
+              white-space: normal; /* Allow wrapping */
+            }
+
+            /* 2. Reposition Clock: Remove absolute centering */
+            .header-clock {
+              position: relative;
+              top: auto;
+              left: auto;
+              transform: none;
+              width: 100%;
+              flex-direction: row;
+              justify-content: space-between;
+              padding: 6px 12px;
+              margin-top: 4px;
+            }
+
+            .clock-time {
+               font-size: 1.4rem;
+            }
+
+            .header-controls {
+              top: 16px;
+              right: 16px;
+            }
+
+            /* 3. Optimize Table Columns for Width */
+            .table-head {
+               padding: 8px 10px;
+            }
+            
+            .table-row {
+               padding: 12px 10px;
+            }
+
+            /* Hide Status col, merge into time or just reduce padding */
+            .col-status { width: 12px; margin-right: 4px; } 
+
+            .col-time { 
+              width: 65px; /* Shrink time column */
+            }
+            
+            .table-body .col-time {
+              font-size: 1.4rem; /* Smaller time font */
+            }
+
+            .col-route {
+               width: 60px; /* Shrink route column */
+            }
+            
+            .route-pill {
+               padding: 2px 6px;
+               font-size: 0.8rem;
+               min-width: 40px;
+            }
+
+            /* Hide Direction on very small screens to save space */
+            .col-dir {
+               display: none; 
+            }
+
+            /* Remove the white box from Type on mobile to reduce noise */
+            .table-body .col-type {
+               background: transparent;
+               border: none;
+               width: 40px;
+               font-size: 1.2rem;
+            }
+
+            /* Make destination text wrapping cleaner */
+            .col-dest {
+               padding-right: 4px;
+            }
+            
+            .dest-main {
+               font-size: 1rem;
+               white-space: normal; /* Allow text wrap */
+               display: -webkit-box;
+               -webkit-line-clamp: 2; /* Limit to 2 lines */
+               -webkit-box-orient: vertical;
+            }
+        }
       `}</style>
     </Show>
   );
