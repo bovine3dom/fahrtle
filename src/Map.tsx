@@ -273,13 +273,14 @@ export default function MapView() {
           const minute = localDate.getMinutes();
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
+          const targetMinutes = hour * 60 + minute;
           const query = `
             SELECT *
-            -- FROM transitous_everything_stop_times_one_day_even_saner  -- switch to _edgelist_fahrtle
             FROM transitous_everything_edgelist_fahrtle
             WHERE h3 IN (${h3Conditions})
-              AND (toHour(departure_time) > ${hour} OR (toHour(departure_time) = ${hour} AND toMinute(departure_time) >= ${minute}))
-            ORDER by departure_time asc
+            ORDER by (
+              ((toHour(departure_time) * 60 + toMinute(departure_time)) - ${targetMinutes} + 1440) % 1440
+            ) ASC
             LIMIT 100
           `;
 

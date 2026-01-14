@@ -33,25 +33,17 @@ export default function DepartureBoard() {
 
     const now = currentTime();
     const zone = stopZone();
-    const seen = new Set<string>();
 
     // Convert current simulation time to local STOP wall-time
     const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
     const localDate = new Date(localDateStr);
     const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
 
-    return raw.filter(row => {
-      // 1. Filter out past departures (Local time of day only)
+    return raw.map(row => {
       const depDate = new Date(row.departure_time);
       const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
-
-      if (depSeconds < localSeconds) return false;
-
-      // 2. Deduplicate
-      const key = `${row.departure_time}|${row.route_short_name}|${row.trip_headsign}|${row.stop_name}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+      const isTomorrow = depSeconds < localSeconds;
+      return { ...row, isTomorrow };
     });
   };
 
@@ -265,8 +257,13 @@ export default function DepartureBoard() {
                           <span class="status-dot imminent"></span>
                         </Show>
                       </div>
-                      <div class="col-time">
-                        {formatRowTime(row.departure_time)}
+                      <div class="col-time" style={{ "line-height": "1.1" }}>
+                        <div>{formatRowTime(row.departure_time)}</div>
+                        <Show when={row.isTomorrow}>
+                          <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
+                            (tmrw.)
+                          </div>
+                        </Show>
                       </div>
                       <div class="col-route">
                         <span
