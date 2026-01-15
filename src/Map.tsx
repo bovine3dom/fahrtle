@@ -610,7 +610,7 @@ export default function MapView() {
 
               const dist = haversineDist(seg.start, seg.end);
               const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
-              const speed = durationHours > 0 ? dist / durationHours : 0;
+              const speed = durationHours > 0 ? (dist || 0) / durationHours : 0; // never actually zero here but ts whines
               currentSpeeds[pid] = speed;
               break;
             }
