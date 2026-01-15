@@ -441,7 +441,7 @@ function App() {
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                       }}
                     >
-                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready Up'}
+                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready up'}
                     </button>
                   )}
                   <button
@@ -511,7 +511,7 @@ function App() {
               'border-radius': '16px', color: 'white', 'text-align': 'center',
               'pointer-events': 'none', 'backdrop-filter': 'blur(4px)'
             }}>
-              <div style={{ 'font-size': '1.5rem', opacity: 0.8, 'margin-bottom': '8px' }}>Mission Starts In</div>
+              <div style={{ 'font-size': '1.5rem', opacity: 0.8, 'margin-bottom': '8px' }}>Mission starts in</div>
               <div style={{ 'font-size': '6rem', 'font-weight': 'bold', 'line-height': 1 }}>{timeLeft()}</div>
             </div>
           )}
