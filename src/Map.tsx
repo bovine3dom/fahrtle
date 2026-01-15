@@ -10,19 +10,8 @@ import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral } from 'd3';
-const haversineDist = (coords1: [number, number], coords2: [number, number]) => {
-  const toRad = (x: number) => x * Math.PI / 180;
-  const R = 6371; // km
-  const dLat = toRad(coords2[1] - coords1[1]);
-  const dLon = toRad(coords2[0] - coords1[0]);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(coords1[1])) * Math.cos(toRad(coords2[1])) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
+import { haversineDist, lerp, getBearing } from './utils/geo';
 
-const lerp = (v0: number, v1: number, t: number) => v0 * (1 - t) + v1 * t;
 let mapInstance: maplibregl.Map | undefined;
 
 export function flyToPlayer(playerId: string) {
@@ -37,16 +26,16 @@ export function flyToPlayer(playerId: string) {
 }
 
 export function fitGameBounds() {
- const bounds = $gameBounds.get();
+  const bounds = $gameBounds.get();
   if (!mapInstance) return;
 
   if (bounds.start && bounds.finish) {
     const box = new maplibregl.LngLatBounds();
     box.extend([bounds.start[1], bounds.start[0]]);   // [lng, lat]
     box.extend([bounds.finish[1], bounds.finish[0]]); // [lng, lat]
-    
-    mapInstance.fitBounds(box, { 
-      padding: 200, 
+
+    mapInstance.fitBounds(box, {
+      padding: 200,
       maxZoom: 14,
       duration: 1500,
       essential: true
@@ -175,7 +164,6 @@ export default function MapView() {
   const [mapReady, setMapReady] = createSignal(false);
 
   onMount(() => {
-    console.log('[Map] Component Mounted. Container Ref:', mapContainer);
 
     if (!mapContainer) {
       console.error('[Map] Fatal: Map container ref is missing!');
@@ -196,7 +184,6 @@ export default function MapView() {
         fadeDuration: 0,
         doubleClickZoom: false,
       });
-      console.log('[Map] Instance created.');
     } catch (err) {
       console.error('[Map] Error creating MapLibre instance:', err);
       return;
@@ -207,7 +194,6 @@ export default function MapView() {
     });
 
     mapInstance.on('load', () => {
-      console.log('[Map] "load" event fired. Initializing layers...');
 
       if (!params.has('transport')) {
         mapInstance!.addSource('openrailwaymap', {
@@ -255,7 +241,6 @@ export default function MapView() {
         layout: {
           'text-field': ['get', 'label'],
           'text-size': 14,
-          'text-font': ['Open Sans Bold'],
           'text-offset': [0, 1.2],
           'text-anchor': 'top',
           'text-allow-overlap': true
@@ -340,7 +325,7 @@ export default function MapView() {
       createEffect(() => {
         const mode = pickerMode();
         if (mapInstance && mapInstance.getCanvas()) {
-           mapInstance.getCanvas().style.cursor = mode ? 'crosshair' : 'grab';
+          mapInstance.getCanvas().style.cursor = mode ? 'crosshair' : 'grab';
         }
       });
 
@@ -361,10 +346,9 @@ export default function MapView() {
         clickTimeout = setTimeout(() => {
           const mode = $pickerMode.get();
           if (mode) {
-             console.log(`[Map] Picked point for ${mode}:`, e.lngLat);
-             $pickedPoint.set({ lat: e.lngLat.lat, lng: e.lngLat.lng, target: mode });
-             $pickerMode.set(null);
-             return;
+            $pickedPoint.set({ lat: e.lngLat.lat, lng: e.lngLat.lng, target: mode });
+            $pickerMode.set(null);
+            return;
           }
           const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
           const neighborhood = gridDisk(h3Index, 2);
@@ -416,28 +400,10 @@ export default function MapView() {
             LIMIT 100
           `;
 
-          // ideally would check if there is only one stop on the service (i.e. ours) and exclude them
-          function toRad(deg: number) {
-            return deg * Math.PI / 180;
-          }
-
-          function toDeg(rad: number) {
-            return rad * 180 / Math.PI;
-          }
-
-          function getBearing(startLat: number, startLon: number, destLat: number, destLon: number) {
-            const y = Math.sin(toRad(destLon - startLon)) * Math.cos(toRad(destLat));
-            const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
-              Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLon - startLon));
-
-            let brng = toDeg(Math.atan2(y, x));
-            return (brng + 360) % 360; // Normalize to 0-360
-          }
-
           chQuery(query)
             .then(res => {
               if (res && res.data) {
-                const data = res.data.map(row => {
+                const data = res.data.map((row: any) => {
                   row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
                   return row;
                 })
@@ -466,7 +432,7 @@ export default function MapView() {
       startAnimationLoop();
     });
   });
-  
+
   const bounds = useStore($gameBounds);
   const roomState = useStore($roomState);
   createEffect((prevState) => {
@@ -578,34 +544,32 @@ export default function MapView() {
     }
   });
 
-const startAnimationLoop = () => {
-  let lastFrameTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;  // 30 FPS
-  let frameCount = 0;
+  const startAnimationLoop = () => {
+    let lastFrameTime = 0;
+    const FRAME_INTERVAL = 1000 / 30;  // 30 FPS
+    let frameCount = 0;
 
-  const loop = (timestamp: number) => {
-    frameId = requestAnimationFrame(loop);
-    frameCount++;
+    const loop = (timestamp: number) => {
+      frameId = requestAnimationFrame(loop);
+      frameCount++;
 
-    // Throttle rendering
-    if (timestamp - lastFrameTime < FRAME_INTERVAL) return;
-    lastFrameTime = timestamp; 
+      // Throttle rendering
+      if (timestamp - lastFrameTime < FRAME_INTERVAL) return;
+      lastFrameTime = timestamp;
 
-    if (!mapInstance) return;
+      if (!mapInstance) return;
 
-    const now = getServerTime();
-    const allPlayers = $players.get(); // Use .get() to avoid subscription overhead
-    const currentSpeeds: Record<string, number> = {};
-    const vehicleFeatures: any[] = [];
+      const now = getServerTime();
+      const allPlayers = $players.get(); // Use .get() to avoid subscription overhead
+      const currentSpeeds: Record<string, number> = {};
+      const vehicleFeatures: any[] = [];
 
-    const myId = $myPlayerId.get();
-    const isRunning = $roomState.get() === 'RUNNING';
-    const startTime = $gameStartTime.get();
+      const isRunning = $roomState.get() === 'RUNNING';
+      const startTime = $gameStartTime.get();
 
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
 
-        const coords = player.waypoints.map(wp => [wp.x, wp.y]);
         let currentPos = null;
 
         if (player.segments.length === 0) {
@@ -651,16 +615,17 @@ const startAnimationLoop = () => {
               $playerTimeZone.set(zone);
             }
             if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
-                // only check every 10th frame
-                if (frameCount % 10 !== 0) return; // dangerous because code below might not execute
+              // check approx every 10 frames
+              if (frameCount % 10 === 0) {
                 try {
                   const myCell = latLngToCell(currentPos[1], currentPos[0], 11);
                   if (finishCells.includes(myCell)) {
                     console.log("[Client] Crossed finish line!");
                     finishRace(now - startTime);
                   }
-                } catch(e) { /* ignore H3 errors */ }
-             }
+                } catch (e) { /* ignore H3 errors */ }
+              }
+            }
           }
         }
       }

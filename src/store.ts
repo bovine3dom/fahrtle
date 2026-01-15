@@ -190,11 +190,6 @@ export function submitWaypoint(lat: number, lng: number) {
 
   if (!player) return;
 
-  // 2. Set Speed Factor to Walking Speed (approx 5 km/h)
-  const factor = 0.025;
-
-  console.log(`[Store] Manual Waypoint: Walking at 5km/h (Factor: ${factor}x)`);
-
   ws.send(JSON.stringify({
     type: 'ADD_WAYPOINT',
     x: lng,
@@ -207,56 +202,28 @@ export function submitWaypoint(lat: number, lng: number) {
 export function submitWaypointsBatch(points: { lng: number, lat: number, time: number, stopName?: string }[]) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  const myId = $myPlayerId.get();
-  const allPlayers = $players.get();
-  const player = myId ? allPlayers[myId] : null;
-
+  const player = $players.get()[$myPlayerId.get() ?? ''];
   if (!player || points.length === 0) return;
 
-  // 1. Calculate relative timings based on absolute timestamps
-  let lastTime = $clock.get(); // Current Sim Time
-
-  const legs = [];
+  const clockTime = $clock.get();
+  let lastTime = clockTime;
   let totalVirtualTime = 0;
 
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    
-    // Delta = Time difference from previous point (or NOW for the first point)
-    // We clamp to 1000ms minimum to avoid zero/negative math issues if schedule is slightly behind
-    const delta = Math.max(1000, p.time - lastTime);
-
-    legs.push({ 
-        x: p.lng, 
-        y: p.lat, 
-        delta, 
-        stopName: p.stopName,
-        time: p.time
-    });
-
-    totalVirtualTime += delta;
+  for (const p of points) {
+    totalVirtualTime += Math.max(1000, p.time - lastTime);
     lastTime = p.time;
   }
 
-  // 2. Solve for factor: VirtualDuration / factor = 30 seconds
-  const targetRealTime = 30000;
-  let M = totalVirtualTime / targetRealTime;
-  if (M < 1.0) M = 1.0; 
+  const speedFactor = Math.max(1.0, totalVirtualTime / 30000); // Compress to 30s real time
 
-  console.log(`[Store] Trip: ${(totalVirtualTime / 60000).toFixed(1)} virtual minutes. Compressing with ${M.toFixed(2)}x rate.`);
-
-  // 3. Send waypoints
-  let currentTime = $clock.get();
-  for (const l of legs) {
-    currentTime += l.delta;
-
+  for (const p of points) {
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
-      x: l.x,
-      y: l.y,
-      arrivalTime: l.time,
-      speedFactor: M,
-      stopName: l.stopName
+      x: p.lng,
+      y: p.lat,
+      arrivalTime: p.time,
+      speedFactor,
+      stopName: p.stopName
     }));
   }
 }
@@ -281,7 +248,7 @@ export function cancelNavigation() {
     console.error('WebSocket not open, cannot cancel navigation');
     return;
   }
-  console.log('[Store] Sending CANCEL_NAVIGATION');
+
   ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
 }
 
@@ -321,8 +288,6 @@ export function setGameBounds(start: [number, number] | null, finish: [number, n
 
 export function finishRace(finishTime: number) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  
-  console.log(`[Store] Finishing race at ${finishTime}ms`);
   ws.send(JSON.stringify({
     type: 'PLAYER_FINISHED',
     finishTime: finishTime

@@ -4,50 +4,7 @@ import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
-
-function parseDBTime(dbString: string, timeZone: string): number {
-  if (!dbString) return 0;
-  
-  const iso = dbString.replace(' ', 'T');
-  const naive = new Date(iso + "Z");
-
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: 'numeric', minute: 'numeric', second: 'numeric',
-    hour12: false
-  });
-  
-  const parts = formatter.formatToParts(naive);
-  const p: any = {};
-  parts.forEach(({ type, value }) => p[type] = value);
-
-  const wallTimeInTarget = new Date(Date.UTC(
-    parseInt(p.year), 
-    parseInt(p.month) - 1, 
-    parseInt(p.day), 
-    parseInt(p.hour), 
-    parseInt(p.minute), 
-    parseInt(p.second)
-  ));
-
-  const offset = wallTimeInTarget.getTime() - naive.getTime();
-
-  return naive.getTime() - offset;
-}
-
-// seconds since midnight for a timestamp in a zone
-function getWallSeconds(timestamp: number, timeZone: string): number {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour: 'numeric', minute: 'numeric', second: 'numeric',
-    hour12: false
-  });
-  const parts = formatter.formatToParts(new Date(timestamp));
-  const p: any = {};
-  parts.forEach(({ type, value }) => p[type] = parseInt(value));
-  return (p.hour % 24) * 3600 + p.minute * 60 + p.second;
-}
+import { parseDBTime, getWallSeconds } from './utils/time';
 
 export default function DepartureBoard() {
   const results = useStore($departureBoardResults);
@@ -107,9 +64,8 @@ export default function DepartureBoard() {
     return filtered.length > 0 ? filtered : interim; // tiny bug here: if all results are tomorrow, order is wrong
   });
 
-  // Clear preview whenever the displayed results change (e.g. closing board, new station)
   createEffect(() => {
-    results(); // Track dependency
+    results();
     clearPreviewRoute();
   });
 
@@ -120,9 +76,6 @@ export default function DepartureBoard() {
   };
 
   const handlePreviewClick = (row: any) => {
-    console.log(`[DepartureBoard] Preview Clicked: ${row.trip_headsign}`);
-
-    // Query ClickHouse for all stops of this trip starting from THIS departure
     const query = `
           SELECT stop_lat, stop_lon
           FROM transitous_everything_stop_times_one_day_even_saner
@@ -143,7 +96,7 @@ export default function DepartureBoard() {
             color: row.route_color ? `#${row.route_color}` : '#333',
             coordinates: coords as [number, number][]
           });
-          console.log($previewRoute.get());
+
           // Auto-minimize when previewing
           $boardMinimized.set(true);
         }
@@ -151,14 +104,7 @@ export default function DepartureBoard() {
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
   };
 
-  const handleTripClick = (row: any) => {
-    console.log(`[DepartureBoard] Trip Clicked: ${row.trip_id} | Route: ${row.route_long_name}`);
-    // (Existing single-click logic just logs for now)
-  };
-
   const handleTripDoubleClick = (row: any) => {
-    console.log(`[DepartureBoard] Trip Double-Clicked! Following: ${row.trip_headsign}`);
-
     // Fetch same data as single click but process it as points
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
@@ -174,43 +120,39 @@ export default function DepartureBoard() {
     chQuery(query)
       .then(res => {
         if (res && res.data && res.data.length > 0) {
-          // add small amount of randomness to avoid totally overlapping routes
           const rawPoints = res.data.map((r: any, idx: number) => {
             const thisStopZone = getTimeZone(r.stop_lat, r.stop_lon);
             const timeStr = idx === 0 ? r.departure_time : r.arrival_time;
             const absoluteTime = parseDBTime(timeStr, thisStopZone);
-              return {
-                lng: r.stop_lon + Math.random() * 0.0001,
-                lat: r.stop_lat + Math.random() * 0.0001,
-                // Use departure_time for the first stop, arrival_time for subsequent ones
-                dbTime: absoluteTime,
-                stopName: r.stop_name
-          }});
+            return {
+              // add small amount of randomness to avoid totally overlapping routes
+              lng: r.stop_lon + Math.random() * 0.0001,
+              lat: r.stop_lat + Math.random() * 0.0001,
+              dbTime: absoluteTime,
+              stopName: r.stop_name
+            }
+          });
 
           const startPt = rawPoints[0];
           const gameTime = $clock.get();
-          
+
           const dbSeconds = getWallSeconds(startPt.dbTime, startPt.timeZone);
           const gameSeconds = getWallSeconds(gameTime, startPt.timeZone);
 
           let diff = dbSeconds - gameSeconds;
-          
+
           const TOLERANCE = -60; // 1 minute leeway
           if (diff < TOLERANCE) {
-            diff += 86400; 
+            diff += 86400;
           }
 
           const targetStart = gameTime + (diff * 1000);
           const timeShift = targetStart - startPt.dbTime;
-
-          console.log(`[DepartureBoard] Time Sync: DB=${new Date(startPt.dbTime).toISOString()} Game=${new Date(gameTime).toISOString()} Shift=${timeShift/1000}s`);
-
-          // 3. Apply Shift
           const points = rawPoints.map((p: any) => ({
-             lng: p.lng,
-             lat: p.lat,
-             time: p.dbTime + timeShift,
-             stopName: p.stopName
+            lng: p.lng,
+            lat: p.lat,
+            time: p.dbTime + timeShift,
+            stopName: p.stopName
           }));
 
           submitWaypointsBatch(points);

@@ -47,11 +47,18 @@ type Room = {
 };
 
 const rooms = new Map<string, Room>();
-const BASE_SPEED = 0.0000005 * 0.025; // walking speed, approx 5km/h
+const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 
-// Helper: Distance
-function dist(p1: { x: number, y: number }, p2: { x: number, y: number }) {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
+  const toRad = (x: number) => x * Math.PI / 180;
+  const R = 6371; // km
+  const dLat = toRad(coords2.y - coords1.y);
+  const dLon = toRad(coords2.x - coords1.x);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(coords1.y)) * Math.cos(toRad(coords2.y)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 // Helper: Generate a random point within ~50m of a center
@@ -59,7 +66,7 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
   const spreadMeters = 50;
   const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
   const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(centerLat * Math.PI / 180)));
-  
+
   return {
     x: centerLng + lngOffset,
     y: centerLat + latOffset
@@ -68,7 +75,7 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
 
 const server = serve<WSData>({
   port: 8080,
-  fetch(req: Request, server) {
+  fetch(req: Request, server: any) {
     if (server.upgrade(req)) return;
     return new Response("WebSocket Game Server", { status: 200 });
   },
@@ -126,7 +133,7 @@ const server = serve<WSData>({
             loopInterval: setInterval(() => updateRoom(roomId), 100)
           };
           rooms.set(roomId, room);
-          console.log(`Created room ${roomId}`);
+          console.log(`[Room: ${roomId}]: New room created.`);
         }
 
         // Room is no longer empty
@@ -150,6 +157,7 @@ const server = serve<WSData>({
               speedFactor: 1
             }],
             desiredRate: 1.0,
+            finishTime: null,
           };
         }
 
@@ -232,8 +240,6 @@ const server = serve<WSData>({
           const changed = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
 
           if (changed) {
-            console.log(`[Room ${d.roomId}] Start moved to ${newLat}, ${newLng}. Repositioning players.`);
-
             for (const pid in room.players) {
               const p = room.players[pid];
               const spawn = getSpawnPoint(newLat, newLng);
@@ -281,7 +287,7 @@ const server = serve<WSData>({
 
         let finalArrival = arrivalTime;
         if (finalArrival === undefined) {
-          const distance = dist(lastPoint, { x, y });
+          const distance = haversineDist(lastPoint, { x, y });
           const duration = distance / BASE_SPEED;
           finalArrival = start + duration;
         }
@@ -308,7 +314,7 @@ const server = serve<WSData>({
       // --- CANCEL NAVIGATION ---
       if (message.type === 'CANCEL_NAVIGATION') {
         const d = ws.data;
-        console.log(`[Server] Received CANCEL_NAVIGATION from ${d.playerId}`);
+
         if (!d.roomId || !d.playerId) return;
         const room = rooms.get(d.roomId);
         if (!room) return;
@@ -320,10 +326,8 @@ const server = serve<WSData>({
 
         // Find the next waypoint (the one we are currently traveling towards)
         const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
-        console.log(`[Server] VirtualTime: ${vTime}, NextWpIndex: ${nextWpIndex}, Total Waypoints: ${player.waypoints.length}`);
 
         if (nextWpIndex !== -1 && nextWpIndex < player.waypoints.length - 1) {
-          console.log(`[Server] Truncating waypoints to index ${nextWpIndex}`);
           // Truncate path: Keep everything up to the next waypoint, discard the rest
           player.waypoints = player.waypoints.slice(0, nextWpIndex + 1);
 
@@ -332,10 +336,6 @@ const server = serve<WSData>({
             type: 'PLAYER_JOINED', // Overwrite player state on clients
             player: player
           }));
-
-          console.log(`[Player ${d.playerId}] Cancelled navigation. Stopping at next waypoint.`);
-        } else {
-          console.log(`[Server] No future waypoints to cancel or already at last waypoint.`);
         }
       }
 
@@ -344,14 +344,12 @@ const server = serve<WSData>({
         if (!d.roomId || !d.playerId) return;
         const room = rooms.get(d.roomId);
         if (!room || room.state !== 'RUNNING') return;
-        
+
         const player = room.players[d.playerId];
         if (!player || player.finishTime) return; // Ignore if already finished
-
-        console.log(`[Room ${d.roomId}] Player ${d.playerId} finished at ${message.finishTime}ms`);
         player.finishTime = message.finishTime;
+        console.log(`[Room: ${d.roomId}]: Player ${d.playerId} finished.`);
 
-        // Broadcast the finish to everyone (triggers leaderboard update)
         server.publish(d.roomId, JSON.stringify({
           type: 'PLAYER_JOINED',
           player: player
@@ -370,7 +368,6 @@ const server = serve<WSData>({
           }));
 
           if (Object.keys(room.players).length === 0) {
-            console.log(`Room ${d.roomId} is empty. Starting 1-min cleanup timer.`);
             room.emptySince = Date.now();
           }
         }
@@ -428,7 +425,7 @@ function updateRoom(roomId: string) {
   if (room.emptySince !== null) {
     const emptyDuration = Date.now() - room.emptySince;
     if (emptyDuration > 60000) { // 1 Minute
-      console.log(`Killing room ${roomId} after 1 minute of emptiness.`);
+      console.log(`[Room: ${roomId}]: Killed room after 1 minute of emptiness.`);
       clearInterval(room.loopInterval);
       rooms.delete(roomId);
       return;
@@ -470,9 +467,7 @@ function updateRoom(roomId: string) {
   }
 
   if (Math.abs(room.playbackRate - minSpeed) > 0.01) {
-    console.log(`[Room ${roomId}] Adjusting Global Clock: ${minSpeed}x`);
     room.playbackRate = minSpeed;
-
     server.publish(roomId, JSON.stringify({
       type: 'CLOCK_UPDATE',
       serverTime: room.virtualTime,

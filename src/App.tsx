@@ -2,11 +2,13 @@
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime } from './store';
-import { getServerTime, getRealServerTime } from './time-sync';
+import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
 import { flyToPlayer, fitGameBounds } from './Map';
 import DepartureBoard from './DepartureBoard';
+import { formatDuration } from './utils/time';
+import { parseCoords } from './utils/format';
 
 const MapView = lazy(() => import('./Map'));
 
@@ -52,43 +54,7 @@ function App() {
     }
   });
 
-  const formatDuration = (ms: number) => {
-    if (ms < 0) return "0s";
-    const seconds = Math.floor(ms / 1000);
-    const m = Math.floor(seconds / 60);
-    const h = Math.floor(m / 60);
-    const d = Math.floor(h / 24);
-    const w = Math.floor(d / 7);
 
-    const parts = [];
-    if (w > 0) parts.push(`${w}w`);
-    if (d % 7 > 0) parts.push(`${d % 7}d`);
-    if (h % 24 > 0) parts.push(`${h % 24}h`);
-    if (m % 60 > 0) parts.push(`${m % 60}m`);
-    parts.push(`${seconds % 60}s`);
-
-    return parts.join(' ');
-  };
-
-  const parseCoords = (s: string): [number, number] | null => {
-    const parts = s.split(',');
-    if (parts.length !== 2) return null;
-
-    const latStr = parts[0].trim();
-    const lngStr = parts[1].trim();
-
-    // Prevent empty strings from becoming 0
-    if (latStr === '' || lngStr === '') return null;
-
-    const lat = Number(latStr);
-    const lng = Number(lngStr);
-
-    if (!isNaN(lat) && !isNaN(lng)) {
-      return [lat, lng];
-    }
-    return null;
-
-  };
 
   createEffect(() => {
     const b = bounds();
@@ -105,8 +71,6 @@ function App() {
   // Check if local inputs match the store (saved state)
   const isSaved = createMemo(() => {
     const b = bounds();
-    const s = parseCoords(startStr());
-    const f = parseCoords(finishStr());
 
     const compare = (p1: [number, number] | null, p2: [number, number] | null) => {
       if (!p1 && !p2) return true;
@@ -116,11 +80,11 @@ function App() {
     };
     const checkField = (str: string, serverVal: [number, number] | null) => {
       const parsed = parseCoords(str);
-      
+
       if (parsed === null && str.trim() !== "") {
         return false;
       }
-      
+
       return compare(parsed, serverVal);
     };
 
@@ -163,11 +127,11 @@ function App() {
     return Object.keys(all).sort((idA, idB) => {
       const a = all[idA];
       const b = all[idB];
-      
+
       // 1. Finished players first
       if (a.finishTime != null && b.finishTime == null) return -1;
       if (a.finishTime == null && b.finishTime != null) return 1;
-      
+
       // 2. Sort by finish time (asc)
       if (a.finishTime != null && b.finishTime != null) {
         return a.finishTime - b.finishTime;
@@ -226,20 +190,20 @@ function App() {
             'flex-direction': 'column',
             transition: 'all 0.2s ease-in-out'
           }}>
-            
+
             {/* Header Row with Toggle */}
-            <div style={{ 
-              display: 'flex', 
-              'justify-content': 'space-between', 
-              'align-items': 'center', 
-              'margin-bottom': minimized() ? '0' : '8px' 
+            <div style={{
+              display: 'flex',
+              'justify-content': 'space-between',
+              'align-items': 'center',
+              'margin-bottom': minimized() ? '0' : '8px'
             }}>
               {/* If minimized, show Clock here. If expanded, show Room Name */}
               <Show when={!minimized()} fallback={<Clock />}>
                 <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>Room: {room()}</div>
               </Show>
 
-              <button 
+              <button
                 onClick={() => setMinimized(!minimized())}
                 style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
@@ -268,7 +232,7 @@ function App() {
                   </Show>
                 </div>
 
-               <Show when={roomState() === 'JOINING'}>
+                <Show when={roomState() === 'JOINING'}>
                   <div style={{
                     'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
                     'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
@@ -276,13 +240,13 @@ function App() {
                     <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
                       COURSE SETTINGS
                     </div>
-                    
+
                     <div style={{ 'margin-bottom': '6px' }}>
                       <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng)</label>
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <input 
-                          type="text" 
-                          value={startStr()} 
+                        <input
+                          type="text"
+                          value={startStr()}
                           onInput={(e) => setStartStr(e.currentTarget.value)}
                           placeholder="e.g. 55.953, -3.188"
                           style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
@@ -304,9 +268,9 @@ function App() {
                     <div style={{ 'margin-bottom': '6px' }}>
                       <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <input 
-                          type="text" 
-                          value={finishStr()} 
+                        <input
+                          type="text"
+                          value={finishStr()}
                           onInput={(e) => setFinishStr(e.currentTarget.value)}
                           placeholder="e.g. 51.507, -0.127"
                           style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
@@ -325,15 +289,15 @@ function App() {
                       </div>
                     </div>
 
-                    <button 
+                    <button
                       onClick={updateBounds}
                       disabled={isSaved()}
                       style={{
-                        width: '100%', padding: '4px', 
-                        'background': isSaved() ? '#10b981' : '#0f172a', 
+                        width: '100%', padding: '4px',
+                        'background': isSaved() ? '#10b981' : '#0f172a',
                         'color': 'white',
-                        border: 'none', 'border-radius': '4px', 
-                        'cursor': isSaved() ? 'default' : 'pointer', 
+                        border: 'none', 'border-radius': '4px',
+                        'cursor': isSaved() ? 'default' : 'pointer',
                         'font-size': '0.8em',
                         'font-weight': 'bold',
                         'transition': 'all 0.2s'
@@ -357,9 +321,9 @@ function App() {
                     <For each={sortedPlayerIds()}>
                       {(id, index) => {
                         // Access player reactively by ID
-                        const p = () => players()[id]; 
+                        const p = () => players()[id];
                         const isFinished = () => p().finishTime != null;
-                        
+
                         return (
                           <div
                             onClick={() => flyToPlayer(p().id)}
@@ -395,11 +359,11 @@ function App() {
                               </div>
                               {(() => {
                                 if (isFinished()) {
-                                   return (
-                                     <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
-                                       Finished in {formatDuration(p().finishTime!)}
-                                     </div>
-                                   );
+                                  return (
+                                    <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
+                                      Finished in {formatDuration(p().finishTime!)}
+                                    </div>
+                                  );
                                 }
                                 const nextWp = p().waypoints.find((wp: any) => wp.arrivalTime > time());
                                 if (nextWp && nextWp.stopName) {
