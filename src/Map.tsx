@@ -209,6 +209,16 @@ export default function MapView() {
         data: { type: 'FeatureCollection', features: [] }
       });
 
+      mapInstance!.addSource('course-markers-h3', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      mapInstance!.addLayer({
+        id: 'h3-cell-line', type: 'fill', source: 'course-markers-h3',
+        paint: { 'fill-color': '#10b981', 'fill-opacity': 0.8 }
+      });
+
       mapInstance!.addLayer({
         id: 'course-markers-icon',
         type: 'symbol',
@@ -485,6 +495,21 @@ export default function MapView() {
     }
 
     source.setData({ type: 'FeatureCollection', features: features as any });
+
+    const cellsSource = mapInstance.getSource('course-markers-h3') as maplibregl.GeoJSONSource;
+    if (!cellsSource) return;
+
+    const cellFeatures = finishCells.map(index => {
+      const boundary = cellToBoundary(index);
+      const coords = boundary.map(p => [p[1], p[0]]);
+      coords.push(coords[0]);
+      return {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: {}
+      };
+    });
+    cellsSource.setData({ type: 'FeatureCollection', features: cellFeatures as any });
   });
 
   const Preview = useStore($previewRoute);
