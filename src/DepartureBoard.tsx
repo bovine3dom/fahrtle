@@ -208,20 +208,13 @@ export default function DepartureBoard() {
           </div>
 
           {/* Type Filter Toolbar */}
-          <div style={{ padding: '0 20px', 'background': '#003a79', display: 'flex', gap: '8px', 'overflow-x': 'auto', 'padding-bottom': '8px' }}>
+          <div class="type-filter-toolbar">
             <For each={[...new Set(deduplicatedResults().map(r => getRouteEmoji(r.route_type)))]}>
               {(emoji) => (
                 <button
+                  class="filter-btn"
+                  classList={{ active: filterType() === emoji }}
                   onClick={() => setFilterType(filterType() === emoji ? null : emoji)}
-                  style={{
-                    background: filterType() === emoji ? '#ffed02' : 'rgba(255,255,255,0.1)',
-                    color: filterType() === emoji ? '#000' : '#fff',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    'border-radius': '4px',
-                    padding: '4px 8px',
-                    cursor: 'pointer',
-                    'font-size': '1.2em'
-                  }}
                   title={filterType() === emoji ? 'Clear Filter' : `Filter by ${emoji}`}
                 >
                   {emoji}
@@ -262,56 +255,116 @@ export default function DepartureBoard() {
                       style={{ cursor: 'pointer' }}
                       onDblClick={() => handleTripDoubleClick(row)}
                     >
-                      <div class="col-status">
-                        <Show when={isImminent()}>
-                          <span class="status-dot imminent"></span>
-                        </Show>
+                      {/* Desktop Layout (visible on >768px) */}
+                      <div class="desktop-row-content">
+                        <div class="col-status">
+                          <Show when={isImminent()}>
+                            <span class="status-dot imminent"></span>
+                          </Show>
+                        </div>
+                        <div class="col-time" style={{ "line-height": "1.1" }}>
+                          <div>{formatRowTime(row.departure_time)}</div>
+                          <Show when={row.isTomorrow}>
+                            <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
+                              (tmrw.)
+                            </div>
+                          </Show>
+                        </div>
+                        <div class="col-route">
+                          <span
+                            class="route-pill"
+                            style={{
+                              "background-color": row.route_color ? `#${row.route_color}` : '#333',
+                              "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
+                            }}
+                          >
+                            {row.route_short_name || '??'}
+                          </span>
+                        </div>
+                        <div class="col-dest">
+                          <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
+                          <div class="route-long">{row.route_long_name}</div>
+                        </div>
+
+                        <div class="col-dir">
+                          <svg
+                            class="dir-icon"
+                            viewBox="0 0 24 24"
+                            style={{
+                              transform: `rotate(${row.bearing || 0}deg)`
+                            }}
+                          >
+                            <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
+                          </svg>
+                        </div>
+
+                        <div class="col-type">{getRouteEmoji(row.route_type)}</div>
+                        <div class="col-preview">
+                          <button
+                            class="preview-btn"
+                            onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
+                            title="Preview Trip Route"
+                          >
+                            🔍
+                          </button>
+                        </div>
                       </div>
-                      <div class="col-time" style={{ "line-height": "1.1" }}>
-                        <div>{formatRowTime(row.departure_time)}</div>
-                        <Show when={row.isTomorrow}>
-                          <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
-                            (tmrw.)
+
+                      {/* Mobile Layout (visible on <=768px) */}
+                      <div class="mobile-row-content">
+                        <div class="mobile-row-top">
+                          <div class="mobile-time">
+                            <div style={{ display: "flex", "align-items": "center" }}>
+                              {formatRowTime(row.departure_time)}
+                            </div>
+                            <Show when={isImminent()}>
+                              <span class="status-dot imminent" style={{ "margin-left": "4px" }}></span>
+                            </Show>
+                            <Show when={row.isTomorrow}>
+                              <div class="mobile-tomorrow">tomorrow</div>
+                            </Show>
                           </div>
-                        </Show>
-                      </div>
-                      <div class="col-route">
-                        <span
-                          class="route-pill"
-                          style={{
-                            "background-color": row.route_color ? `#${row.route_color}` : '#333',
-                            "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
-                          }}
-                        >
-                          {row.route_short_name || '??'}
-                        </span>
-                      </div>
-                      <div class="col-dest">
-                        <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
-                        <div class="route-long">{row.route_long_name}</div>
-                      </div>
+                          <div class="mobile-route-info">
+                            <span class="mobile-emoji">{getRouteEmoji(row.route_type)}</span>
+                            <span
+                              class="route-pill"
+                              style={{
+                                "background-color": row.route_color ? `#${row.route_color}` : '#333',
+                                "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
+                              }}
+                            >
+                              {row.route_short_name || '??'}
+                            </span>
+                          </div>
+                          <div class="mobile-dest-arrow">→</div>
+                          <div class="mobile-dest-name">{row.trip_headsign || row.stop_name}</div>
+                        </div>
+                        <div class="mobile-row-bottom">
+                          <div class="mobile-secondary-info">
+                            {row.route_long_name}
+                          </div>
+                          <div class="mobile-actions">
 
-                      <div class="col-dir">
-                        <svg
-                          class="dir-icon"
-                          viewBox="0 0 24 24"
-                          style={{
-                            transform: `rotate(${row.bearing || 0}deg)`
-                          }}
-                        >
-                          <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
-                        </svg>
-                      </div>
-
-                      <div class="col-type">{getRouteEmoji(row.route_type)}</div>
-                      <div class="col-preview">
-                        <button
-                          class="preview-btn"
-                          onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
-                          title="Preview Trip Route"
-                        >
-                          🔍
-                        </button>
+                            <div class="col-dir">
+                              <svg
+                                class="dir-icon"
+                                viewBox="0 0 24 24"
+                                style={{
+                                  transform: `rotate(${row.bearing || 0}deg)`
+                                }}
+                              >
+                                <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
+                              </svg>
+                            </div>
+                            <button
+                              class="preview-btn"
+                              onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
+                              title="Preview Trip Route"
+                            >
+                              🔍
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -555,6 +608,36 @@ export default function DepartureBoard() {
           display: none;
         }
 
+        .type-filter-toolbar {
+          padding: 8px 20px;
+          background: #003a79;
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          flex-shrink: 0;
+          scrollbar-width: none; /* Firefox */
+        }
+
+        .type-filter-toolbar::-webkit-scrollbar {
+          display: none; /* Chrome/Safari */
+        }
+
+        .filter-btn {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+          padding: 4px 8px;
+          cursor: pointer;
+          font-size: 1.2em;
+          transition: all 0.2s ease;
+        }
+
+        .filter-btn.active {
+          background: #ffed02;
+          color: #000;
+        }
+
         .board-table {
           width: 100%;
           padding: 0;
@@ -562,7 +645,6 @@ export default function DepartureBoard() {
 
         .table-container {
           flex: 1;
-          overflow-y: auto;
           background: #0064ab;
           transition: all 0.4s ease;
         }
@@ -604,7 +686,7 @@ export default function DepartureBoard() {
         }
 
         .table-row:nth-child(even) {
-          background: #003a79;
+          background: #003a79 !important;
         }
 
         .table-row:hover {
@@ -612,17 +694,14 @@ export default function DepartureBoard() {
           box-shadow: inset 0 0 0 1px #fff;
         }
 
+        .desktop-row-content {
+          display: flex;
+          align-items: center;
+          width: 100%;
+        }
+
         .col-status { width: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .col-time { 
-          width: 120px; 
-          flex-shrink: 0;
-        }
-        .table-body .col-time {
-          color: #ffed02; /* SNCF Time Yellow */
-          font-weight: 900;
-          font-size: 2.2rem;
-          letter-spacing: -0.02em;
-        }
+        .col-time { width: 120px; flex-shrink: 0; }
         .col-route { width: 100px; flex-shrink: 0; }
         .col-dest { 
           flex: 1; 
@@ -632,11 +711,29 @@ export default function DepartureBoard() {
           text-overflow: ellipsis;
           padding-right: 20px;
         }
+
+        .table-body .col-time {
+          color: #ffed02; /* SNCF Time Yellow */
+          font-weight: 900;
+          font-size: 2.2rem;
+          letter-spacing: -0.02em;
+        }
+
         .table-body .col-dest {
           font-weight: 900; 
           font-size: 1.8rem; 
         }
-          
+
+        .mobile-row-content {
+          display: none;
+          flex-direction: column;
+          width: 100%;
+          gap: 4px;
+        }
+
+        .table-body .col-type { width: 80px; text-align: center; flex-shrink: 0; border: 1px solid #fff; border-radius: 44px; background: rgba(255,255,255,0.8); }
+        .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
+
         .col-dir {
           width: 50px;
           flex-shrink: 0;
@@ -653,8 +750,10 @@ export default function DepartureBoard() {
           transition: transform 0.2s ease;
         }
 
-        .table-body .col-type { width: 80px; text-align: center; flex-shrink: 0; border: 1px solid #fff; border-radius: 4px; background: rgba(255,255,255,0.8); }
-        .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
+        .control-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+          transform: scale(1.1);
+        }
 
         .preview-btn {
           background: rgba(255, 255, 255, 0.1);
@@ -721,116 +820,227 @@ export default function DepartureBoard() {
               align-items: flex-end; /* Align to bottom like a sheet */
             }
 
-            .departure-board {
-              width: 100%;
-              height: 85vh; /* Leave some space at top to click out */
-              border-radius: 16px 16px 0 0; /* Rounded top only */
-              border-left: none;
-              border-right: none;
-              border-bottom: none;
+            .status-dot {
+              margin-top: 10px;
             }
 
-            /* 1. Fix Header Overlap: Switch to Flex Column */
+            .type-filter-toolbar {
+              background: #fff;
+              padding-top: 8px;
+              padding-bottom: 12px;
+            }
+
+            .filter-btn {
+              background: #f0f0f0;
+              color: #000;
+              border: none;
+              border-radius: 50%;
+              width: 44px;
+              height: 44px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 0;
+              font-size: 1.4rem;
+              flex-shrink: 0;
+            }
+
+            .filter-btn.active {
+              background: #ffed02;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+
+            .dir-icon {
+              fill: #000;
+              filter: none;
+            }
+
+            .departure-board {
+              width: 100%;
+              height: 90vh; /* Taller on mobile for better viewing */
+              border-radius: 20px 20px 0 0; 
+              border: none;
+            }
+
             .board-header {
               flex-direction: column;
               align-items: flex-start;
-              padding: 16px;
+              padding: 20px;
               height: auto;
               min-height: auto;
               gap: 12px;
+              background: #c1121c; /* OEBB Red Header */
             }
 
             .header-main {
               width: 100%;
-              padding-right: 40px; /* Make room for close button */
+              padding-right: 60px;
             }
 
             .header-main h1 {
-              font-size: 10px;
+              font-size: 14px;
+              color: rgba(255,255,255,0.9);
+              font-weight: bold;
+              text-transform: none;
+              letter-spacing: normal;
             }
 
             .stop-name {
-              font-size: 1.5rem; /* Smaller font for station name */
-              line-height: 1.1;
-              white-space: normal; /* Allow wrapping */
+              font-size: 1rem;
+              color: #fff !important;
+              line-height: 1.2;
+              white-space: normal;
             }
 
-            /* 2. Reposition Clock: Remove absolute centering */
             .header-clock {
               position: relative;
               top: auto;
               left: auto;
               transform: none;
               width: 100%;
+              background: rgba(0,0,0,0.1);
+              border: none;
+              padding: 8px 12px;
               flex-direction: row;
               justify-content: space-between;
-              padding: 6px 12px;
-              margin-top: 4px;
+              margin: 0;
             }
 
             .clock-time {
-               font-size: 1.4rem;
+               font-size: 1.6rem;
             }
 
             .header-controls {
-              top: 16px;
-              right: 16px;
+              top: 20px;
+              right: 20px;
             }
 
-            /* 3. Optimize Table Columns for Width */
             .table-head {
-               padding: 8px 10px;
+               display: none; /* Hide headers on mobile */
             }
-            
+
             .table-row {
-               padding: 12px 10px;
+               padding: 16px;
+               border-bottom: 1px solid #eee;
+               background: #fff !important; /* White rows like Scotty */
+               color: #333;
             }
 
-            /* Hide Status col, merge into time or just reduce padding */
-            .col-status { width: 12px; margin-right: 4px; } 
-
-            .col-time { 
-              width: 65px; /* Shrink time column */
-            }
-            
-            .table-body .col-time {
-              font-size: 1.4rem; /* Smaller time font */
+            .table-row:nth-child(even) {
+               background: #f9f9f9 !important;
             }
 
-            .col-route {
-               width: 60px; /* Shrink route column */
+            .desktop-row-content {
+              display: none;
             }
-            
+
+            .mobile-row-content {
+              display: flex;
+            }
+
+            .mobile-row-top {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              font-size: 0.8rem;
+            }
+
+            .mobile-time {
+              font-weight: 800;
+              width: 55px;
+              color: #000;
+              display: flex;
+              flex-direction: column;
+              line-height: 1;
+              justify-content: center;
+            }
+
+            .mobile-route-info {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+            }
+
+            .mobile-emoji {
+              font-size: 1.2rem;
+            }
+
+            .mobile-dest-arrow {
+              color: #888;
+              font-weight: 300;
+            }
+
+            .mobile-dest-name {
+              font-weight: 600;
+              color: #000;
+              flex: 1;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .mobile-row-bottom {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-left: 67px; /* Align with dest name */
+              margin-top: 2px;
+            }
+
+            .mobile-secondary-info {
+              font-size: 0.8rem;
+              color: #666;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              flex: 1;
+              padding-right: 10px;
+            }
+
+            .mobile-tomorrow {
+              color: #c1121c;
+              font-weight: bold;
+              font-size: 0.6rem;
+              margin-top: 2px;
+            }
+
+            .mobile-actions {
+              display: flex;
+              gap: 8px;
+            }
+
+            .table-container {
+               background: #fff !important;
+               display: flex;
+               flex-direction: column;
+               flex: 1;
+               min-height: 0; /* Allow the container to shrink and scroll its contents */
+               overflow: hidden;
+            }
+
+            .table-body {
+               flex: 1;
+               overflow-y: auto !important;
+               -webkit-overflow-scrolling: touch;
+               min-height: 0;
+               max-height: none !important;
+            }
+
+            /* Mobile Scrollbar Style (White/Red) */
+            .table-body::-webkit-scrollbar-track {
+               background: #f0f0f0;
+            }
+            .table-body::-webkit-scrollbar-thumb {
+               background: #c1121c; /* OEBB Red thumb */
+               border-radius: 10px;
+            }
+
             .route-pill {
-               padding: 2px 6px;
-               font-size: 0.8rem;
-               min-width: 40px;
-            }
-
-            /* Hide Direction on very small screens to save space */
-            .col-dir {
-               display: none; 
-            }
-
-            /* Remove the white box from Type on mobile to reduce noise */
-            .table-body .col-type {
-               background: transparent;
-               border: none;
-               width: 40px;
-               font-size: 1.2rem;
-            }
-
-            /* Make destination text wrapping cleaner */
-            .col-dest {
-               padding-right: 4px;
-            }
-            
-            .dest-main {
-               font-size: 1rem;
-               white-space: normal; /* Allow text wrap */
-               display: -webkit-box;
-               -webkit-line-clamp: 2; /* Limit to 2 lines */
-               -webkit-box-orient: vertical;
+              font-size: 0.6rem;
+              padding: 2px 8px;
+              border-radius: 4px;
+              min-width: 25px;
+              box-shadow: none;
             }
         }
       `}</style>
