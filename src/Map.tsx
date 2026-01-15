@@ -265,7 +265,10 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      mapInstance!.addSource('vehicles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addSource('vehicles', {
+        type: 'geojson', data: { type: 'FeatureCollection', features: [] },
+        attribution: '<a href="https://github.com/bovine3dom/fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
+      });
       mapInstance!.addLayer({
         id: 'vehicles-circle', type: 'circle', source: 'vehicles',
         paint: {
@@ -293,7 +296,11 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      mapInstance!.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addSource('stops', {
+        type: 'geojson', data: { type: 'FeatureCollection', features: [] },
+        attribution: '&copy; <a href="https://transitous.org/sources" target="_blank">Transitous et al.</a>'
+      });
+
       mapInstance!.addLayer({
         id: 'stops-layer',
         type: 'symbol',
@@ -533,7 +540,7 @@ export default function MapView() {
 
   const startAnimationLoop = () => {
     let lastFrameTime = 0;
-    const FRAME_INTERVAL = 1000 / 30;  // 30 FPS
+    const FRAME_INTERVAL = 1000 / 30; // 30 FPS
     let frameCount = 0;
 
     const loop = (timestamp: number) => {
