@@ -204,7 +204,22 @@ const server = serve<WSData>({
         checkCountdown(room);
       }
 
-      // --- SNOOZE ---
+      if (message.type === 'UPDATE_PLAYER_COLOR') {
+        const d = ws.data;
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room) return;
+        const player = room.players[d.playerId];
+        if (player) {
+          player.color = message.color;
+          // Broadcast player update so all clients see the new color
+          server.publish(d.roomId, JSON.stringify({
+            type: 'PLAYER_JOINED',
+            player: player
+          }));
+        }
+      }
+
       if (message.type === 'TOGGLE_SNOOZE') {
         const d = ws.data;
         if (!d.roomId || !d.playerId) return;

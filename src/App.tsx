@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -321,11 +321,25 @@ function App() {
                               'background': isFinished() ? 'rgba(255, 237, 74, 0.1)' : 'transparent',
                               'border': isFinished() ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid transparent'
                             }}>
-                            <div style={{
-                              width: '10px', height: '10px', 'border-radius': '50%',
-                              background: p().color, 'flex-shrink': 0,
-                              'border': '1px solid rgba(0,0,0,0.2)'
-                            }} />
+                            <div style={{ position: 'relative', width: '12px', height: '12px', 'flex-shrink': 0 }}>
+                              <div style={{
+                                width: '12px', height: '12px', 'border-radius': '50%',
+                                background: p().color,
+                                'border': '1px solid rgba(0,0,0,0.2)'
+                              }} />
+                              <Show when={p().id === myId()}>
+                                <input
+                                  type="color"
+                                  value={p().color}
+                                  onInput={(e) => setPlayerColor(e.currentTarget.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                    opacity: 0, cursor: 'pointer', 'z-index': 1
+                                  }}
+                                />
+                              </Show>
+                            </div>
                             <div style={{ 'flex': 1, 'min-width': 0 }}>
                               <div style={{
                                 'font-size': '0.9em',

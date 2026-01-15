@@ -2,6 +2,7 @@
 import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
+import { throttle } from 'throttle-debounce';
 
 if (typeof window !== 'undefined') {
   (window as any).getGameState = () => ({
@@ -225,6 +226,15 @@ export function leaveRoom() {
   if (ws) ws.close();
   $currentRoom.set(null);
   $players.set({});
+}
+
+const throttledSetColor = throttle(200, (color: string) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'UPDATE_PLAYER_COLOR', color }));
+});
+
+export function setPlayerColor(color: string) {
+  throttledSetColor(color);
 }
 
 export function toggleReady() {
