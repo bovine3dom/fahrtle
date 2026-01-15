@@ -26,29 +26,21 @@ function App() {
   const pickedPoint = useStore($pickedPoint);
   const startTime = useStore($gameStartTime);
 
-  // New state for UI toggle
   const [minimized, setMinimized] = createSignal(false);
-
-  // Local state for inputs
   const [startStr, setStartStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
 
   createEffect(() => {
     const p = pickedPoint();
     if (p) {
-      // 1. Get the parsed values of whatever is currently in the boxes.
-      // We do this to ensure that if the user typed manually in the OTHER box
-      // (and hasn't synced yet), we don't overwrite their work with the old server state.
       const currentStart = untrack(() => parseCoords(startStr()));
       const currentFinish = untrack(() => parseCoords(finishStr()));
 
       const newPoint: [number, number] = [p.lat, p.lng];
 
       if (p.target === 'start') {
-        // Update Start with pick, keep Finish as is (local or server)
         setGameBounds(newPoint, currentFinish);
       } else if (p.target === 'finish') {
-        // Update Finish with pick, keep Start as is (local or server)
         setGameBounds(currentStart, newPoint);
       }
     }
@@ -58,9 +50,6 @@ function App() {
 
   createEffect(() => {
     const b = bounds();
-    // Only update if the store actually has values, to allow user to clear/type initially
-    // We compare with current parsed value to avoid blowing away user typing if it matches numerically
-    // But primarily this effect runs when *server* sends an update.
     if (b.start) setStartStr(`${b.start[0]}, ${b.start[1]}`);
     else if (!b.start && !startStr()) setStartStr("");
 
@@ -68,14 +57,12 @@ function App() {
     else if (!b.finish && !finishStr()) setFinishStr("");
   });
 
-  // Check if local inputs match the store (saved state)
   const isSaved = createMemo(() => {
     const b = bounds();
 
     const compare = (p1: [number, number] | null, p2: [number, number] | null) => {
       if (!p1 && !p2) return true;
       if (!p1 || !p2) return false;
-      // Use epsilon for float comparison safety
       return Math.abs(p1[0] - p2[0]) < 0.000001 && Math.abs(p1[1] - p2[1]) < 0.000001;
     };
     const checkField = (str: string, serverVal: [number, number] | null) => {
@@ -97,9 +84,9 @@ function App() {
 
   const togglePicker = (mode: 'start' | 'finish') => {
     if (pickerMode() === mode) {
-      $pickerMode.set(null); // Cancel
+      $pickerMode.set(null);
     } else {
-      $pickerMode.set(mode); // Activate
+      $pickerMode.set(mode);
     }
   };
 
@@ -128,16 +115,13 @@ function App() {
       const a = all[idA];
       const b = all[idB];
 
-      // 1. Finished players first
       if (a.finishTime != null && b.finishTime == null) return -1;
       if (a.finishTime == null && b.finishTime != null) return 1;
 
-      // 2. Sort by finish time (asc)
       if (a.finishTime != null && b.finishTime != null) {
         return a.finishTime - b.finishTime;
       }
 
-      // 3. Fallback to ID
       return a.id.localeCompare(b.id);
     });
   });
@@ -149,7 +133,6 @@ function App() {
     return '';
   };
 
-  // Auto-reset leave confirmation
   createEffect(() => {
     if (leaveConfirm()) {
       const t = setTimeout(() => setLeaveConfirm(false), 5000);
@@ -182,7 +165,6 @@ function App() {
             position: 'absolute', top: '10px', left: '10px', 'z-index': 10,
             background: 'rgba(255,255,255,0.9)', padding: '12px', 'border-radius': '8px',
             'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-            // Layout adjustments for mobile/minimizing
             'min-width': minimized() ? 'auto' : '200px',
             'max-width': 'calc(100vw - 20px)',
             'max-height': 'calc(100vh - 100px)',
@@ -320,7 +302,6 @@ function App() {
                   <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
                     <For each={sortedPlayerIds()}>
                       {(id, index) => {
-                        // Access player reactively by ID
                         const p = () => players()[id];
                         const isFinished = () => p().finishTime != null;
 
@@ -419,7 +400,6 @@ function App() {
                     >
                       <span>🛑</span> Get Off At
                       {(() => {
-                        // Find next waypoint
                         const nextWp = players()[myId()!].waypoints.find((wp: any) => wp.arrivalTime > time());
                         if (nextWp && nextWp.stopName) {
                           return " " + nextWp.stopName;

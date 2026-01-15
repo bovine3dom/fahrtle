@@ -63,20 +63,14 @@ export function fitGameBounds() {
   }
 }
 
-// Convert crow_km to color (0-100km range)
-// Higher km = better connectivity = cooler colors (purple/blue)
-// Lower km = worse connectivity = warmer colors (red/orange)
 const getCrowKmColor = (crowKm: number): string => {
-  const normalized = Math.min(crowKm / 100, 1); // Normalize to 0-1
-  // Invert so higher values get cooler colors (spectral goes red->purple)
+  const normalized = Math.min(crowKm / 100, 1);
   return interpolateSpectral(normalized);
 };
 
-// Fetch and update stops based on map bounds
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
   if (zoom < 14) {
-    // Clear stops if zoom is too low
     const source = map.getSource('stops') as maplibregl.GeoJSONSource;
     if (source) {
       source.setData({ type: 'FeatureCollection', features: [] });
@@ -215,7 +209,6 @@ export default function MapView() {
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      // Icon Layer
       mapInstance!.addLayer({
         id: 'course-markers-icon',
         type: 'symbol',
@@ -227,13 +220,11 @@ export default function MapView() {
           'text-offset': [0, -0.2]
         },
         paint: {
-          // chill green
           'text-color': '#10b981',
           'text-halo-color': '#000000',
           'text-halo-width': 2,
         }
       });
-      // Label Layer
       mapInstance!.addLayer({
         id: 'course-markers-label',
         type: 'symbol',
@@ -417,7 +408,6 @@ export default function MapView() {
         }, 300);
       });
 
-      // Update stops on map move/zoom
       mapInstance!.on('moveend', () => {
         if (mapInstance) updateStops(mapInstance);
       });
@@ -425,9 +415,7 @@ export default function MapView() {
         if (mapInstance) updateStops(mapInstance);
       });
 
-      // Initial load of stops
       updateStops(mapInstance!);
-
       setMapReady(true);
       startAnimationLoop();
     });
@@ -468,7 +456,6 @@ export default function MapView() {
       finishCells = [];
     }
 
-    // Use mapInstance directly if possible, or wait for mapReady
     if (!mapReady() || !mapInstance) return;
 
     const source = mapInstance.getSource('course-markers') as maplibregl.GeoJSONSource;
@@ -478,14 +465,14 @@ export default function MapView() {
     if (b.start) {
       features.push({
         type: 'Feature',
-        geometry: { type: 'Point', coordinates: [b.start[1], b.start[0]] }, // GeoJSON: [lng, lat]
+        geometry: { type: 'Point', coordinates: [b.start[1], b.start[0]] },
         properties: { icon: '🟢', label: 'Start' }
       });
     }
     if (b.finish) {
       features.push({
         type: 'Feature',
-        geometry: { type: 'Point', coordinates: [b.finish[1], b.finish[0]] }, // GeoJSON: [lng, lat]
+        geometry: { type: 'Point', coordinates: [b.finish[1], b.finish[0]] },
         properties: { icon: '🏁', label: 'Finish' }
       });
     }
@@ -553,14 +540,13 @@ export default function MapView() {
       frameId = requestAnimationFrame(loop);
       frameCount++;
 
-      // Throttle rendering
       if (timestamp - lastFrameTime < FRAME_INTERVAL) return;
       lastFrameTime = timestamp;
 
       if (!mapInstance) return;
 
       const now = getServerTime();
-      const allPlayers = $players.get(); // Use .get() to avoid subscription overhead
+      const allPlayers = $players.get();
       const currentSpeeds: Record<string, number> = {};
       const vehicleFeatures: any[] = [];
 
@@ -589,8 +575,6 @@ export default function MapView() {
                 lerp(seg.start[1], seg.end[1], t)
               ];
 
-              // Calculate speed for this segment
-              // Distance (km) / Time (hours)
               const dist = haversineDist(seg.start, seg.end);
               const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
               const speed = durationHours > 0 ? dist / durationHours : 0;
@@ -615,7 +599,6 @@ export default function MapView() {
               $playerTimeZone.set(zone);
             }
             if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
-              // check approx every 10 frames
               if (frameCount % 10 === 0) {
                 try {
                   const myCell = latLngToCell(currentPos[1], currentPos[0], 11);

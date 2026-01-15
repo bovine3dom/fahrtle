@@ -3,9 +3,6 @@ import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 
-// --- Configuration ---
-// --- Debug Helper ---
-// Expose state getter on window for debugging
 if (typeof window !== 'undefined') {
   (window as any).getGameState = () => ({
     connected: $connected.get(),
@@ -24,9 +21,7 @@ if (typeof window !== 'undefined') {
     boardMinimized: $boardMinimized.get(),
   });
 }
-// (No global client-side constants needed for movement math anymore)
 
-// --- Types ---
 export type Waypoint = {
   x: number;
   y: number;
@@ -41,7 +36,7 @@ export type Player = {
   color: string;
   isReady: boolean;
   waypoints: Waypoint[];
-  renderableSegments?: AnimationSegment[]; // Client-side computed
+  renderableSegments?: AnimationSegment[];
   finishTime?: number;
   desiredRate?: number;
 };
@@ -57,7 +52,6 @@ export type RenderablePlayer = Player & {
   segments: AnimationSegment[];
 };
 
-// --- State ---
 export const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
@@ -79,8 +73,6 @@ export const $gameStartTime = atom<number | null>(null);
 
 let ws: WebSocket | null = null;
 
-// --- Actions ---
-
 export function connectAndJoin(roomId: string, playerId: string, color?: string) {
   if (ws) ws.close();
 
@@ -89,7 +81,6 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
   ws.onopen = () => {
     $connected.set(true);
 
-    // FIX: Send roomId with the sync request so server knows which clock to read
     ws?.send(JSON.stringify({
       type: 'SYNC_REQUEST',
       clientSendTime: Date.now(),
@@ -113,7 +104,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
     }
 
     if (msg.type === 'CLOCK_UPDATE') {
-      syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50); // Assume 50ms latency for broadcast
+      syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
       $globalRate.set(msg.rate);
     }
 
@@ -122,7 +113,6 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
       for (const pid in msg.players) {
         renderables[pid] = processPlayer(msg.players[pid]);
 
-        // Initial timezone detection for self
         if (pid === $myPlayerId.get()) {
           const p = msg.players[pid];
           if (p.waypoints.length > 0) {
@@ -214,7 +204,7 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
     lastTime = p.time;
   }
 
-  const speedFactor = Math.max(1.0, totalVirtualTime / 30000); // Compress to 30s real time
+  const speedFactor = Math.max(1.0, totalVirtualTime / 30000);
 
   for (const p of points) {
     ws.send(JSON.stringify({
@@ -252,7 +242,6 @@ export function cancelNavigation() {
   ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
 }
 
-// --- Helper: Convert Points to Time Segments ---
 function processPlayer(raw: Player): RenderablePlayer {
   const segments: AnimationSegment[] = [];
 

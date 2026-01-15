@@ -16,3 +16,16 @@ export const parseCoords = (s: string): [number, number] | null => {
     }
     return null;
 };
+
+export const formatRowTime = (timeStr: string) => {
+    if (!timeStr) return '--:--';
+    try {
+        if (timeStr.length >= 16) {
+            return timeStr.substring(11, 16);
+        }
+        const d = new Date(timeStr);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch (e) {
+        return '--:--';
+    }
+};

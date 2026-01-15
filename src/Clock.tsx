@@ -25,7 +25,6 @@ export default function Clock() {
         lastStoreUpdate = realNow;
       }
 
-      // Format to local time
       const timeString = formatInTimeZone(now, zone(), true);
 
       if (spanRef && timeString !== lastTimeString) {

@@ -5,6 +5,7 @@ import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
+import { formatRowTime } from './utils/format';
 
 export default function DepartureBoard() {
   const results = useStore($departureBoardResults);
@@ -14,14 +15,12 @@ export default function DepartureBoard() {
   const isMinimized = useStore($boardMinimized);
   const [filterType, setFilterType] = createSignal<string | null>(null);
 
-  // Auto-unminimize when results are lost (empty) or closed
   createEffect(() => {
     if (!results() || results()!.length === 0) {
       $boardMinimized.set(false);
     }
   });
 
-  // Auto-expand when results appear
   createEffect(() => {
     if (results() && results()!.length > 0) {
       $boardMinimized.set(false);
@@ -32,11 +31,9 @@ export default function DepartureBoard() {
     const raw = results();
     if (!raw) return [];
 
-    // const now = $clock.get(); // fixes thrashing but breaks the departures leaving
     const now = currentTime();
     const zone = stopZone();
 
-    // Convert current simulation time to local STOP wall-time
     const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
     const localDate = new Date(localDateStr);
     const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
@@ -48,7 +45,6 @@ export default function DepartureBoard() {
       return { ...row, isTomorrow };
     });
 
-    // filter out and isTomorrow that are before non-isTomorrow
     const filtered = []
     let seenNonTomorrow = false;
     for (const row of interim) {
@@ -97,7 +93,6 @@ export default function DepartureBoard() {
             coordinates: coords as [number, number][]
           });
 
-          // Auto-minimize when previewing
           $boardMinimized.set(true);
         }
       })
@@ -105,7 +100,6 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: any) => {
-    // Fetch same data as single click but process it as points
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
@@ -173,23 +167,6 @@ export default function DepartureBoard() {
       return date.toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined
       });
-    }
-  };
-
-  const formatRowTime = (timeStr: string) => {
-    if (!timeStr) return '--:--';
-    // The DB returns local "wall time" string e.g. "2023-10-10 14:00:00"
-    // We just want to extract "14:00" without any timezone logic
-    try {
-      // Check if it matches YYYY-MM-DD HH:mm:ss format roughly
-      if (timeStr.length >= 16) {
-        return timeStr.substring(11, 16);
-      }
-      // Fallback
-      const d = new Date(timeStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    } catch (e) {
-      return '--:--';
     }
   };
 
