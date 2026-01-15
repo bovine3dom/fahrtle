@@ -15,6 +15,7 @@ if (typeof window !== 'undefined') {
     countdownEnd: $countdownEnd.get(),
     clock: $clock.get(),
     playerSpeeds: $playerSpeeds.get(),
+    playerDistances: $playerDistances.get(),
     departureBoardResults: $departureBoardResults.get(),
     stopTimeZone: $stopTimeZone.get(),
     playerTimeZone: $playerTimeZone.get(),
@@ -68,6 +69,7 @@ export const $clock = atom(0);
 export const $previewRoute = atom<{ id: string, color: string, coordinates: [number, number][] } | null>(null);
 export const $boardMinimized = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
+export const $playerDistances = map<Record<string, number | null>>({});
 export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null }>({ start: null, finish: null });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);

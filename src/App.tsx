@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -20,6 +20,7 @@ function App() {
   const roomState = useStore($roomState);
   const countdownEnd = useStore($countdownEnd);
   const speeds = useStore($playerSpeeds);
+  const distances = useStore($playerDistances);
   const time = useStore($clock);
   const bounds = useStore($gameBounds);
   const pickerMode = useStore($pickerMode);
@@ -116,19 +117,22 @@ function App() {
 
   const sortedPlayerIds = createMemo(() => {
     const all = players();
-    return Object.keys(all).sort((idA, idB) => {
-      const a = all[idA];
-      const b = all[idB];
-
-      if (a.finishTime != null && b.finishTime == null) return -1;
-      if (a.finishTime == null && b.finishTime != null) return 1;
-
-      if (a.finishTime != null && b.finishTime != null) {
-        return a.finishTime - b.finishTime;
-      }
-
-      return a.id.localeCompare(b.id);
+    const dists = distances();
+    // sort finishers first
+    const sorted_finishers = Object.keys(all).filter(id => all[id].finishTime != null).sort((idA, idB) => {
+      const a = all[idA].finishTime as number;
+      const b = all[idB].finishTime as number;
+      return a - b;
     });
+    const sorted_others = Object.keys(all).filter(id => all[id].finishTime == null).sort((idA, idB) => {
+      const a = dists[idA];
+      const b = dists[idB];
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a - b;
+    });
+    return sorted_finishers.concat(sorted_others);
   });
 
   const getMedal = (rankIndex: number) => {
@@ -387,7 +391,7 @@ function App() {
                                 'min-width': '60px',
                                 'text-align': 'right'
                               }}>
-                                {(speeds()[p().id] || 0).toFixed(0)} km/h
+                                {(speeds()[p().id] || 0).toFixed(0)} km/h {(Number.parseFloat((distances()[p().id] || 0).toPrecision(2))).toLocaleString('en-GB')} km
                               </span>
                             )}
                             {roomState() !== 'RUNNING' && (

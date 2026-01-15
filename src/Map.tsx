@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-j
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -580,6 +580,7 @@ export default function MapView() {
       const now = getServerTime();
       const allPlayers = $players.get();
       const currentSpeeds: Record<string, number> = {};
+      const currentDists: Record<string, number | null> = {};
       const vehicleFeatures: any[] = [];
 
       const isRunning = $roomState.get() === 'RUNNING';
@@ -588,7 +589,7 @@ export default function MapView() {
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
 
-        let currentPos = null;
+        let currentPos: [number, number] | null = null;
 
         if (player.segments.length === 0) {
           if (player.waypoints.length > 0) {
@@ -614,6 +615,10 @@ export default function MapView() {
               break;
             }
           }
+
+          const b = $gameBounds.get().finish;
+          const distToFinish = haversineDist(currentPos, b?.length === 2 ? [b[1], b[0]] : null); // lat lng vs lng lat bane of my life
+          currentDists[pid] = distToFinish;
         }
 
         if (currentPos) {
@@ -652,6 +657,7 @@ export default function MapView() {
       if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
 
       $playerSpeeds.set(currentSpeeds);
+      $playerDistances.set(currentDists);
     };
     requestAnimationFrame(loop);
   };

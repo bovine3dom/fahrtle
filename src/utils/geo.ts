@@ -1,4 +1,5 @@
-export const haversineDist = (coords1: [number, number], coords2: [number, number]) => {
+export const haversineDist = (coords1: [number, number] | null, coords2: [number, number] | null) => {
+    if (!coords1 || !coords2) return null;
     const toRad = (x: number) => x * Math.PI / 180;
     const R = 6371; // km
     const dLat = toRad(coords2[1] - coords1[1]);
