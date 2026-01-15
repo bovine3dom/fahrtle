@@ -359,7 +359,7 @@ function App() {
                                 <Show when={isFinished()}>
                                   <span style={{ "margin-right": "4px" }}>{getMedal(index())}</span>
                                 </Show>
-                                {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && !isFinished() ? '💤' : ''}
+                                {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && '💤'}
                               </div>
                               {(() => {
                                 if (isFinished()) {
