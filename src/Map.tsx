@@ -625,10 +625,12 @@ export default function MapView() {
           });
 
           const myId = $myPlayerId.get();
-          if (pid === myId && frameCount % 60 === 0) {
-            const zone = getTimeZone(currentPos[1], currentPos[0]);
-            if ($playerTimeZone.get() !== zone) {
-              $playerTimeZone.set(zone);
+          if (pid === myId) {
+            if (frameCount % 60 === 0) {
+              const zone = getTimeZone(currentPos[1], currentPos[0]);
+              if ($playerTimeZone.get() !== zone) {
+                $playerTimeZone.set(zone);
+              }
             }
             if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
               if (frameCount % 10 === 0) {
