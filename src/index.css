@@ -5,6 +5,18 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow: hidden;
   background-color: #242424;
 }
 

@@ -2,6 +2,8 @@
 import { createEffect, createSignal, onMount } from 'solid-js';
 import { connectAndJoin } from './store';
 import { generatePilotName } from './names';
+import bgImage from './assets/h3_hero.png';
+import favicon from '../public/favicon.svg';
 
 export default function Lobby() {
   const generateRandomRoom = () => {
@@ -38,18 +40,18 @@ export default function Lobby() {
     window.history.replaceState(null, '', url);
   })
 
-  const bgImage = "assets/h3_hero.png";
 
   return (
     <div style={{
       display: 'flex',
-      height: '100vh',
+      height: '100%',
       'justify-content': 'center',
       'align-items': 'center',
       color: 'white',
-      background: `linear-gradient(rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.7)), url('${bgImage}')`,
+      'background-image': `linear-gradient(rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.7)), url('${bgImage}')`,
       'background-size': 'cover',
       'background-position': 'center',
+      'image-rendering': 'pixelated',
       'background-repeat': 'no-repeat'
     }}>
       <form onSubmit={handleJoin} style={{
@@ -66,7 +68,7 @@ export default function Lobby() {
           'margin-bottom': '8px'
         }}>
           <img
-            src="favicon.svg"
+            src={favicon}
             alt="Logo"
             style={{ width: '72px', height: '72px' }}
           />
