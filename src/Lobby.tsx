@@ -1,10 +1,16 @@
 // ==> src/Lobby.tsx <==
-import { createSignal, onMount } from 'solid-js';
+import { createEffect, createSignal, onMount } from 'solid-js';
 import { connectAndJoin } from './store';
 import { generatePilotName } from './names';
 
 export default function Lobby() {
-  const [room, setRoom] = createSignal("room-1");
+  const generateRandomRoom = () => {
+    const randomId = Math.random().toString(36).substring(2, 10) +
+      Math.random().toString(36).substring(2, 10);
+    return randomId;
+  };
+
+  const [room, setRoom] = createSignal(generateRandomRoom());
   const [user, setUser] = createSignal(generatePilotName());
   const [color, setColor] = createSignal('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'));
 
@@ -26,12 +32,11 @@ export default function Lobby() {
     }
   };
 
-  // Generates a random alphanumeric string (Base36)
-  const generateRandomRoom = () => {
-    const randomId = Math.random().toString(36).substring(2, 10) +
-      Math.random().toString(36).substring(2, 10);
-    setRoom(randomId);
-  };
+  createEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', room());
+    window.history.replaceState(null, '', url);
+  })
 
   const bgImage = "/assets/h3_hero.png";
 
@@ -77,7 +82,7 @@ export default function Lobby() {
             <input
               value={room()}
               onInput={e => setRoom(e.currentTarget.value)}
-              placeholder="Enter Room ID"
+              placeholder="Enter or create room ID"
               style={{
                 padding: '8px', 'border-radius': '4px', border: 'none',
                 width: '160px', flex: '1'
@@ -85,7 +90,7 @@ export default function Lobby() {
             />
             <button
               type="button"
-              onClick={generateRandomRoom}
+              onClick={() => setRoom(generateRandomRoom)}
               title="Generate Random ID"
               style={{
                 background: '#475569', border: 'none', cursor: 'pointer',
