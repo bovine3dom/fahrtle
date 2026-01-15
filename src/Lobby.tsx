@@ -38,7 +38,7 @@ export default function Lobby() {
     window.history.replaceState(null, '', url);
   })
 
-  const bgImage = "/assets/h3_hero.png";
+  const bgImage = "assets/h3_hero.png";
 
   return (
     <div style={{
@@ -66,7 +66,7 @@ export default function Lobby() {
           'margin-bottom': '8px'
         }}>
           <img
-            src="/favicon.svg"
+            src="favicon.svg"
             alt="Logo"
             style={{ width: '72px', height: '72px' }}
           />
