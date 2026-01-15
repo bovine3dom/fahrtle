@@ -479,7 +479,7 @@ function App() {
                   })()}
 
                   <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
-                    {roomState() === 'RUNNING' ? 'Double click to set waypoint. Single click to query H3.' : 'Waiting for game to start...'}
+                    {roomState() === 'RUNNING' ? <a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8' }}>Click map for departures, double click to board or walk<br />Click here for more information</a> : 'Waiting for game to start...'}
                   </div>
                 </div>
               </div>
