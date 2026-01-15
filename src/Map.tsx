@@ -137,6 +137,38 @@ const updateStops = async (map: maplibregl.Map) => {
   }
 };
 
+let STYLE: string | Record<string, any> = "https://tiles.openfreemap.org/styles/positron"
+
+const params = new URLSearchParams(window.location.search)
+
+if (params.has('transport')) {
+  STYLE = {
+    'version': 8,
+    'sources': {
+      'raster-tiles': {
+        'type': 'raster',
+        'tiles': [
+          `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
+        ],
+        'tileSize': 256,
+        'attribution':
+          '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+      }
+    },
+    'layers': [
+      {
+        'id': 'simple-tiles',
+        'type': 'raster',
+        'source': 'raster-tiles',
+        'minzoom': 0,
+        'maxzoom': 22
+      }
+    ]
+  }
+}
+
+
+
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let frameId: number;
@@ -158,7 +190,7 @@ export default function MapView() {
     try {
       mapInstance = new maplibregl.Map({
         container: mapContainer,
-        style: 'https://tiles.openfreemap.org/styles/positron',
+        style: STYLE,
         center: [-3.1883, 55.9533],
         zoom: 14,
         fadeDuration: 0,
@@ -177,18 +209,20 @@ export default function MapView() {
     mapInstance.on('load', () => {
       console.log('[Map] "load" event fired. Initializing layers...');
 
-      mapInstance!.addSource('openrailwaymap', {
-        type: 'raster',
-        tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
-      });
-      mapInstance!.addLayer({
-        id: 'openrailwaymap-layer',
-        type: 'raster',
-        source: 'openrailwaymap',
-        paint: { 'raster-opacity': 1 }
-      });
+      if (!params.has('transport')) {
+        mapInstance!.addSource('openrailwaymap', {
+          type: 'raster',
+          tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
+        });
+        mapInstance!.addLayer({
+          id: 'openrailwaymap-layer',
+          type: 'raster',
+          source: 'openrailwaymap',
+          paint: { 'raster-opacity': 1 }
+        });
+      }
 
       mapInstance!.addSource('course-markers', {
         type: 'geojson',
