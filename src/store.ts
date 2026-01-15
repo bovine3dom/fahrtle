@@ -76,7 +76,10 @@ let ws: WebSocket | null = null;
 export function connectAndJoin(roomId: string, playerId: string, color?: string) {
   if (ws) ws.close();
 
-  ws = new WebSocket('ws://localhost:8080');
+  const wsUri = import.meta.env.PROD
+    ? import.meta.env.VITE_FAHRTLE_WS_URI
+    : 'ws://localhost:8080';
+  ws = new WebSocket(wsUri);
 
   ws.onopen = () => {
     $connected.set(true);
