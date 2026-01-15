@@ -142,11 +142,12 @@ export default function DepartureBoard() {
 
           const targetStart = gameTime + (diff * 1000);
           const timeShift = targetStart - startPt.dbTime;
-          const points = rawPoints.map((p: any) => ({
+          const points = rawPoints.map((p: any, idx: number) => ({
             lng: p.lng,
             lat: p.lat,
             time: p.dbTime + timeShift,
-            stopName: p.stopName
+            stopName: p.stopName,
+            isWalk: idx === 0
           }));
 
           submitWaypointsBatch(points);

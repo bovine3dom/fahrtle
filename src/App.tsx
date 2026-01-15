@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -94,7 +94,12 @@ function App() {
     const p = players()[myId()!];
     if (!p) return false;
     const futurePoints = p.waypoints.filter(wp => wp.arrivalTime > time());
-    return futurePoints.length > 1;
+    if (futurePoints.length === 0) return false;
+
+    if (futurePoints.length > 1) return true;
+    if (futurePoints[0].isWalk) return true;
+
+    return false;
   });
 
   const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
@@ -205,7 +210,7 @@ function App() {
                 <div style={{ 'margin-bottom': '8px' }}>
                   <Clock />
                   <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
-                    Time Dilation: {rate().toFixed(2)}x
+                    Time dilation: {rate().toFixed(2)}x
                   </div>
                   <Show when={elapsedTime()}>
                     <div style={{ 'font-size': '0.85em', 'color': '#059669', 'margin-top': '2px', 'font-weight': 'bold' }}>
@@ -402,25 +407,26 @@ function App() {
                 {/* Footer Actions */}
                 <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
                   <Show when={canCancel()}>
-                    <button
-                      onClick={cancelNavigation}
-                      style={{
-                        width: '100%', padding: '8px', 'background': '#f59e0b', color: '#fff',
-                        border: '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
-                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
-                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                      }}
-                      title="Stops at the next upcoming station and cancels remaining trip"
-                    >
-                      <span>🛑</span> Get Off At
-                      {(() => {
-                        const nextWp = players()[myId()!].waypoints.find((wp: any) => wp.arrivalTime > time());
-                        if (nextWp && nextWp.stopName) {
-                          return " " + nextWp.stopName;
-                        }
-                        return null;
-                      })()}
-                    </button>
+                    {(() => {
+                      const p = players()[myId()!];
+                      const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
+                      const isWalk = nextWp?.isWalk;
+
+                      return (
+                        <button
+                          onClick={isWalk ? stopImmediately : cancelNavigation}
+                          style={{
+                            width: '100%', padding: '8px', 'background': isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                            border: isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
+                            'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                            'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                          }}
+                          title={isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                        >
+                          <span>🛑</span> {isWalk ? 'Stop walking' : `Get off at ${nextWp?.stopName || ''}`}
+                        </button>
+                      );
+                    })()}
                   </Show>
                   {roomState() !== 'RUNNING' && (
                     <button
@@ -454,7 +460,7 @@ function App() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    {leaveConfirm() ? 'Click again to confirm' : 'Leave Room'}
+                    {leaveConfirm() ? 'Click again to confirm' : 'Leave room'}
                   </button>
 
                   {/* Snooze Button */}

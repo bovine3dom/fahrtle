@@ -30,6 +30,7 @@ export type Waypoint = {
   arrivalTime: number;
   speedFactor: number;
   stopName?: string;
+  isWalk?: boolean;
 };
 
 export type Player = {
@@ -189,7 +190,8 @@ export function submitWaypoint(lat: number, lng: number) {
     x: lng,
     y: lat,
     speedFactor: 20,
-    stopName: 'walking'
+    stopName: 'walking',
+    isWalk: true
   }));
 }
 
@@ -210,14 +212,16 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
 
   const speedFactor = Math.max(1.0, totalVirtualTime / 30000);
 
-  for (const p of points) {
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
       x: p.lng,
       y: p.lat,
       arrivalTime: p.time,
       speedFactor,
-      stopName: p.stopName
+      stopName: p.stopName,
+      isWalk: i === 0
     }));
   }
 }
@@ -253,6 +257,11 @@ export function cancelNavigation() {
   }
 
   ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
+}
+
+export function stopImmediately() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY' }));
 }
 
 function processPlayer(raw: Player): RenderablePlayer {

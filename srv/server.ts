@@ -13,6 +13,7 @@ type Waypoint = {
   arrivalTime: number; // Virtual Timestamp
   speedFactor: number;
   stopName?: string;
+  isWalk?: boolean;
 };
 
 type Player = {
@@ -59,6 +60,10 @@ function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, 
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function lerp(v0: number, v1: number, t: number) {
+  return v0 * (1 - t) + v1 * t;
 }
 
 // Helper: Generate a random point within ~50m of a center
@@ -292,7 +297,7 @@ const server = serve<WSData>({
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime, stopName } = message;
+        const { x, y, speedFactor, arrivalTime, stopName, isWalk } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -312,7 +317,8 @@ const server = serve<WSData>({
           startTime: start,
           arrivalTime: finalArrival,
           speedFactor: speedFactor,
-          stopName: stopName || undefined
+          stopName: stopName || undefined,
+          isWalk: isWalk || false
         };
 
         player.waypoints.push(newWaypoint);
@@ -352,6 +358,72 @@ const server = serve<WSData>({
             player: player
           }));
         }
+      }
+
+      if (message.type === 'STOP_IMMEDIATELY') {
+        const d = ws.data;
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room) return;
+        const player = room.players[d.playerId];
+        if (!player) return;
+
+        stepClock(room);
+        const vTime = room.virtualTime;
+
+        let currentPos = { x: player.waypoints[0].x, y: player.waypoints[0].y };
+        const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
+
+        if (nextWpIndex !== -1) {
+          const nextWp = player.waypoints[nextWpIndex];
+          const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
+          const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
+          const duration = nextWp.arrivalTime - segStartTime;
+          if (duration > 0 && vTime > segStartTime) {
+            const t = (vTime - segStartTime) / duration;
+            currentPos.x = lerp(prevWp.x, nextWp.x, t);
+            currentPos.y = lerp(prevWp.y, nextWp.y, t);
+          } else if (vTime >= nextWp.arrivalTime) {
+            currentPos.x = nextWp.x;
+            currentPos.y = nextWp.y;
+          } else {
+            currentPos.x = prevWp.x;
+            currentPos.y = prevWp.y;
+          }
+        } else {
+          const last = player.waypoints[player.waypoints.length - 1];
+          currentPos.x = last.x;
+          currentPos.y = last.y;
+        }
+
+        if (nextWpIndex !== -1) {
+          const nextWp = player.waypoints[nextWpIndex];
+          const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
+          const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
+
+          player.waypoints = [
+            ...player.waypoints.slice(0, nextWpIndex),
+            {
+              x: currentPos.x,
+              y: currentPos.y,
+              startTime: segStartTime,
+              arrivalTime: vTime,
+              speedFactor: 1,
+              stopName: 'Stopped'
+            }
+          ];
+        } else {
+          const last = player.waypoints[player.waypoints.length - 1];
+          if (last) {
+            last.stopName = 'Stopped';
+            last.arrivalTime = Math.min(last.arrivalTime, vTime);
+          }
+        }
+
+        server.publish(d.roomId, JSON.stringify({
+          type: 'PLAYER_JOINED',
+          player: player
+        }));
       }
 
       if (message.type === 'PLAYER_FINISHED') {
