@@ -135,7 +135,7 @@ export default function Lobby() {
         </button>
       </form>
       <a
-        href="https://github.com/bovine3dom/fahrtle"
+        href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle"
         target="_blank"
         rel="noopener noreferrer"
         style={{

@@ -267,7 +267,7 @@ export default function MapView() {
 
       mapInstance!.addSource('vehicles', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
-        attribution: '<a href="https://github.com/bovine3dom/fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
+        attribution: '<a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
       });
       mapInstance!.addLayer({
         id: 'vehicles-circle', type: 'circle', source: 'vehicles',
