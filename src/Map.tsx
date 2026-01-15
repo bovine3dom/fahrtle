@@ -120,7 +120,7 @@ const updateStops = async (map: maplibregl.Map) => {
   }
 };
 
-let STYLE: string | Record<string, any> = "https://tiles.openfreemap.org/styles/positron"
+let STYLE: string | maplibregl.StyleSpecification = "https://tiles.openfreemap.org/styles/positron"
 
 const params = new URLSearchParams(window.location.search)
 

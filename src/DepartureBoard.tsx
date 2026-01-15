@@ -259,7 +259,6 @@ export default function DepartureBoard() {
                     <div
                       class="table-row"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => handleTripClick(row)}
                       onDblClick={() => handleTripDoubleClick(row)}
                     >
                       <div class="col-status">
