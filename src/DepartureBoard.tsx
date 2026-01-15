@@ -1042,6 +1042,76 @@ export default function DepartureBoard() {
               min-width: 25px;
               box-shadow: none;
             }
+
+            .departure-board.minimized {
+              height: 52px;
+              width: 260px;
+              max-width: calc(100% - 40px);
+              position: absolute;
+              bottom: 24px;
+              left: 50%;
+              transform: translateX(-50%);
+              border-radius: 26px;
+              box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+              background: #c1121c; /* OEBB Red */
+              border: 1px solid rgba(255,255,255,0.2);
+              display: flex;
+              align-items: center;
+              padding: 0 16px;
+              justify-content: space-between;
+              overflow: hidden;
+            }
+
+            .departure-board.minimized .board-header {
+              background: transparent !important;
+              padding: 0;
+              min-height: 0;
+              flex: 1;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+
+            .departure-board.minimized .header-main {
+              padding: 0;
+            }
+
+            .departure-board.minimized .stop-name {
+              font-size: 1.1rem;
+              margin: 0;
+              color: #fff !important;
+              max-width: 130px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .departure-board.minimized .header-controls {
+               position: static;
+               transform: none;
+               display: flex;
+               gap: 8px;
+            }
+
+            .departure-board.minimized .type-filter-toolbar,
+            .departure-board.minimized .table-container,
+            .departure-board.minimized .header-clock,
+            .departure-board.minimized .header-main h1 {
+              display: none !important;
+            }
+
+            .departure-board.minimized .control-btn {
+               background: rgba(255, 255, 255, 0.2);
+               border: 1px solid rgba(255, 255, 255, 0.3);
+               color: #fff;
+               width: 18px;
+               height: 18px;
+               font-size: 14px;
+            }
+
+            .departure-board.minimized .cross-line {
+              width: 12px;
+            }
         }
       `}</style>
     </Show>
