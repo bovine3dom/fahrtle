@@ -702,6 +702,12 @@ export default function MapView() {
               if ($playerTimeZone.get() !== zone) {
                 $playerTimeZone.set(zone);
               }
+              // delete positions that are not in the game
+              for (const pid in playerPositions) {
+                if (!allPlayers[pid]) {
+                  delete playerPositions[pid];
+                }
+              }
             }
             if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
               if (frameCount % 10 === 0) {
