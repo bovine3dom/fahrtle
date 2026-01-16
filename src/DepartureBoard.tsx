@@ -28,28 +28,31 @@ export default function DepartureBoard() {
     }
   });
 
+  const getLocalSeconds = (time: number, zone: string) => {
+    const localDateStr = new Date(time).toLocaleString('en-US', { timeZone: zone });
+    const localDate = new Date(localDateStr);
+    return localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+  };
+
+  const getRowSeconds = (departureTime: string) => {
+    const depDate = new Date(departureTime);
+    return depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+  };
+
   const deduplicatedResults = createMemo(() => {
     const raw = results();
     if (!raw) return [];
 
     const now = currentTime();
     const zone = stopZone();
-
-    const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
-    const localDate = new Date(localDateStr);
-    const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
-
-    const interim = raw.map(row => {
-      const depDate = new Date(row.departure_time);
-      const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
-      const isTomorrow = depSeconds < localSeconds;
-      return { ...row, isTomorrow };
-    });
+    const localSeconds = getLocalSeconds(now, zone);
 
     const filtered = []
     let seenNonTomorrow = false;
-    for (const row of interim) {
-      if (row.isTomorrow) {
+    for (const row of raw) {
+      const depSeconds = getRowSeconds(row.departure_time);
+      const isRowTomorrow = depSeconds < localSeconds;
+      if (isRowTomorrow) {
         if (seenNonTomorrow) {
           filtered.push(row);
         }
@@ -58,7 +61,22 @@ export default function DepartureBoard() {
         filtered.push(row);
       }
     }
-    return filtered.length > 0 ? filtered : interim; // tiny bug here: if all results are tomorrow, order is wrong
+    return filtered.length > 0 ? filtered : raw; // tiny bug here: if all results are tomorrow, order is wrong
+  }, [], {
+    equals: (a, b) => {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+      }
+      return true;
+    }
+  });
+
+  const displayResults = createMemo(() => {
+    const rows = deduplicatedResults();
+    const filter = filterType();
+    if (!filter) return rows;
+    return rows.filter(r => getRouteEmoji(r.route_type) === filter);
   });
 
   createEffect(() => {
@@ -242,20 +260,24 @@ export default function DepartureBoard() {
               <div class="col-board"></div>
             </div>
             <div class="table-body">
-              <For each={deduplicatedResults().filter(r => !filterType() || getRouteEmoji(r.route_type) === filterType())}>
+              <For each={displayResults()}>
                 {(row) => {
-                  const depDate = new Date(row.departure_time);
-                  const depSeconds = depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
-
-                  const isImminent = () => {
+                  const isTomorrow = createMemo(() => {
                     const now = currentTime();
                     const zone = stopZone();
-                    const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
-                    const localDate = new Date(localDateStr);
-                    const localSeconds = localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+                    const localSeconds = getLocalSeconds(now, zone);
+                    const depSeconds = getRowSeconds(row.departure_time);
+                    return depSeconds < localSeconds;
+                  });
+
+                  const isImminent = createMemo(() => {
+                    const depSeconds = getRowSeconds(row.departure_time);
+                    const now = currentTime();
+                    const zone = stopZone();
+                    const localSeconds = getLocalSeconds(now, zone);
                     const diff = depSeconds - localSeconds;
                     return diff > 0 && diff <= 120;
-                  };
+                  });
 
                   return (
                     <div
@@ -272,7 +294,7 @@ export default function DepartureBoard() {
                         </div>
                         <div class="col-time" style={{ "line-height": "1.1" }}>
                           <div>{formatRowTime(row.departure_time)}</div>
-                          <Show when={row.isTomorrow}>
+                          <Show when={isTomorrow()}>
                             <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
                               (tmrw.)
                             </div>
@@ -340,7 +362,7 @@ export default function DepartureBoard() {
                             <Show when={isImminent()}>
                               <span class="status-dot imminent" style={{ "margin-left": "4px" }}></span>
                             </Show>
-                            <Show when={row.isTomorrow}>
+                            <Show when={isTomorrow()}>
                               <div class="mobile-tomorrow">tomorrow</div>
                             </Show>
                           </div>
