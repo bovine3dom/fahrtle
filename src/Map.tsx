@@ -564,19 +564,16 @@ export default function MapView() {
   });
 
   const previewRoute = useStore($previewRoute);
-  const boardMinimized = useStore($boardMinimized);
-  const departureBoardResults = useStore($departureBoardResults);
-  let prevStopName = '';
   createEffect(() => {
     const preview = previewRoute();
-    const minimized = boardMinimized();
-    const depBoard = departureBoardResults();
-    if (!mapInstance || !mapInstance.isStyleLoaded()) return;
+    const isReady = mapReady();
+    console.log(Date.now(), preview);
+    if (!isReady || !mapInstance || !mapInstance.isStyleLoaded()) return;
 
     const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
     if (!source) return;
 
-    if (preview && minimized && depBoard.length > 0 && depBoard[0].stop_name == prevStopName) {
+    if (preview) {
       source.setData({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: preview },
@@ -588,10 +585,10 @@ export default function MapView() {
         preview.forEach(coord => bounds.extend(coord));
         mapInstance.fitBounds(bounds, { padding: 80, duration: 1500 });
       }
+      $boardMinimized.set(true);
     } else {
       source.setData({ type: 'FeatureCollection', features: [] });
     }
-    prevStopName = depBoard[0]?.stop_name || '';
   });
 
   const players = useStore($players);

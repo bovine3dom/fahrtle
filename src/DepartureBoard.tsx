@@ -18,12 +18,14 @@ export default function DepartureBoard() {
 
   createEffect(() => {
     if (!results() || results()!.length === 0) {
+      $previewRoute.set([]);
       $boardMinimized.set(false);
     }
   });
 
   createEffect(() => {
     if (results() && results()!.length > 0) {
+      $previewRoute.set([]);
       $boardMinimized.set(false);
     }
   });
@@ -81,6 +83,7 @@ export default function DepartureBoard() {
 
   const close = () => {
     $departureBoardResults.set([]);
+    $previewRoute.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
   };
@@ -102,8 +105,6 @@ export default function DepartureBoard() {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
           $previewRoute.set(coords as [number, number][]);
-
-          $boardMinimized.set(true);
         }
       })
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
