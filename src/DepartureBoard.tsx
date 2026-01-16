@@ -18,14 +18,12 @@ export default function DepartureBoard() {
 
   createEffect(() => {
     if (!results() || results()!.length === 0) {
-      $previewRoute.set([]);
       $boardMinimized.set(false);
     }
   });
 
   createEffect(() => {
     if (results() && results()!.length > 0) {
-      $previewRoute.set([]);
       $boardMinimized.set(false);
     }
   });
@@ -83,7 +81,6 @@ export default function DepartureBoard() {
 
   const close = () => {
     $departureBoardResults.set([]);
-    $previewRoute.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
   };

@@ -566,13 +566,8 @@ export default function MapView() {
   const previewRoute = useStore($previewRoute);
   createEffect(() => {
     const preview = previewRoute();
-    const isReady = mapReady();
-    console.log(Date.now(), preview);
-    if (!isReady || !mapInstance || !mapInstance.isStyleLoaded()) return;
-
-    const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
+    const source = mapInstance?.getSource('preview-route') as maplibregl.GeoJSONSource;
     if (!source) return;
-
     if (preview) {
       source.setData({
         type: 'Feature',
@@ -583,7 +578,7 @@ export default function MapView() {
       if (preview.length > 0) {
         const bounds = new maplibregl.LngLatBounds();
         preview.forEach(coord => bounds.extend(coord));
-        mapInstance.fitBounds(bounds, { padding: 80, duration: 1500 });
+        mapInstance?.fitBounds(bounds, { padding: 80, duration: 1500 });
       }
       $boardMinimized.set(true);
     } else {
