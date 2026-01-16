@@ -343,7 +343,7 @@ export default function MapView() {
       mapInstance!.addLayer({
         id: 'preview-route-line', type: 'line', source: 'preview-route',
         paint: {
-          'line-color': ['get', 'color'],
+          'line-color': '#000',
           'line-width': 4,
           'line-dasharray': [2, 1]
         },
@@ -563,29 +563,35 @@ export default function MapView() {
     cellsSource.setData({ type: 'FeatureCollection', features: cellFeatures as any });
   });
 
-  const Preview = useStore($previewRoute);
+  const previewRoute = useStore($previewRoute);
+  const boardMinimized = useStore($boardMinimized);
+  const departureBoardResults = useStore($departureBoardResults);
+  let prevStopName = '';
   createEffect(() => {
-    const preview = Preview();
+    const preview = previewRoute();
+    const minimized = boardMinimized();
+    const depBoard = departureBoardResults();
     if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
     const source = mapInstance.getSource('preview-route') as maplibregl.GeoJSONSource;
     if (!source) return;
 
-    if (preview) {
+    if (preview && minimized && depBoard.length > 0 && depBoard[0].stop_name == prevStopName) {
       source.setData({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: preview.coordinates },
-        properties: { color: preview.color }
+        geometry: { type: 'LineString', coordinates: preview },
+        properties: { color: '#000' }
       });
 
-      if (preview.coordinates.length > 0) {
+      if (preview.length > 0) {
         const bounds = new maplibregl.LngLatBounds();
-        preview.coordinates.forEach(coord => bounds.extend(coord as [number, number]));
+        preview.forEach(coord => bounds.extend(coord));
         mapInstance.fitBounds(bounds, { padding: 80, duration: 1500 });
       }
     } else {
       source.setData({ type: 'FeatureCollection', features: [] });
     }
+    prevStopName = depBoard[0]?.stop_name || '';
   });
 
   const players = useStore($players);
