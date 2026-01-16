@@ -573,18 +573,17 @@ export default function MapView() {
   });
 
   const startAnimationLoop = () => {
-    let lastFrameTime = 0;
-    const FRAME_INTERVAL = 1000 / 30; // 30 FPS
+    let lastFrameTime = performance.now();
     let frameCount = 0;
 
     const loop = (timestamp: number) => {
       frameId = requestAnimationFrame(loop);
       frameCount++;
 
-      if (timestamp - lastFrameTime < FRAME_INTERVAL) return;
+      const dt = timestamp - lastFrameTime;
       lastFrameTime = timestamp;
 
-      if (!mapInstance) return;
+      if (!mapInstance || dt < 1) return;
 
       const now = getServerTime();
       const allPlayers = $players.get();
@@ -595,24 +594,26 @@ export default function MapView() {
       const isRunning = $roomState.get() === 'RUNNING';
       const startTime = $gameStartTime.get();
 
+      const SMOOTHING_TIME_CONSTANT = 100;
+      const alpha = 1 - Math.exp(-dt / SMOOTHING_TIME_CONSTANT);
+
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
-
-        let currentPos: [number, number] | null = null;
+        let targetPos: [number, number] | null = null;
 
         if (player.segments.length === 0) {
           if (player.waypoints.length > 0) {
             const p = player.waypoints[0];
-            currentPos = [p.x, p.y];
+            targetPos = [p.x, p.y];
           }
         } else {
           const last = player.segments[player.segments.length - 1];
-          currentPos = last.end;
+          targetPos = last.end;
 
           for (const seg of player.segments) {
             if (now >= seg.startTime && now < seg.endTime) {
               const t = (now - seg.startTime) / (seg.endTime - seg.startTime);
-              currentPos = [
+              targetPos = [
                 lerp(seg.start[0], seg.end[0], t),
                 lerp(seg.start[1], seg.end[1], t)
               ];
@@ -626,36 +627,46 @@ export default function MapView() {
           }
 
           const b = $gameBounds.get().finish;
-          const distToFinish = haversineDist(currentPos, b?.length === 2 ? [b[1], b[0]] : null); // lat lng vs lng lat bane of my life
+          const distToFinish = haversineDist(targetPos, b?.length === 2 ? [b[1], b[0]] : null); // lat lng vs lng lat bane of my life
           currentDists[pid] = distToFinish;
         }
 
-        if (currentPos) {
-          const previousPos = playerPositions[pid] || currentPos;
-          playerPositions[pid] = [lerp(previousPos[0], currentPos[0], 0.2), lerp(previousPos[1], currentPos[1], 0.2)];
+        if (targetPos) {
+          const previousPos = playerPositions[pid] || targetPos;
+
+          const smoothedPos: [number, number] = [
+            lerp(previousPos[0], targetPos[0], alpha),
+            lerp(previousPos[1], targetPos[1], alpha)
+          ];
+
+          playerPositions[pid] = smoothedPos;
+
           vehicleFeatures.push({
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: playerPositions[pid] },
+            geometry: { type: 'Point', coordinates: smoothedPos },
             properties: { id: player.id, color: player.color }
           });
 
-          const myId = $myPlayerId.get();
-          if (pid === myId) {
-            if (frameCount % 60 === 0) {
-              const zone = getTimeZone(currentPos[1], currentPos[0]);
-              if ($playerTimeZone.get() !== zone) {
-                $playerTimeZone.set(zone);
+          if (previousPos !== smoothedPos) {
+
+            const myId = $myPlayerId.get();
+            if (pid === myId) {
+              if (frameCount % 60 === 0) {
+                const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
+                if ($playerTimeZone.get() !== zone) {
+                  $playerTimeZone.set(zone);
+                }
               }
-            }
-            if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
-              if (frameCount % 10 === 0) {
-                try {
-                  const myCell = latLngToCell(currentPos[1], currentPos[0], 11);
-                  if (finishCells.includes(myCell)) {
-                    console.log("[Client] Crossed finish line!");
-                    finishRace(now - startTime);
-                  }
-                } catch (e) { /* ignore H3 errors */ }
+              if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
+                if (frameCount % 10 === 0) {
+                  try {
+                    const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
+                    if (finishCells.includes(myCell)) {
+                      console.log("[Client] Crossed finish line!");
+                      finishRace(now - startTime);
+                    }
+                  } catch (e) { /* ignore H3 errors */ }
+                }
               }
             }
           }
@@ -685,7 +696,8 @@ export default function MapView() {
           targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
 
           const currentZoom = mapInstance.getZoom();
-          const nextZoom = lerp(currentZoom, targetZoom, 0.1);
+          const nextZoom = lerp(currentZoom, targetZoom, alpha);
+
           mapInstance.jumpTo({
             center: myPos,
             zoom: nextZoom
