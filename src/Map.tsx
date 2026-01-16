@@ -216,8 +216,8 @@ export default function MapView() {
       });
 
       mapInstance!.addLayer({
-        id: 'h3-cell-line', type: 'line', source: 'course-markers-h3',
-        paint: { 'line-color': '#10b981', 'fill-opacity': 0.8 }
+        id: 'course-markerks-h3-filled', type: 'fill', source: 'course-markers-h3',
+        paint: { 'fill-color': '#10b981', 'fill-opacity': 0.8 }
       });
 
       mapInstance!.addLayer({
