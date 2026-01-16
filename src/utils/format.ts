@@ -29,3 +29,5 @@ export const formatRowTime = (timeStr: string) => {
         return '--:--';
     }
 };
+
+export const sensibleNumber = (x: number) => Number.parseFloat(x.toPrecision(2)).toLocaleString('en-GB')

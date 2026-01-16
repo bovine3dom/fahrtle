@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-js';
+import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -11,6 +11,7 @@ import { getTimeZone } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
+import { sensibleNumber } from './utils/format';
 
 let mapInstance: maplibregl.Map | undefined;
 
@@ -116,8 +117,48 @@ const updateStops = async (map: maplibregl.Map) => {
       }
     }
   } catch (err) {
-    console.error('[Map] Failed to fetch stops:', err);
   }
+};
+
+const getPointer = (targetLat: number, targetLng: number): { x: number, y: number, bearing: number, distance: number } | null => {
+  if (!mapInstance) return null;
+
+  const targetLngLat = new maplibregl.LngLat(targetLng, targetLat);
+  const bounds = mapInstance.getBounds();
+
+  if (bounds.contains(targetLngLat)) return null;
+
+  const canvas = mapInstance.getCanvas();
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const paddingX = 120;
+  const paddingY = 40;
+
+  const centerMap = mapInstance.getCenter();
+  const centerScreen = mapInstance.project(centerMap);
+  const targetScreen = mapInstance.project(targetLngLat);
+
+  const rect = { minX: paddingX, minY: paddingY, maxX: w - paddingX, maxY: h - paddingY };
+  const dx = targetScreen.x - centerScreen.x;
+  const dy = targetScreen.y - centerScreen.y;
+
+  let t = Infinity;
+  if (dx > 0) t = Math.min(t, (rect.maxX - centerScreen.x) / dx);
+  else if (dx < 0) t = Math.min(t, (rect.minX - centerScreen.x) / dx);
+
+  if (dy > 0) t = Math.min(t, (rect.maxY - centerScreen.y) / dy);
+  else if (dy < 0) t = Math.min(t, (rect.minY - centerScreen.y) / dy);
+
+  const intersection = {
+    x: centerScreen.x + dx * t,
+    y: centerScreen.y + dy * t
+  };
+
+  const pointerLngLat = mapInstance.unproject([intersection.x, intersection.y]);
+  const bearing = getBearing(pointerLngLat.lat, pointerLngLat.lng, targetLat, targetLng);
+  const distance = haversineDist([centerMap.lat, centerMap.lng], [targetLat, targetLng]) || 0;
+
+  return { x: intersection.x, y: intersection.y, bearing, distance };
 };
 
 let STYLE: string | maplibregl.StyleSpecification = "https://tiles.openfreemap.org/styles/positron"
@@ -157,6 +198,8 @@ export default function MapView() {
   let frameId: number;
   const [mapReady, setMapReady] = createSignal(false);
   const isFollowing = useStore($isFollowing);
+  const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
+  const [playerPointers, setPlayerPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
 
   onMount(() => {
 
@@ -669,6 +712,19 @@ export default function MapView() {
         }
       }
 
+      const finish = $gameBounds.get().finish;
+      if (finish) {
+        setFinishPointer(getPointer(finish[0], finish[1]));
+      } else {
+        setFinishPointer(null);
+      }
+
+      const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
+        const pointer = getPointer(pos[1], pos[0]);
+        return { pid, pointer };
+      });
+      setPlayerPointers(t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]);
+
       const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
 
       if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
@@ -750,6 +806,86 @@ export default function MapView() {
           <path d="M12 2V4M12 20V22M2 12H4M20 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
       </button>
+
+      <Show when={finishPointer()}>
+        {(p) => (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${p().x}px`,
+              top: `${p().y}px`,
+              transform: `translate(-50%, -50%)`,
+              display: 'flex',
+              'align-items': 'center',
+              gap: '8px',
+              "pointer-events": 'none',
+              "z-index": 100,
+            }}
+          >
+            <div
+              style={{
+                transform: `rotate(${p().bearing}deg)`,
+                color: '#10b981',
+                "font-size": '32px',
+                "text-shadow": '0 0 2px #000',
+              }}
+            >
+              ▲
+            </div>
+            <div
+              style={{
+                color: '#10b981',
+                "font-size": '14px',
+                "font-weight": 'bold',
+                "text-shadow": '0 0 1px #000',
+                "white-space": 'nowrap'
+              }}
+            >
+              finish {sensibleNumber(p().distance)} km
+            </div>
+          </div>
+        )}
+      </Show>
+
+      <For each={playerPointers()}>
+        {(p) => (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${p.pointer.x}px`,
+              top: `${p.pointer.y}px`,
+              transform: `translate(-50%, -50%)`,
+              display: 'flex',
+              'align-items': 'center',
+              gap: '4px',
+              "pointer-events": 'none',
+              "z-index": 100,
+            }}
+          >
+            <div
+              style={{
+                transform: `rotate(${p.pointer.bearing}deg)`,
+                color: players()[p.pid]?.color || '#fff',
+                "font-size": '24px',
+                "text-shadow": '0 0 1px #000',
+              }}
+            >
+              ▲
+            </div>
+            <div
+              style={{
+                color: players()[p.pid]?.color || '#fff',
+                "font-size": '14px',
+                "font-weight": 'bold',
+                "text-shadow": '0 0 1px #000',
+                "white-space": 'nowrap'
+              }}
+            >
+              {p.pid} {sensibleNumber(p.pointer.distance)} km
+            </div>
+          </div>
+        )}
+      </For>
 
       <style>{`
         .follow-btn {

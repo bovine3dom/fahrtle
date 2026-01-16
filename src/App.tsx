@@ -8,7 +8,7 @@ import Clock from './Clock';
 import { flyToPlayer, fitGameBounds } from './Map';
 import DepartureBoard from './DepartureBoard';
 import { formatDuration } from './utils/time';
-import { parseCoords } from './utils/format';
+import { parseCoords, sensibleNumber } from './utils/format';
 
 const MapView = lazy(() => import('./Map'));
 
@@ -391,7 +391,7 @@ function App() {
                                 'min-width': '60px',
                                 'text-align': 'right'
                               }}>
-                                {(speeds()[p().id] || 0).toFixed(0)} km/h {(Number.parseFloat((distances()[p().id] || 0).toPrecision(2))).toLocaleString('en-GB')} km
+                                {(speeds()[p().id] || 0).toFixed(0)} km/h {sensibleNumber(distances()[p().id] || 0)} km
                               </span>
                             )}
                             {roomState() !== 'RUNNING' && (
