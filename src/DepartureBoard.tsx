@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized, $isFollowing } from './store';
 import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone } from './timezone';
@@ -172,6 +172,7 @@ export default function DepartureBoard() {
           }));
 
           submitWaypointsBatch(points);
+          $isFollowing.set(true);
           close();
         }
         setLoadingTripKey(null);

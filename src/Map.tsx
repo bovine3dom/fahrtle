@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-j
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -156,7 +156,7 @@ export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let frameId: number;
   const [mapReady, setMapReady] = createSignal(false);
-  const [isFollowing, setIsFollowing] = createSignal(false);
+  const isFollowing = useStore($isFollowing);
 
   onMount(() => {
 
@@ -433,7 +433,7 @@ export default function MapView() {
         if (mapInstance) updateStops(mapInstance);
       });
 
-      const disableFollowing = () => setIsFollowing(false);
+      const disableFollowing = () => $isFollowing.set(false);
       mapInstance!.on('dragstart', disableFollowing);
       mapInstance!.on('wheel', disableFollowing);
       mapInstance!.on('touchstart', disableFollowing);
@@ -703,7 +703,7 @@ export default function MapView() {
 
   const toggleFollow = () => {
     const following = !isFollowing();
-    setIsFollowing(following);
+    $isFollowing.set(following);
     if (following) {
       const myId = $myPlayerId.get();
       const myPos = myId ? playerPositions[myId] : null;
