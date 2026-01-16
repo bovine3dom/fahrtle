@@ -14,6 +14,7 @@ export default function DepartureBoard() {
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
   const [filterType, setFilterType] = createSignal<string | null>(null);
+  const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   createEffect(() => {
     if (!results() || results()!.length === 0) {
@@ -100,6 +101,8 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: any) => {
+    const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
+    setLoadingTripKey(key);
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_stop_times_one_day_even_saner
@@ -153,8 +156,12 @@ export default function DepartureBoard() {
           submitWaypointsBatch(points);
           close();
         }
+        setLoadingTripKey(null);
       })
-      .catch(err => console.error(`[ClickHouse] Trip batch query failed:`, err));
+      .catch(err => {
+        console.error(`[ClickHouse] Trip batch query failed:`, err);
+        setLoadingTripKey(null);
+      });
   };
 
   const formatClockTime = (time: string | number, showSeconds = false) => {
@@ -232,6 +239,7 @@ export default function DepartureBoard() {
               <div class="col-dir">Dir</div> {/* New Header */}
               <div class="col-type">Type</div>
               <div class="col-preview"></div>
+              <div class="col-board"></div>
             </div>
             <div class="table-body">
               <For each={deduplicatedResults().filter(r => !filterType() || getRouteEmoji(r.route_type) === filterType())}>
@@ -308,6 +316,18 @@ export default function DepartureBoard() {
                             🔍
                           </button>
                         </div>
+                        <div class="col-board">
+                          <button
+                            class="preview-btn"
+                            onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
+                            title="Board"
+                            disabled={loadingTripKey() !== null}
+                          >
+                            <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛃"}>
+                              <span class="spinner-small"></span>
+                            </Show>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Mobile Layout (visible on <=768px) */}
@@ -363,6 +383,16 @@ export default function DepartureBoard() {
                             >
                               🔍
                             </button>
+                            <button
+                              class="preview-btn"
+                              onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
+                              title="Board"
+                              disabled={loadingTripKey() !== null}
+                            >
+                              <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛃"}>
+                                <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>
+                              </Show>
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -396,6 +426,20 @@ export default function DepartureBoard() {
           0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7), 0 0 0 0 rgba(224, 176, 255, 0.4); }
           70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0), 0 0 15px 10px rgba(224, 176, 255, 0); }
           100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(224, 176, 255, 0); }
+        }
+
+        .spinner-small {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top-color: #fff;
+          animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
 
         .departure-board-overlay {
