@@ -631,7 +631,7 @@ export default function MapView() {
         }
 
         if (currentPos) {
-          const previousPos = playerPositions[pid];
+          const previousPos = playerPositions[pid] || currentPos;
           playerPositions[pid] = [lerp(previousPos[0], currentPos[0], 0.2), lerp(previousPos[1], currentPos[1], 0.2)];
           vehicleFeatures.push({
             type: 'Feature',
