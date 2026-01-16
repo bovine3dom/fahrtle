@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, clearPreviewRoute, $boardMinimized, $isFollowing } from './store';
 import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { chQuery } from './clickhouse';
-import { formatInTimeZone, getTimeZoneColor, getTimeZone } from './timezone';
+import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
@@ -211,7 +211,7 @@ export default function DepartureBoard() {
         >
           <div class="board-header">
             <div class="header-main">
-              <h1>Departures</h1>
+              <h1>{getDepartureLabel(getTimeZoneLanguage(stopZone()))}</h1>
               <div class="stop-name" style={{ color: '#ffed02', "font-weight": "900", }}>
                 {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
               </div>
