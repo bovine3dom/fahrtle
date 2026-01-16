@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack } from 'solid-j
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -156,6 +156,7 @@ export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let frameId: number;
   const [mapReady, setMapReady] = createSignal(false);
+  const [isFollowing, setIsFollowing] = createSignal(false);
 
   onMount(() => {
 
@@ -432,6 +433,14 @@ export default function MapView() {
         if (mapInstance) updateStops(mapInstance);
       });
 
+      const disableFollowing = () => setIsFollowing(false);
+      mapInstance!.on('dragstart', disableFollowing);
+      mapInstance!.on('wheel', disableFollowing);
+      mapInstance!.on('touchstart', disableFollowing);
+      mapInstance!.on('mousedown', (e) => {
+        if (e.originalEvent.button === 0) disableFollowing();
+      });
+
       updateStops(mapInstance!);
       setMapReady(true);
       startAnimationLoop();
@@ -622,10 +631,11 @@ export default function MapView() {
         }
 
         if (currentPos) {
-          playerPositions[pid] = currentPos as [number, number];
+          const previousPos = playerPositions[pid];
+          playerPositions[pid] = [lerp(previousPos[0], currentPos[0], 0.2), lerp(previousPos[1], currentPos[1], 0.2)];
           vehicleFeatures.push({
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: currentPos },
+            geometry: { type: 'Point', coordinates: playerPositions[pid] },
             properties: { id: player.id, color: player.color }
           });
 
@@ -658,6 +668,30 @@ export default function MapView() {
 
       $playerSpeeds.set(currentSpeeds);
       $playerDistances.set(currentDists);
+
+      if (isFollowing() && mapInstance) {
+        const myId = $myPlayerId.get();
+        const myPos = myId ? playerPositions[myId] : null;
+        const mySpeed = myId ? currentSpeeds[myId] : 0;
+        if (myPos) {
+          const REFERENCE_SPEED = 50; // km/h
+          const REFERENCE_ZOOM = 15;  // zoom level at reference speed
+          const MIN_ZOOM = 5;
+          const MAX_ZOOM = 18;
+          const dilation = $globalRate.get() / 20; // normalise to walking dilation
+          const safeSpeed = Math.max(1, mySpeed * dilation || 0);
+
+          let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
+          targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+
+          const currentZoom = mapInstance.getZoom();
+          const nextZoom = lerp(currentZoom, targetZoom, 0.1);
+          mapInstance.jumpTo({
+            center: myPos,
+            zoom: nextZoom
+          });
+        }
+      }
     };
     requestAnimationFrame(loop);
   };
@@ -667,5 +701,89 @@ export default function MapView() {
     mapInstance?.remove();
   });
 
-  return <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#e5e5e5' }} />;
+  const toggleFollow = () => {
+    const following = !isFollowing();
+    setIsFollowing(following);
+    if (following) {
+      const myId = $myPlayerId.get();
+      const myPos = myId ? playerPositions[myId] : null;
+      if (myPos && mapInstance && myId) {
+        const mySpeed = $playerSpeeds.get()[myId] || 0;
+        const targetZoom = 18 - Math.min(1, mySpeed / 400) * 7;
+        mapInstance.easeTo({
+          center: myPos,
+          zoom: targetZoom,
+          duration: 1000,
+          essential: true
+        });
+      }
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#ffed02' }} />
+      <button
+        class="follow-btn"
+        classList={{ active: isFollowing() }}
+        onClick={toggleFollow}
+        title={isFollowing() ? "Stop Following" : "Follow Me"}
+      >
+        <svg viewBox="0 0 24 24" fill="none" class="reticle-icon">
+          <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" />
+          <circle cx="12" cy="12" r="3" fill="currentColor" />
+          <path d="M12 2V4M12 20V22M2 12H4M20 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+
+      <style>{`
+        .follow-btn {
+          position: absolute;
+          bottom: 24px;
+          right: 24px;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: #0064ab;
+          border: 4px solid #003a79;
+          color: #fff;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: 10;
+          padding: 12px;
+        }
+
+        .follow-btn:hover {
+          transform: scale(1.1);
+          background: #0076c8;
+        }
+
+        .follow-btn.active {
+          background: #ffed02;
+          color: #003a79;
+          border-color: #003a79;
+          box-shadow: 0 0 20px rgba(255, 237, 2, 0.4);
+        }
+
+        .reticle-icon {
+          width: 64px;
+          height: 64px;
+        }
+
+        .follow-btn.active .reticle-icon {
+          animation: pulse-reticle 2s infinite;
+        }
+
+        @keyframes pulse-reticle {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.15); opacity: 0.8; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
 }
