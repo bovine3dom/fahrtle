@@ -440,7 +440,7 @@ export default function MapView() {
           clickTimeout = null;
         }, 300);
       });
-
+      mapInstance && updateStops(mapInstance);
       setMapReady(true);
       startAnimationLoop();
     });
