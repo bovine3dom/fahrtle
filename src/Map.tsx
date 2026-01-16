@@ -340,6 +340,21 @@ export default function MapView() {
 
       let clickTimeout: any = null;
 
+      mapInstance!.on('moveend', () => {
+        if (mapInstance && !isFollowing()) updateStops(mapInstance);
+      });
+      mapInstance!.on('zoomend', () => {
+        if (mapInstance && !isFollowing()) updateStops(mapInstance);
+      });
+
+      const disableFollowing = () => $isFollowing.set(false);
+      mapInstance!.on('dragstart', disableFollowing);
+      mapInstance!.on('wheel', disableFollowing);
+      mapInstance!.on('touchstart', disableFollowing);
+      mapInstance!.on('mousedown', (e) => {
+        if (e.originalEvent.button === 0) disableFollowing();
+      });
+
       mapInstance!.on('dblclick', (e) => {
         if (clickTimeout) {
           clearTimeout(clickTimeout);
@@ -426,22 +441,6 @@ export default function MapView() {
         }, 300);
       });
 
-      mapInstance!.on('moveend', () => {
-        if (mapInstance) updateStops(mapInstance);
-      });
-      mapInstance!.on('zoomend', () => {
-        if (mapInstance) updateStops(mapInstance);
-      });
-
-      const disableFollowing = () => $isFollowing.set(false);
-      mapInstance!.on('dragstart', disableFollowing);
-      mapInstance!.on('wheel', disableFollowing);
-      mapInstance!.on('touchstart', disableFollowing);
-      mapInstance!.on('mousedown', (e) => {
-        if (e.originalEvent.button === 0) disableFollowing();
-      });
-
-      updateStops(mapInstance!);
       setMapReady(true);
       startAnimationLoop();
     });
@@ -647,26 +646,23 @@ export default function MapView() {
             properties: { id: player.id, color: player.color }
           });
 
-          if (previousPos !== smoothedPos) {
-
-            const myId = $myPlayerId.get();
-            if (pid === myId) {
-              if (frameCount % 60 === 0) {
-                const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
-                if ($playerTimeZone.get() !== zone) {
-                  $playerTimeZone.set(zone);
-                }
+          const myId = $myPlayerId.get();
+          if (pid === myId) {
+            if (frameCount % 60 === 0) {
+              const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
+              if ($playerTimeZone.get() !== zone) {
+                $playerTimeZone.set(zone);
               }
-              if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
-                if (frameCount % 10 === 0) {
-                  try {
-                    const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
-                    if (finishCells.includes(myCell)) {
-                      console.log("[Client] Crossed finish line!");
-                      finishRace(now - startTime);
-                    }
-                  } catch (e) { /* ignore H3 errors */ }
-                }
+            }
+            if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
+              if (frameCount % 10 === 0) {
+                try {
+                  const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
+                  if (finishCells.includes(myCell)) {
+                    console.log("[Client] Crossed finish line!");
+                    finishRace(now - startTime);
+                  }
+                } catch (e) { /* ignore H3 errors */ }
               }
             }
           }
@@ -684,11 +680,14 @@ export default function MapView() {
         const myId = $myPlayerId.get();
         const myPos = myId ? playerPositions[myId] : null;
         const mySpeed = myId ? currentSpeeds[myId] : 0;
-        if (myPos) {
+        const centre = mapInstance.getCenter();
+        const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
+
+        if (myPos && !approxEq(myPos[0], centre.lng) && !approxEq(myPos[1], centre.lat)) {
           const REFERENCE_SPEED = 50; // km/h
           const REFERENCE_ZOOM = 15;  // zoom level at reference speed
           const MIN_ZOOM = 5;
-          const MAX_ZOOM = 18;
+          const MAX_ZOOM = 16;
           const dilation = $globalRate.get() / 20; // normalise to walking dilation
           const safeSpeed = Math.max(1, mySpeed * dilation || 0);
 
@@ -702,6 +701,10 @@ export default function MapView() {
             center: myPos,
             zoom: nextZoom
           });
+
+          if (frameCount % 120 === 0) {
+            updateStops(mapInstance);
+          }
         }
       }
     };
