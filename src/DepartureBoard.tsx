@@ -346,7 +346,7 @@ export default function DepartureBoard() {
                             title="Board"
                             disabled={loadingTripKey() !== null}
                           >
-                            <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛃"}>
+                            <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                               <span class="spinner-small"></span>
                             </Show>
                           </button>
@@ -412,7 +412,7 @@ export default function DepartureBoard() {
                               title="Board"
                               disabled={loadingTripKey() !== null}
                             >
-                              <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛃"}>
+                              <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                                 <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>
                               </Show>
                             </button>
