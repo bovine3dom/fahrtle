@@ -260,12 +260,14 @@ function App() {
                     'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
                     'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
                   }}>
-                    <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
-                      COURSE SETTINGS
-                    </div>
+                    <Show when={bounds()}>
+                      <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
+                        {findClosestCity({ latitude: bounds()!.start?.[0] || 0, longitude: bounds()!.start?.[1] || 0 })} ➡️ {findClosestCity({ latitude: bounds()!.finish?.[0] || 0, longitude: bounds()!.finish?.[1] || 0 })}
+                      </div>
+                    </Show>
 
                     <div style={{ 'margin-bottom': '6px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng)</label>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng): </label>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <input
                           type="text"
