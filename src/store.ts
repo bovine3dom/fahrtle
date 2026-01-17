@@ -108,7 +108,7 @@ export const $gameStartTime = atom<number | null>(null);
 
 let ws: WebSocket | null = null;
 
-export function connectAndJoin(roomId: string, playerId: string, color?: string) {
+export function connectAndJoin(roomId: string, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null }) {
   if (ws) ws.close();
 
   const wsUri = import.meta.env.PROD
@@ -126,6 +126,14 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string)
     }));
 
     ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId, color }));
+
+    if (initialBounds) {
+      ws?.send(JSON.stringify({
+        type: 'SET_GAME_BOUNDS',
+        startPos: initialBounds.start,
+        finishPos: initialBounds.finish
+      }));
+    }
 
     $currentRoom.set(roomId);
     $myPlayerId.set(playerId);

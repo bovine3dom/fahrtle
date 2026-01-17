@@ -31,6 +31,14 @@ export const getTravelSummary = (player: Player, gameBounds: { start: [number, n
     const finishCity = gameBounds.finish ? findClosestCity({ latitude: gameBounds.finish[0], longitude: gameBounds.finish[1] }) : "";
     const startCity = gameBounds.start ? findClosestCity({ latitude: gameBounds.start[0], longitude: gameBounds.start[1] }) : "";
 
+    const url = new URL(window.location.origin + window.location.pathname);
+    if (gameBounds.start) {
+        url.searchParams.set('start', `${gameBounds.start[0].toFixed(4)},${gameBounds.start[1].toFixed(4)}`);
+    }
+    if (gameBounds.finish) {
+        url.searchParams.set('finish', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
+    }
+
     travel = `I just played fahrtle!\n${startCity} ➡️ ${finishCity} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
-    return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${window.location.href.split('?')[0]}`;
+    return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${url.toString()}`;
 }

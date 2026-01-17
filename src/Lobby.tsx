@@ -28,9 +28,22 @@ export default function Lobby() {
     e.preventDefault();
     if (room() && user()) {
       const url = new URL(window.location.href);
+
+      const startParam = url.searchParams.get('start');
+      const finishParam = url.searchParams.get('finish');
+      let initialBounds;
+
+      if (startParam || finishParam) {
+        const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
+        initialBounds = { start: parse(startParam), finish: parse(finishParam) };
+      }
+
+      url.searchParams.delete('start');
+      url.searchParams.delete('finish');
+
       url.searchParams.set('room', room());
       window.history.replaceState(null, '', url);
-      connectAndJoin(room(), user(), color());
+      connectAndJoin(room(), user(), color(), initialBounds);
     }
   };
 
