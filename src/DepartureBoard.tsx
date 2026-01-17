@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, type DepartureResult } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult } from './store';
 import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist } from './utils/geo';
@@ -12,12 +12,14 @@ import { formatRowTime } from './utils/format';
 export default function DepartureBoard() {
   const results = useStore($departureBoardResults);
   const currentTime = useStore($clock);
+  const roomState = useStore($roomState);
 
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
   const [isTooFar, setIsTooFar] = createSignal(false);
+  const [flashError, setFlashError] = createSignal(false);
 
   createEffect(() => {
     results();
@@ -35,6 +37,16 @@ export default function DepartureBoard() {
     } else {
       setIsTooFar(false);
     }
+  });
+
+  const blockingReason = createMemo(() => {
+    if (roomState() !== 'RUNNING') {
+      return "⚠️ The game hasn't started yet!";
+    }
+    if (isTooFar()) {
+      return `⚠️ You are too far from the station to board (${deduplicatedResults()[0]?.stop_name})`;
+    }
+    return null;
   });
 
   createEffect(() => {
@@ -129,7 +141,12 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: DepartureResult) => {
-    if (isTooFar()) return;
+    if (blockingReason()) {
+      setFlashError(false);
+      setTimeout(() => setFlashError(true), 0);
+      setTimeout(() => setFlashError(false), 500);
+      return;
+    }
     const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
     setLoadingTripKey(key);
     const query = `
@@ -250,12 +267,21 @@ export default function DepartureBoard() {
             </div>
           </div>
 
-          <Show when={isTooFar()}>
-            <div style={{
-              background: '#dc2626', color: 'white', padding: '8px', 'text-align': 'center',
-              'font-weight': 'bold', 'font-size': '0.9em'
-            }}>
-              ⚠️ You are too far from the station to board ({deduplicatedResults()[0]?.stop_name})
+          <Show when={blockingReason()}>
+            <div
+              classList={{ 'flash-animation': flashError() }}
+              style={{
+                background: '#dc2626',
+                color: 'white',
+                padding: '8px',
+                'text-align': 'center',
+                'font-weight': 'bold',
+                'font-size': '0.9em',
+                transition: 'opacity 0.1s',
+                opacity: flashError() ? 1 : 0.9
+              }}
+            >
+              {blockingReason()}
             </div>
           </Show>
 
@@ -369,8 +395,8 @@ export default function DepartureBoard() {
                           <button
                             class="preview-btn"
                             onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
-                            title={isTooFar() ? "Too far to board" : "Board"}
-                            disabled={loadingTripKey() !== null || isTooFar()}
+                            title={blockingReason() || "Board"}
+                            disabled={loadingTripKey() !== null}
                           >
                             <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                               <span class="spinner-small"></span>
@@ -435,8 +461,8 @@ export default function DepartureBoard() {
                             <button
                               class="preview-btn"
                               onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
-                              title={isTooFar() ? "Too far to board" : "Board"}
-                              disabled={loadingTripKey() !== null || isTooFar()}
+                              title={blockingReason() || "Board"}
+                              disabled={loadingTripKey() !== null}
                             >
                               <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                                 <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>
@@ -475,6 +501,17 @@ export default function DepartureBoard() {
           0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7), 0 0 0 0 rgba(224, 176, 255, 0.4); }
           70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0), 0 0 15px 10px rgba(224, 176, 255, 0); }
           100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(224, 176, 255, 0); }
+        }
+
+        @keyframes flash-warning {
+          0%, 100% { background-color: #dc2626; transform: scale(1); }
+          25% { background-color: #fbbf24; transform: scale(1.05); color: #000; }
+          50% { background-color: #dc2626; transform: scale(1); color: #fff; }
+          75% { background-color: #fbbf24; transform: scale(1.05); color: #000; }
+        }
+
+        .flash-animation {
+          animation: flash-warning 0.5s ease-in-out;
         }
 
         .spinner-small {
