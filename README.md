@@ -71,7 +71,3 @@ yeah this shouldn't be here. fight me
 - think about different game modes other than just race: tag? relay? 
 
 - trophies? most modes of transport? highest max speed? most departures? opposites of that?
-
-- think about how to store route history in a human-readable way
-
-- fix nginx root
