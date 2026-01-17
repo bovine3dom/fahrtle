@@ -315,8 +315,8 @@ function App() {
                           onClick={() => togglePicker('finish')}
                           title="Pick on Map"
                           style={{
-                            background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
-                            color: pickerMode() === 'start' ? 'white' : '#475569',
+                            background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
+                            color: pickerMode() === 'finish' ? 'white' : '#475569',
                             border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
                           }}
                         >
