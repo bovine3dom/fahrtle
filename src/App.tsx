@@ -5,11 +5,11 @@ import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
-import { flyToPlayer, fitGameBounds } from './Map';
+import { fitGameBounds } from './Map';
 import DepartureBoard from './DepartureBoard';
 import { formatDuration } from './utils/time';
-import { parseCoords, sensibleNumber, formatRowTime } from './utils/format';
-
+import { parseCoords, formatRowTime, sensibleNumber } from './utils/format';
+import { findClosestCity, haversineDist } from './utils/geo';
 const MapView = lazy(() => import('./Map'));
 
 const getTravelSummaryObj = (player: Player) => {
@@ -31,12 +31,18 @@ const getTravelSummaryObj = (player: Player) => {
 /* convert object to a human readable string for sharing on socials */
 const getTravelSummary = (player: Player) => {
   const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
-  const travel = waypoints.map((wp) => {
+  let travel = waypoints.map((wp) => {
     if (wp.emoji == "🐾") return;
     return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
   }).filter(s => s).join('\n');
-  return player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel;
+  const gameBounds = $gameBounds.get();
+  const finishCity = gameBounds.finish ? findClosestCity({ latitude: gameBounds.finish[0], longitude: gameBounds.finish[1] }) : "";
+  const startCity = gameBounds.start ? findClosestCity({ latitude: gameBounds.start[0], longitude: gameBounds.start[1] }) : "";
+  travel = `I just played fahrtle!\n${startCity} ➡️ ${finishCity} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
+  return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${window.location.href.split('?')[0]}`;
 }
+
+(window as any).findClosestCity = findClosestCity;
 
 function App() {
   const room = useStore($currentRoom);

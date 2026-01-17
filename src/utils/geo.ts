@@ -1,3 +1,18 @@
+import tinyCities from '../assets/tiny-cities.json';
+import KDBush from 'kdbush';
+import { around } from 'geokdbush';
+
+const cityTree = new KDBush(tinyCities.length);
+for (const { latitude, longitude } of tinyCities) {
+    cityTree.add(longitude, latitude);
+}
+cityTree.finish();
+
+export const findClosestCity = ({ latitude, longitude }: { latitude: number, longitude: number }) => {
+    const idx = around(cityTree, longitude, latitude, 1)[0] as number;
+    return tinyCities[idx].name + ', ' + tinyCities[idx].country_code;
+}
+
 export const haversineDist = (coords1: [number, number] | null, coords2: [number, number] | null) => {
     if (!coords1 || !coords2) return null;
     const toRad = (x: number) => x * Math.PI / 180;
