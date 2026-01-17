@@ -224,10 +224,11 @@ export default function MapView() {
     }
 
     try {
+      const startPos = $gameBounds.get().start;
       mapInstance = new maplibregl.Map({
         container: mapContainer,
         style: STYLE,
-        center: [-3.1883, 55.9533],
+        center: startPos ? [startPos[1], startPos[0]] : [-3.1883, 55.9533],
         zoom: 14,
         fadeDuration: 0,
         doubleClickZoom: false,

@@ -133,6 +133,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
         startPos: initialBounds.start,
         finishPos: initialBounds.finish
       }));
+      $gameBounds.set(initialBounds);
     }
 
     $currentRoom.set(roomId);
