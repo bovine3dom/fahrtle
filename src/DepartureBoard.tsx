@@ -1,6 +1,8 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, type DepartureResult } from './store';
-import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, type DepartureResult } from './store';
+import { Show, For, createEffect, createSignal, createMemo, onCleanup } from 'solid-js';
+import { playerPositions } from './playerPositions';
+import { haversineDist } from './utils/geo';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
@@ -15,6 +17,25 @@ export default function DepartureBoard() {
   const isMinimized = useStore($boardMinimized);
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
+  const [isTooFar, setIsTooFar] = createSignal(false);
+
+  createEffect(() => {
+    results();
+    const resultsDedup = deduplicatedResults();
+    if (resultsDedup.length > 0) {
+      const stop = resultsDedup[0];
+      const pid = $myPlayerId.get()
+      if (pid && playerPositions[pid]) {
+        const myPos = playerPositions[pid];
+        const dist = haversineDist(myPos, [stop.stop_lon, stop.stop_lat]);
+        if (dist !== null) {
+          setIsTooFar(dist > 0.2); // 200m
+        }
+      }
+    } else {
+      setIsTooFar(false);
+    }
+  });
 
   createEffect(() => {
     if (!results() || results()!.length === 0) {
@@ -108,6 +129,7 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: DepartureResult) => {
+    if (isTooFar()) return;
     const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
     setLoadingTripKey(key);
     const query = `
@@ -228,6 +250,15 @@ export default function DepartureBoard() {
             </div>
           </div>
 
+          <Show when={isTooFar()}>
+            <div style={{
+              background: '#dc2626', color: 'white', padding: '8px', 'text-align': 'center',
+              'font-weight': 'bold', 'font-size': '0.9em'
+            }}>
+              ⚠️ You are too far from the station to board ({deduplicatedResults()[0]?.stop_name})
+            </div>
+          </Show>
+
           {/* Type Filter Toolbar */}
           <div class="type-filter-toolbar">
             <For each={[...new Set(deduplicatedResults().map(r => getRouteEmoji(r.route_type)))]}>
@@ -338,8 +369,8 @@ export default function DepartureBoard() {
                           <button
                             class="preview-btn"
                             onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
-                            title="Board"
-                            disabled={loadingTripKey() !== null}
+                            title={isTooFar() ? "Too far to board" : "Board"}
+                            disabled={loadingTripKey() !== null || isTooFar()}
                           >
                             <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                               <span class="spinner-small"></span>
@@ -404,8 +435,8 @@ export default function DepartureBoard() {
                             <button
                               class="preview-btn"
                               onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
-                              title="Board"
-                              disabled={loadingTripKey() !== null}
+                              title={isTooFar() ? "Too far to board" : "Board"}
+                              disabled={loadingTripKey() !== null || isTooFar()}
                             >
                               <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
                                 <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>

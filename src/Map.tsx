@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } fr
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -415,6 +415,15 @@ export default function MapView() {
         }
         if ($pickerMode.get()) return;
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
+      });
+
+      // middle click to teleport in dev mode
+      !import.meta.env.PROD && mapInstance!.on('mousedown', (e) => {
+        if (e.originalEvent.button === 1) {
+          submitWaypointsBatch([
+            { lat: e.lngLat.lat, lng: e.lngLat.lng, time: $clock.get() },
+          ])
+        }
       });
 
       mapInstance!.on('click', (e) => {
