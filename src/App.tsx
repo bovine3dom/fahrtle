@@ -372,8 +372,19 @@ function App() {
                                 const nextWp = p().waypoints.find((wp: any) => wp.arrivalTime > time());
                                 if (nextWp && nextWp.stopName) {
                                   return (
-                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px' }}>
-                                      &rarr; {nextWp.stopName}
+                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                      <Show when={nextWp.route_short_name}>
+                                        <span
+                                          class="route-pill"
+                                          style={{
+                                            "background-color": nextWp.route_color ? `#${nextWp.route_color}` : '#333',
+                                            "color": '#fff'
+                                          }}
+                                        >
+                                          {nextWp.route_short_name}
+                                        </span>
+                                      </Show>
+                                      {nextWp.emoji + " " || ''} &rarr; {nextWp.stopName}
                                     </div>
                                   );
                                 }

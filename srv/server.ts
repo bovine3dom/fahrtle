@@ -14,6 +14,11 @@ type Waypoint = {
   speedFactor: number;
   stopName?: string;
   isWalk?: boolean;
+  route_color?: string;
+  route_short_name?: string;
+  display_name?: string;
+  emoji?: string;
+  route_departure_time?: string;
 };
 
 type Player = {
@@ -297,7 +302,7 @@ const server = serve<WSData>({
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime, stopName, isWalk } = message;
+        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -318,7 +323,12 @@ const server = serve<WSData>({
           arrivalTime: finalArrival,
           speedFactor: speedFactor,
           stopName: stopName || undefined,
-          isWalk: isWalk || false
+          isWalk: isWalk || false,
+          route_color,
+          route_short_name,
+          display_name,
+          emoji: isWalk ? '🐾' : emoji,
+          route_departure_time
         };
 
         player.waypoints.push(newWaypoint);
@@ -409,7 +419,8 @@ const server = serve<WSData>({
               startTime: segStartTime,
               arrivalTime: vTime,
               speedFactor: 1,
-              stopName: 'Stopped'
+              stopName: 'Stopped',
+              // emoji: '🛑'
             }
           ];
         } else {

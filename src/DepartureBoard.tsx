@@ -158,7 +158,12 @@ export default function DepartureBoard() {
             lat: p.lat,
             time: p.dbTime + timeShift,
             stopName: p.stopName,
-            isWalk: idx === 0
+            isWalk: idx === 0,
+            route_color: row.route_color,
+            route_short_name: row.route_short_name,
+            display_name: row.trip_headsign || row.route_long_name || row.stop_name,
+            emoji: getRouteEmoji(row.route_type),
+            route_departure_time: row.departure_time
           }));
 
           submitWaypointsBatch(points);

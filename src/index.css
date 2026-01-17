@@ -70,3 +70,14 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.route-pill {
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  min-width: 25px;
+  box-shadow: none;
+  font-weight: 800;
+  display: inline-block;
+  text-align: center;
+}

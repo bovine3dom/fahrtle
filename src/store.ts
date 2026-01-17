@@ -32,6 +32,11 @@ export type Waypoint = {
   speedFactor: number;
   stopName?: string;
   isWalk?: boolean;
+  route_color?: string;
+  route_short_name?: string;
+  display_name?: string;
+  emoji?: string;
+  route_departure_time?: string;
 };
 
 export type Player = {
@@ -223,7 +228,17 @@ export function submitWaypoint(lat: number, lng: number) {
   }));
 }
 
-export function submitWaypointsBatch(points: { lng: number, lat: number, time: number, stopName?: string }[]) {
+export function submitWaypointsBatch(points: {
+  lng: number,
+  lat: number,
+  time: number,
+  stopName?: string,
+  route_color?: string,
+  route_short_name?: string,
+  display_name?: string,
+  emoji?: string,
+  route_departure_time?: string | null
+}[]) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   const player = $players.get()[$myPlayerId.get() ?? ''];
@@ -249,7 +264,12 @@ export function submitWaypointsBatch(points: { lng: number, lat: number, time: n
       arrivalTime: p.time,
       speedFactor,
       stopName: p.stopName,
-      isWalk: i === 0
+      isWalk: i === 0,
+      route_color: p.route_color,
+      route_short_name: p.route_short_name,
+      display_name: p.display_name,
+      emoji: p.emoji,
+      route_departure_time: p.route_departure_time
     }));
   }
 }
