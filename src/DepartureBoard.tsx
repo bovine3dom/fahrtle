@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult } from './store';
-import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
+import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist } from './utils/geo';
 import { chQuery } from './clickhouse';
@@ -21,22 +21,39 @@ export default function DepartureBoard() {
   const [isTooFar, setIsTooFar] = createSignal(false);
   const [flashError, setFlashError] = createSignal(false);
 
-  createEffect(() => {
-    results();
-    const resultsDedup = deduplicatedResults();
-    if (resultsDedup.length > 0) {
-      const stop = resultsDedup[0];
-      const pid = $myPlayerId.get()
-      if (pid && playerPositions[pid]) {
-        const myPos = playerPositions[pid];
-        const dist = haversineDist(myPos, [stop.stop_lon, stop.stop_lat]);
-        if (dist !== null) {
-          setIsTooFar(dist > 0.2); // 200m
-        }
+  const checkDistance = (force = false) => {
+    const res = deduplicatedResults();
+    if (res.length === 0) {
+      setIsTooFar(false);
+      return;
+    }
+
+    if ($boardMinimized.get() && !force) return;
+
+    const pid = $myPlayerId.get();
+    if (!pid) return;
+
+    const stop = res[0];
+    const myPos = playerPositions[pid];
+    if (myPos) {
+      const dist = haversineDist(myPos, [stop.stop_lon, stop.stop_lat]);
+      if (dist !== null) {
+        setIsTooFar(dist > 0.2); // 200m
       }
+    }
+  };
+
+  createEffect(() => {
+    if (deduplicatedResults().length > 0) {
+      checkDistance(true);
     } else {
       setIsTooFar(false);
     }
+  });
+
+  onMount(() => {
+    const interval = setInterval(() => checkDistance(false), 100);
+    onCleanup(() => clearInterval(interval));
   });
 
   const blockingReason = createMemo(() => {
