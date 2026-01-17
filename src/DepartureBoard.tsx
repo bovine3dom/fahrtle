@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, type DepartureResult } from './store';
 import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel } from './timezone';
@@ -50,7 +50,7 @@ export default function DepartureBoard() {
     const filtered = []
     let seenNonTomorrow = false;
     for (const row of raw) {
-      const depSeconds = getRowSeconds(row.departure_time);
+      const depSeconds = getRowSeconds(row.departure_time || '');
       const isRowTomorrow = depSeconds < localSeconds;
       if (isRowTomorrow) {
         if (seenNonTomorrow) {
@@ -85,7 +85,7 @@ export default function DepartureBoard() {
     setFilterType(null);
   };
 
-  const handlePreviewClick = (row: any) => {
+  const handlePreviewClick = (row: DepartureResult) => {
     const query = `
           SELECT stop_lat, stop_lon
           FROM transitous_everything_stop_times_one_day_even_saner
@@ -107,7 +107,7 @@ export default function DepartureBoard() {
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
   };
 
-  const handleTripDoubleClick = (row: any) => {
+  const handleTripDoubleClick = (row: DepartureResult) => {
     const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
     setLoadingTripKey(key);
     const query = `
@@ -133,7 +133,8 @@ export default function DepartureBoard() {
               lng: r.stop_lon + Math.random() * 0.0001,
               lat: r.stop_lat + Math.random() * 0.0001,
               dbTime: absoluteTime,
-              stopName: r.stop_name
+              stopName: r.stop_name,
+              timeZone: thisStopZone
             }
           });
 
@@ -256,12 +257,12 @@ export default function DepartureBoard() {
                     const now = currentTime();
                     const zone = stopZone();
                     const localSeconds = getLocalSeconds(now, zone);
-                    const depSeconds = getRowSeconds(row.departure_time);
+                    const depSeconds = getRowSeconds(row.departure_time || '');
                     return depSeconds < localSeconds;
                   });
 
                   const isImminent = createMemo(() => {
-                    const depSeconds = getRowSeconds(row.departure_time);
+                    const depSeconds = getRowSeconds(row.departure_time || '');
                     const now = currentTime();
                     const zone = stopZone();
                     const localSeconds = getLocalSeconds(now, zone);
@@ -283,7 +284,7 @@ export default function DepartureBoard() {
                           </Show>
                         </div>
                         <div class="col-time" style={{ "line-height": "1.1" }}>
-                          <div>{formatRowTime(row.departure_time)}</div>
+                          <div>{formatRowTime(row.departure_time || '')}</div>
                           <Show when={isTomorrow()}>
                             <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
                               (tmrw.)
@@ -347,7 +348,7 @@ export default function DepartureBoard() {
                         <div class="mobile-row-top">
                           <div class="mobile-time">
                             <div style={{ display: "flex", "align-items": "center" }}>
-                              {formatRowTime(row.departure_time)}
+                              {formatRowTime(row.departure_time || '')}
                             </div>
                             <Show when={isImminent()}>
                               <span class="status-dot imminent" style={{ "margin-left": "4px" }}></span>

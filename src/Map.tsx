@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } fr
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -470,7 +470,7 @@ export default function MapView() {
           chQuery(query)
             .then(res => {
               if (res && res.data) {
-                const data = res.data.map((row: any) => {
+                const data = res.data.map((row: DepartureResult) => {
                   row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
                   return row;
                 })

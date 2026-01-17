@@ -55,12 +55,37 @@ export type RenderablePlayer = Player & {
   segments: AnimationSegment[];
 };
 
+export interface DepartureResult {
+  source: string;
+  trip_id: string;
+  stop_uuid: number;
+  stop_lat: number;
+  arrival_time: string | null;
+  stop_lon: number;
+  departure_time: string | null;
+  next_stop: number;
+  next_arrival: string | null;
+  next_lat: number;
+  next_lon: number;
+  travel_time: number | null;
+  route_type: number;
+  stop_name: string;
+  route_short_name: string;
+  route_long_name: string;
+  trip_headsign: string;
+  sane_route_id: string;
+  route_color: string;
+  route_text_color: string;
+  h3: number; // truncated UInt64 (!)
+  bearing: number; // Added client-side
+}
+
 export const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
 export const $players = map<Record<string, RenderablePlayer>>({});
 export const $globalRate = atom(1.0);
-export const $departureBoardResults = atom<any[]>([]);
+export const $departureBoardResults = atom<DepartureResult[]>([]);
 export const $stopTimeZone = atom<string>('Europe/Paris');
 export const $playerTimeZone = atom<string>('Europe/Paris');
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
