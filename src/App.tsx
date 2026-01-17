@@ -245,6 +245,9 @@ function App() {
                 {/* Header Info */}
                 <div style={{ 'margin-bottom': '8px' }}>
                   <Clock />
+                  <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px', 'text-align': 'center' }}>
+                    {findClosestCity({ latitude: bounds()!.start?.[0] || 0, longitude: bounds()!.start?.[1] || 0 })} ➡️ {findClosestCity({ latitude: bounds()!.finish?.[0] || 0, longitude: bounds()!.finish?.[1] || 0 })}
+                  </div>
                   <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
                     Time dilation: {rate().toFixed(2)}x
                   </div>
