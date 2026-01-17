@@ -20,7 +20,7 @@ export default function Clock() {
     const update = () => {
       const now = getServerTime();
       const realNow = Date.now();
-      if (realNow - lastStoreUpdate > 1000) {
+      if (realNow - lastStoreUpdate > 100) {
         $clock.set(now);
         lastStoreUpdate = realNow;
       }
