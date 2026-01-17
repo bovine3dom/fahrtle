@@ -1,16 +1,42 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Player } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
 import { flyToPlayer, fitGameBounds } from './Map';
 import DepartureBoard from './DepartureBoard';
 import { formatDuration } from './utils/time';
-import { parseCoords, sensibleNumber } from './utils/format';
+import { parseCoords, sensibleNumber, formatRowTime } from './utils/format';
 
 const MapView = lazy(() => import('./Map'));
+
+const getTravelSummaryObj = (player: Player) => {
+  const waypoints = player.waypoints.map((wp) => {
+    return {
+      route_departure_time: wp.route_departure_time,
+      route_short_name: wp.route_short_name,
+      display_name: wp.display_name,
+      emoji: wp.emoji,
+    }
+  })
+  // deduplicate waypoints
+  const uniqueWaypoints = waypoints.filter((wp, index) => {
+    return waypoints.findIndex(w => w.route_departure_time === wp.route_departure_time && w.route_short_name === wp.route_short_name && w.display_name === wp.display_name && w.emoji === wp.emoji) === index;
+  })
+  return uniqueWaypoints;
+}
+
+/* convert object to a human readable string for sharing on socials */
+const getTravelSummary = (player: Player) => {
+  const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
+  const travel = waypoints.map((wp) => {
+    if (wp.emoji == "🐾") return;
+    return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
+  }).filter(s => s).join('\n');
+  return player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel;
+}
 
 function App() {
   const room = useStore($currentRoom);
@@ -314,9 +340,10 @@ function App() {
                         const p = () => players()[id];
                         const isFinished = () => p().finishTime != null;
 
+                        // onClick={() => flyToPlayer(p().id)}
                         return (
                           <div
-                            onClick={() => flyToPlayer(p().id)}
+                            onClick={() => console.log(getTravelSummary(p()))}
                             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                             style={{
