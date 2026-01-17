@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, type DepartureResult } from './store';
-import { Show, For, createEffect, createSignal, createMemo, onCleanup } from 'solid-js';
+import { Show, For, createEffect, createSignal, createMemo } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist } from './utils/geo';
 import { chQuery } from './clickhouse';
