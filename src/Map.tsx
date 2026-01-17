@@ -26,6 +26,16 @@ export function flyToPlayer(playerId: string) {
   }
 }
 
+export function getPlayerScreenPosition(playerId: string): { x: number, y: number } | null {
+  if (!mapInstance || !playerPositions[playerId]) return null;
+  const canvas = mapInstance.getCanvas();
+  const point = mapInstance.project(playerPositions[playerId]);
+  return {
+    x: point.x / canvas.clientWidth,
+    y: point.y / canvas.clientHeight
+  };
+}
+
 export function fitGameBounds() {
   const bounds = $gameBounds.get();
   if (!mapInstance) return;

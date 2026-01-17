@@ -11,8 +11,10 @@
   "dependencies": {
     "@nanostores/solid": "^1.1.1",
     "@turf/turf": "^7.3.1",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/d3": "^7.4.3",
     "@types/geokdbush": "^1.1.5",
+    "canvas-confetti": "^1.9.4",
     "d3": "^7.9.0",
     "geokdbush": "^2.0.1",
     "h3-js": "^4.4.0",
