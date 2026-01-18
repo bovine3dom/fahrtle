@@ -312,6 +312,7 @@ const throttledSetColor = throttle(200, (color: string) => {
 });
 
 export function setPlayerColor(color: string) {
+  localStorage.setItem('fahrtle_color', color);
   throttledSetColor(color);
 }
 

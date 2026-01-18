@@ -12,21 +12,17 @@ export default function Lobby() {
     return randomId;
   };
 
-  const [room, setRoom] = createSignal(generateRandomRoom());
-  const [user, setUser] = createSignal(generatePilotName());
-  const [color, setColor] = createSignal('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'));
+  const [room, setRoom] = createSignal(localStorage.getItem('fahrtle_room') || generateRandomRoom());
+  const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
+  const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
 
-  onMount(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sharedRoom = params.get('room');
-    if (sharedRoom) {
-      setRoom(sharedRoom);
-    }
-  });
-
-  const handleJoin = (e: Event) => {
-    e.preventDefault();
+  const handleJoin = (e?: Event) => {
+    e?.preventDefault();
     if (room() && user()) {
+      localStorage.setItem('fahrtle_user', user());
+      localStorage.setItem('fahrtle_color', color());
+      localStorage.setItem('fahrtle_room', room());
+
       const url = new URL(window.location.href);
 
       const startParam = url.searchParams.get('s');
@@ -47,6 +43,18 @@ export default function Lobby() {
       connectAndJoin(room(), user(), color(), initialBounds);
     }
   };
+
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedRoom = params.get('room');
+    if (sharedRoom) {
+      setRoom(sharedRoom);
+      // auto-join to handle reloads
+      if (localStorage.getItem('fahrtle_user') && localStorage.getItem('fahrtle_room') === sharedRoom) {
+        handleJoin();
+      }
+    }
+  });
 
   createEffect(() => {
     const url = new URL(window.location.href);

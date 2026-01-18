@@ -465,12 +465,8 @@ const server = serve<WSData>({
       if (d.roomId && d.playerId) {
         const room = rooms.get(d.roomId);
         if (room) {
-          delete room.players[d.playerId];
-          server.publish(d.roomId, JSON.stringify({
-            type: 'PLAYER_LEFT', playerId: d.playerId
-          }));
-
-          if (Object.keys(room.players).length === 0) {
+          const roomConnections = server.subscriberCount(d.roomId);
+          if (roomConnections === 0) {
             room.emptySince = Date.now();
           }
         }
