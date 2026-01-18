@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist } from './utils/geo';
@@ -20,6 +20,12 @@ export default function DepartureBoard() {
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
   const [isTooFar, setIsTooFar] = createSignal(false);
   const [flashError, setFlashError] = createSignal(false);
+
+  createEffect(() => {
+    const res = results();
+    const stopName = res && res.length > 0 ? res[0].stop_name : null;
+    setViewingStop(stopName);
+  });
 
   const checkDistance = (force = false) => {
     const res = deduplicatedResults();

@@ -29,6 +29,7 @@ type Player = {
   desiredRate: number; // 1.0 or 500.0
   finishTime: number | null;
   disconnectedAt: number | null;
+  viewingStopName: string | null;
 };
 
 type Room = {
@@ -180,6 +181,7 @@ const server = serve<WSData>({
             desiredRate: 1.0,
             finishTime: null,
             disconnectedAt: null,
+            viewingStopName: null,
           };
         } else {
           // Player is re-joining
@@ -313,6 +315,21 @@ const server = serve<WSData>({
         broadcastRoomState(room);
       }
 
+      if (message.type === 'SET_VIEWING_STOP') {
+        const d = ws.data;
+        if (!d.roomId || !d.playerId) return;
+        const room = rooms.get(d.roomId);
+        if (!room) return;
+        const player = room.players[d.playerId];
+        if (player) {
+          player.viewingStopName = message.stopName;
+          server.publish(d.roomId, JSON.stringify({
+            type: 'PLAYER_JOINED',
+            player: player
+          }));
+        }
+      }
+
       // --- ADD WAYPOINT ---
       if (message.type === 'ADD_WAYPOINT') {
         const d = ws.data;
@@ -339,6 +356,8 @@ const server = serve<WSData>({
           const duration = distance / BASE_SPEED;
           finalArrival = start + duration;
         }
+
+        player.viewingStopName = null;
 
         const newWaypoint: Waypoint = {
           x, y,

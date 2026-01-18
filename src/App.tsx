@@ -586,6 +586,12 @@ function App() {
                                       {nextWp.emoji + " " || ''} &rarr; {nextWp.stopName}
                                     </div>
                                   );
+                                } else if (p().viewingStopName) {
+                                  return (
+                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                      🔍 Looking at departures @ {p().viewingStopName}
+                                    </div>
+                                  );
                                 }
                                 return null;
                               })()}

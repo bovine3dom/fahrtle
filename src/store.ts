@@ -49,6 +49,7 @@ export type Player = {
   renderableSegments?: AnimationSegment[];
   finishTime?: number;
   desiredRate?: number;
+  viewingStopName?: string | null;
 };
 
 export type AnimationSegment = {
@@ -388,4 +389,9 @@ export function finishRace(finishTime: number) {
     type: 'PLAYER_FINISHED',
     finishTime: finishTime
   }));
+}
+
+export function setViewingStop(stopName: string | null) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'SET_VIEWING_STOP', stopName }));
 }
