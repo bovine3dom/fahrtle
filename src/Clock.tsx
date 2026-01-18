@@ -4,7 +4,7 @@ import { getServerTime } from './time-sync';
 import { $clock, $playerTimeZone } from './store';
 import { formatInTimeZone, getTimeZoneColor } from './timezone';
 
-export default function Clock() {
+export default function Clock(props: { style?: any }) {
   const zone = useStore($playerTimeZone);
   let spanRef: HTMLSpanElement | undefined;
   let frameId: number;
@@ -52,7 +52,10 @@ export default function Clock() {
       "font-family": 'monospace',
       "pointer-events": 'none',
       "user-select": 'none',
-      transition: 'background 1.5s ease'
+      transition: 'background 1.5s ease',
+      width: '100%',
+      "box-sizing": 'border-box',
+      ...(props.style || {})
     }}>
       <span ref={spanRef} style={{ "font-size": "1.2rem", "font-weight": "bold" }}>--:--:--</span>
       <span style={{ "font-size": "0.6rem", opacity: 0.8, "text-transform": "uppercase" }}>{zoneDisplayName()}</span>

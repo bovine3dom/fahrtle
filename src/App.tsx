@@ -263,7 +263,8 @@ function App() {
             position: 'absolute', top: '10px', left: '10px', 'z-index': 10,
             background: 'rgba(255,255,255,0.9)', padding: '12px', 'border-radius': '8px',
             'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-            'min-width': minimized() ? 'auto' : '200px',
+            'width': minimized() ? '280px' : 'auto',
+            'min-width': '200px',
             'max-width': 'calc(100vw - 20px)',
             'max-height': 'calc(100vh - 100px)',
             'display': 'flex',
@@ -279,7 +280,7 @@ function App() {
               'margin-bottom': minimized() ? '0' : '8px'
             }}>
               {/* If minimized, show Clock here. If expanded, show Room Name */}
-              <Show when={!minimized()} fallback={<Clock />}>
+              <Show when={!minimized()} fallback={<Clock style={{ flex: 1 }} />}>
                 <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>Room: {room()}</div>
               </Show>
 
@@ -295,6 +296,77 @@ function App() {
                 {minimized() ? '▼' : '▲'}
               </button>
             </div>
+
+            {/* Persistent Controls (Minimized Only) */}
+            <Show when={minimized()}>
+              <div style={{
+                display: 'flex', gap: '8px', 'margin-bottom': '8px',
+                'padding-top': '8px'
+              }}>
+                <Show when={canCancel()} fallback={
+                  <button disabled style={{
+                    flex: 1, padding: '8px', background: '#f1f5f9', color: '#94a3b8',
+                    border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                    'font-size': '0.9em', 'font-weight': 'bold',
+                    'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
+                    'min-width': 0
+                  }}>
+                    <span style={{ 'flex-shrink': 0 }}>🚶</span>
+                    <span style={{
+                      'white-space': 'nowrap',
+                      'overflow': 'hidden',
+                      'text-overflow': 'ellipsis',
+                      'flex': 1
+                    }}>
+                      Double click map to walk
+                    </span>
+                  </button>
+                }>
+                  <button
+                    onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
+                    style={{
+                      flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                      border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
+                      'font-size': '0.9em', 'font-weight': 'bold',
+                      'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
+                      'min-width': 0
+                    }}
+                    title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                  >
+                    <span style={{ 'flex-shrink': 0 }}>🛑</span>
+                    <span style={{
+                      'white-space': 'nowrap',
+                      'overflow': 'hidden',
+                      'text-overflow': 'ellipsis',
+                      'flex': 1
+                    }}>
+                      {nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`}
+                    </span>
+                  </button>
+                </Show>
+
+                {roomState() === 'RUNNING' && (() => {
+                  const me = players()[myId()!];
+                  const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
+                  return (
+                    <button
+                      onClick={() => toggleSnooze()}
+                      style={{
+                        padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
+                        color: isSnoozing ? 'white' : '#475569',
+                        border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                        'border-radius': '4px', cursor: 'pointer', 'font-size': '1.2em', 'font-weight': 'bold',
+                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center',
+                        'width': '42px', 'flex-shrink': 0
+                      }}
+                      title={isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
+                    >
+                      <span>{isSnoozing ? '⏩' : '💤'}</span>
+                    </button>
+                  );
+                })()}
+              </div>
+            </Show>
 
             {/* Expanded Content */}
             <Show when={!minimized()}>
@@ -530,7 +602,16 @@ function App() {
 
                 {/* Footer Actions */}
                 <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
-                  <Show when={canCancel()}>
+                  <Show when={canCancel()} fallback={
+                    <button disabled style={{
+                      width: '100%', padding: '8px', background: '#f1f5f9', color: '#94a3b8',
+                      border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                      'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                      'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                    }}>
+                      <span>🚶</span> Double click map to walk
+                    </button>
+                  }>
                     <button
                       onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
                       style={{
