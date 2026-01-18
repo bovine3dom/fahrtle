@@ -599,7 +599,23 @@ function App() {
                       </button>
                     );
                   })()}
-
+                  {(() => {
+                    const me = players()[myId()!];
+                    if ((roomState() === 'RUNNING') && me.finishTime)
+                      return <button
+                        onClick={() => setShowWinModal(true)}
+                        style={{
+                          width: '100%', padding: '8px', 'background': '#f1f5f9',
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                          'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                        }}
+                        title="Show results"
+                      >
+                        Show results 📝
+                      </button>
+                  })()}
                   <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
                     {roomState() === 'RUNNING' ? <a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8' }}>Click map for departures, double click to board or walk<br />Click here for more information</a> : 'Waiting for game to start...'}
                   </div>
