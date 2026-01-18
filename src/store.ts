@@ -229,7 +229,35 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
       const p = all[msg.playerId];
       if (p) {
         const updatedWaypoints = [...p.waypoints, msg.waypoint];
-        const updatedPlayer = processPlayer({ ...p, waypoints: updatedWaypoints });
+        const updatedPlayer = processPlayer({ ...p, waypoints: updatedWaypoints, viewingStopName: null });
+        $players.setKey(msg.playerId, updatedPlayer);
+      }
+    }
+
+    if (msg.type === 'PLAYER_COLOR_UPDATE') {
+      const p = $players.get()[msg.playerId];
+      if (p) $players.setKey(msg.playerId, { ...p, color: msg.color });
+    }
+
+    if (msg.type === 'PLAYER_SNOOZE_UPDATE') {
+      const p = $players.get()[msg.playerId];
+      if (p) $players.setKey(msg.playerId, { ...p, desiredRate: msg.desiredRate });
+    }
+
+    if (msg.type === 'PLAYER_VIEW_UPDATE') {
+      const p = $players.get()[msg.playerId];
+      if (p) $players.setKey(msg.playerId, { ...p, viewingStopName: msg.viewingStopName });
+    }
+
+    if (msg.type === 'PLAYER_FINISH_UPDATE') {
+      const p = $players.get()[msg.playerId];
+      if (p) $players.setKey(msg.playerId, { ...p, finishTime: msg.finishTime });
+    }
+
+    if (msg.type === 'PLAYER_WAYPOINTS_UPDATE') {
+      const p = $players.get()[msg.playerId];
+      if (p) {
+        const updatedPlayer = processPlayer({ ...p, waypoints: msg.waypoints, viewingStopName: null });
         $players.setKey(msg.playerId, updatedPlayer);
       }
     }

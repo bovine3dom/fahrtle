@@ -244,8 +244,9 @@ const server = serve<WSData>({
           player.color = message.color;
           // Broadcast player update so all clients see the new color
           server.publish(d.roomId, JSON.stringify({
-            type: 'PLAYER_JOINED',
-            player: player
+            type: 'PLAYER_COLOR_UPDATE',
+            playerId: d.playerId,
+            color: player.color
           }));
         }
       }
@@ -261,10 +262,10 @@ const server = serve<WSData>({
           player.desiredRate = player.desiredRate > 1.0 ? 1.0 : 500.0;
           updateRoom(d.roomId); // Immediate update
 
-          // Broadcast player update so UI shows snooze state
           server.publish(d.roomId, JSON.stringify({
-            type: 'PLAYER_JOINED',
-            player: player
+            type: 'PLAYER_SNOOZE_UPDATE',
+            playerId: d.playerId,
+            desiredRate: player.desiredRate
           }));
         }
       }
@@ -305,8 +306,9 @@ const server = serve<WSData>({
 
               // Broadcast the update for this player
               server.publish(d.roomId, JSON.stringify({
-                type: 'PLAYER_JOINED', // Reuse JOINED as "Update Full Player State"
-                player: p
+                type: 'PLAYER_WAYPOINTS_UPDATE',
+                playerId: pid,
+                waypoints: p.waypoints
               }));
             }
           }
@@ -324,8 +326,9 @@ const server = serve<WSData>({
         if (player) {
           player.viewingStopName = message.stopName;
           server.publish(d.roomId, JSON.stringify({
-            type: 'PLAYER_JOINED',
-            player: player
+            type: 'PLAYER_VIEW_UPDATE',
+            playerId: d.playerId,
+            viewingStopName: player.viewingStopName
           }));
         }
       }
@@ -406,8 +409,9 @@ const server = serve<WSData>({
 
           // Force update for all clients
           server.publish(d.roomId, JSON.stringify({
-            type: 'PLAYER_JOINED', // Overwrite player state on clients
-            player: player
+            type: 'PLAYER_WAYPOINTS_UPDATE',
+            playerId: d.playerId,
+            waypoints: player.waypoints
           }));
         }
       }
@@ -474,8 +478,9 @@ const server = serve<WSData>({
         }
 
         server.publish(d.roomId, JSON.stringify({
-          type: 'PLAYER_JOINED',
-          player: player
+          type: 'PLAYER_WAYPOINTS_UPDATE',
+          playerId: d.playerId,
+          waypoints: player.waypoints
         }));
       }
 
@@ -491,8 +496,9 @@ const server = serve<WSData>({
         console.log(`[Room: ${d.roomId}]: Player ${d.playerId} finished.`);
 
         server.publish(d.roomId, JSON.stringify({
-          type: 'PLAYER_JOINED',
-          player: player
+          type: 'PLAYER_FINISH_UPDATE',
+          playerId: d.playerId,
+          finishTime: player.finishTime
         }));
       }
     },
@@ -510,8 +516,9 @@ const server = serve<WSData>({
             if (roomConnections > 0) {
               player.desiredRate = 500.0;
               server.publish(d.roomId, JSON.stringify({
-                type: 'PLAYER_JOINED',
-                player: player
+                type: 'PLAYER_SNOOZE_UPDATE',
+                playerId: d.playerId,
+                desiredRate: player.desiredRate
               }));
             } else {
               room.emptySince = Date.now();
