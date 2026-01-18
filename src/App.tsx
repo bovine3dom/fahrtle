@@ -304,23 +304,40 @@ function App() {
                 'padding-top': '8px'
               }}>
                 <Show when={canCancel()} fallback={
-                  <button disabled style={{
-                    flex: 1, padding: '8px', background: '#f1f5f9', color: '#94a3b8',
-                    border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
-                    'font-size': '0.9em', 'font-weight': 'bold',
-                    'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
-                    'min-width': 0
-                  }}>
-                    <span style={{ 'flex-shrink': 0 }}>🚶</span>
-                    <span style={{
-                      'white-space': 'nowrap',
-                      'overflow': 'hidden',
-                      'text-overflow': 'ellipsis',
-                      'flex': 1
+                  <Show when={roomState() === 'RUNNING'} fallback={
+                    <button
+                      onClick={() => {
+                        toggleReady();
+                        !players()[myId()!].isReady ? fitGameBounds() : null;
+                      }}
+                      style={{
+                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
+                        color: players()[myId()!]?.isReady ? '#475569' : 'white',
+                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
+                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
+                      }}
+                    >
+                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready up'}
+                    </button>
+                  }>
+                    <button disabled style={{
+                      flex: 1, padding: '8px', background: '#f1f5f9', color: '#94a3b8',
+                      border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                      'font-size': '0.9em', 'font-weight': 'bold',
+                      'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
+                      'min-width': 0
                     }}>
-                      Double click map to walk
-                    </span>
-                  </button>
+                      <span style={{ 'flex-shrink': 0 }}>🚶</span>
+                      <span style={{
+                        'white-space': 'nowrap',
+                        'overflow': 'hidden',
+                        'text-overflow': 'ellipsis',
+                        'flex': 1
+                      }}>
+                        Double click map to walk
+                      </span>
+                    </button>
+                  </Show>
                 }>
                   <button
                     onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
@@ -603,14 +620,16 @@ function App() {
                 {/* Footer Actions */}
                 <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
                   <Show when={canCancel()} fallback={
-                    <button disabled style={{
-                      width: '100%', padding: '8px', background: '#f1f5f9', color: '#94a3b8',
-                      border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
-                      'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
-                      'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                    }}>
-                      <span>🚶</span> Double click map to walk
-                    </button>
+                    <Show when={roomState() === 'RUNNING'} >
+                      <button disabled style={{
+                        width: '100%', padding: '8px', background: '#f1f5f9', color: '#94a3b8',
+                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                      }}>
+                        <span>🚶</span> Double click map to walk
+                      </button>
+                    </Show>
                   }>
                     <button
                       onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
