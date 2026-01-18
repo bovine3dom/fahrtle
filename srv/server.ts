@@ -56,6 +56,16 @@ type Room = {
 const rooms = new Map<string, Room>();
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 
+function logStats(message: string) {
+  setTimeout(() => {
+    let totalSubscribers = 0;
+    for (const room of rooms.values()) {
+      totalSubscribers += server.subscriberCount(room.id);
+    }
+    console.log(`${message} | Total players: ${totalSubscribers}`);
+  }, 10); // tiny delay allows subscribers to actually subscribe
+}
+
 function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
   const toRad = (x: number) => x * Math.PI / 180;
   const R = 6371; // km
@@ -144,7 +154,7 @@ const server = serve<WSData>({
             loopInterval: setInterval(() => updateRoom(roomId), 100)
           };
           rooms.set(roomId, room);
-          console.log(`[Room: ${roomId}]: New room created.`);
+          logStats(`[Room: ${roomId}]: New room created.`);
         }
 
         // Room is no longer empty
@@ -176,6 +186,8 @@ const server = serve<WSData>({
           room.players[playerId].disconnectedAt = null;
           room.players[playerId].desiredRate = 1.0;
         }
+
+        logStats(`[Room: ${roomId}]: Player ${playerId} joined.`);
 
         ws.data.roomId = roomId;
         ws.data.playerId = playerId;
@@ -486,6 +498,7 @@ const server = serve<WSData>({
               room.emptySince = Date.now();
               room.playbackRate = 0;
             }
+            logStats(`[Room: ${d.roomId}]: Player ${d.playerId} disconnected.`);
           }
         }
       }
@@ -542,7 +555,7 @@ function updateRoom(roomId: string) {
   if (room.emptySince !== null) {
     const emptyDuration = Date.now() - room.emptySince;
     if (emptyDuration > 60000) { // 1 Minute
-      console.log(`[Room: ${roomId}]: Killed room after 1 minute of emptiness.`);
+      logStats(`[Room: ${roomId}]: Killed room after 1 minute of emptiness.`);
       clearInterval(room.loopInterval);
       rooms.delete(roomId);
       return;
@@ -552,12 +565,12 @@ function updateRoom(roomId: string) {
   for (const pid in room.players) {
     const p = room.players[pid];
     if (p.disconnectedAt && Date.now() - p.disconnectedAt > 60000) {
-      console.log(`[Room: ${roomId}]: Kicking player ${pid} after 1 minute disconnect.`);
       delete room.players[pid];
       server.publish(roomId, JSON.stringify({
         type: 'PLAYER_LEFT',
         playerId: pid
       }));
+      logStats(`[Room: ${roomId}]: Kicking player ${pid} after 1 minute disconnect.`);
       checkCountdown(room);
     }
   }
