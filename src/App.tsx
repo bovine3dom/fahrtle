@@ -245,6 +245,12 @@ function App() {
     onCleanup(() => clearInterval(interval));
   });
 
+  const nextWaypoint = createMemo(() => {
+    const p = players()[myId()!];
+    if (!p) return undefined;
+    return p.waypoints.find((wp) => wp.arrivalTime > time());
+  });
+
   return (
     <>
       {!room() ? (
@@ -525,26 +531,18 @@ function App() {
                 {/* Footer Actions */}
                 <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
                   <Show when={canCancel()}>
-                    {(() => {
-                      const p = players()[myId()!];
-                      const nextWp = p.waypoints.find((wp: any) => wp.arrivalTime > time());
-                      const isWalk = nextWp?.isWalk;
-
-                      return (
-                        <button
-                          onClick={isWalk ? stopImmediately : cancelNavigation}
-                          style={{
-                            width: '100%', padding: '8px', 'background': isWalk ? '#10b981' : '#f59e0b', color: '#fff',
-                            border: isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
-                            'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
-                            'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                          }}
-                          title={isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
-                        >
-                          <span>🛑</span> {isWalk ? 'Stop walking' : `Get off at ${nextWp?.stopName || ''}`}
-                        </button>
-                      );
-                    })()}
+                    <button
+                      onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
+                      style={{
+                        width: '100%', padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                        border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
+                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
+                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                      }}
+                      title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                    >
+                      <span>🛑</span> {nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`}
+                    </button>
                   </Show>
                   {roomState() !== 'RUNNING' && (
                     <button
