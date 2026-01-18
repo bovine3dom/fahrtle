@@ -7,9 +7,10 @@ import Lobby from './Lobby';
 import Clock from './Clock';
 import { fitGameBounds, getPlayerScreenPosition } from './Map';
 import DepartureBoard from './DepartureBoard';
-import { formatDuration } from './utils/time';
+import { formatDuration, parseUserTime } from './utils/time';
 import { parseCoords, sensibleNumber } from './utils/format';
 import { findClosestCity } from './utils/geo';
+import { getTimeZone } from './timezone';
 const MapView = lazy(() => import('./Map'));
 
 import confetti from 'canvas-confetti';
@@ -33,6 +34,7 @@ function App() {
 
   const [minimized, setMinimized] = createSignal(false);
   const [startStr, setStartStr] = createSignal("");
+  const [startTimeStr, setStartTimeStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
   const [showWinModal, setShowWinModal] = createSignal(false);
 
@@ -96,7 +98,18 @@ function App() {
 
     if (b.finish) setFinishStr(`${b.finish[0]}, ${b.finish[1]}`);
     else if (!b.finish && !finishStr()) setFinishStr("");
+
+    if (b.time) {
+      const tz = getTimeZone(b.start?.[0] || 51, b.start?.[1] || 0);
+      const date = new Date(b.time);
+      const serverTimeStr = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+      }).format(date);
+      setStartTimeStr(serverTimeStr);
+    }
+    else if (!b.time && !startTimeStr()) setStartTimeStr("");
   });
+
 
   const isSaved = createMemo(() => {
     const b = bounds();
@@ -116,11 +129,39 @@ function App() {
       return compare(parsed, serverVal);
     };
 
+    const rs = roomState();
+    const t = time();
+    if (rs === 'JOINING' && b.start) {
+      const tz = getTimeZone(b.start[0], b.start[1]);
+      const date = new Date(t);
+      const serverTimeStr = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+      }).format(date);
+
+      const userTime = startTimeStr();
+      const [h, m] = userTime.split(':');
+      const normalizedUserTime = (h && m)
+        ? `${h.padStart(2, '0')}:${m}`
+        : userTime;
+
+      if (normalizedUserTime !== serverTimeStr) return false;
+    }
+
     return checkField(startStr(), b.start) && checkField(finishStr(), b.finish);
   });
 
   const updateBounds = () => {
-    setGameBounds(parseCoords(startStr()), parseCoords(finishStr()));
+    const s = parseCoords(startStr());
+    const f = parseCoords(finishStr());
+
+    let ts: number | undefined = undefined;
+    if (s) {
+      const tz = getTimeZone(s[0], s[1]);
+      const p = parseUserTime(startTimeStr(), tz);
+      if (p) ts = p;
+    }
+
+    setGameBounds(s, f, ts);
   };
 
   const togglePicker = (mode: 'start' | 'finish') => {
@@ -278,7 +319,19 @@ function App() {
                     </Show>
 
                     <div style={{ 'margin-bottom': '6px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, Lng): </label>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input
+                          type="time"
+                          value={startTimeStr()}
+                          onInput={(e) => setStartTimeStr(e.currentTarget.value)}
+                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box', 'font-family': 'unset' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ 'margin-bottom': '6px' }}>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, lng): </label>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <input
                           type="text"
@@ -339,7 +392,7 @@ function App() {
                         'transition': 'all 0.2s'
                       }}
                     >
-                      {isSaved() ? 'Synced ✓' : 'Set Course'}
+                      {isSaved() ? 'Synced ✓' : 'Set course'}
                     </button>
                   </div>
                 </Show>

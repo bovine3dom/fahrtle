@@ -2,6 +2,7 @@
 import { atom, map } from 'nanostores';
 import { syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
+import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
 
 if (typeof window !== 'undefined') {
@@ -21,6 +22,7 @@ if (typeof window !== 'undefined') {
     playerTimeZone: $playerTimeZone.get(),
     previewRoute: $previewRoute.get(),
     boardMinimized: $boardMinimized.get(),
+    bounds: $gameBounds.get(),
   });
 }
 
@@ -101,14 +103,14 @@ export const $boardMinimized = atom(false);
 export const $isFollowing = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
 export const $playerDistances = map<Record<string, number | null>>({});
-export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null }>({ start: null, finish: null });
+export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number }>({ start: null, finish: null, time: undefined });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
 
 let ws: WebSocket | null = null;
 
-export function connectAndJoin(roomId: string, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null }) {
+export function connectAndJoin(roomId: string, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string }) {
   if (ws) ws.close();
 
   const wsUri = import.meta.env.PROD
@@ -128,12 +130,27 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
     ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId, color }));
 
     if (initialBounds) {
+      let startTime: number | undefined;
+
+      const startPos = initialBounds.start || [51, 0] // gmt
+      if (startPos && initialBounds.time) {
+        const tz = getTimeZone(startPos[0], startPos[1]);
+        const parsed = parseUserTime(initialBounds.time, tz);
+        if (parsed !== null) startTime = parsed;
+      }
+
       ws?.send(JSON.stringify({
         type: 'SET_GAME_BOUNDS',
         startPos: initialBounds.start,
-        finishPos: initialBounds.finish
+        finishPos: initialBounds.finish,
+        startTime: startTime
       }));
-      $gameBounds.set(initialBounds);
+
+      $gameBounds.set({
+        start: initialBounds.start,
+        finish: initialBounds.finish,
+        time: startTime
+      });
     }
 
     $currentRoom.set(roomId);
@@ -171,7 +188,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
       $players.set(renderables);
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
@@ -179,7 +196,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
     if (msg.type === 'ROOM_STATE_UPDATE') {
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
@@ -344,12 +361,13 @@ export function clearPreviewRoute() {
   $previewRoute.set(null);
 }
 
-export function setGameBounds(start: [number, number] | null, finish: [number, number] | null) {
+export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'SET_GAME_BOUNDS',
       startPos: start,
-      finishPos: finish
+      finishPos: finish,
+      startTime: startTime
     }));
   }
 }

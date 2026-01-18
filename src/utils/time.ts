@@ -59,3 +59,19 @@ export function getWallSeconds(timestamp: number, timeZone: string): number {
     parts.forEach(({ type, value }) => p[type] = parseInt(value));
     return (p.hour % 24) * 3600 + p.minute * 60 + p.second;
 }
+
+export function parseUserTime(timeString: string, timeZone: string): number | null {
+    if (!/^\d{1,2}:\d{2}$/.test(timeString)) return null; // "HH:MM"
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour12: false
+    });
+
+    const datePart = formatter.format(new Date());
+    const [h, m] = timeString.split(':');
+    const paddedTime = `${h.padStart(2, '0')}:${m}`;
+    const dbString = `${datePart} ${paddedTime}:00`;
+    return parseDBTime(dbString, timeZone);
+}

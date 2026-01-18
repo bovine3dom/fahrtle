@@ -31,16 +31,17 @@ export default function Lobby() {
 
       const startParam = url.searchParams.get('start');
       const finishParam = url.searchParams.get('finish');
+      const timeParam = url.searchParams.get('t');
       let initialBounds;
 
-      if (startParam || finishParam) {
+      if (startParam || finishParam || timeParam) {
         const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
-        initialBounds = { start: parse(startParam), finish: parse(finishParam) };
+        initialBounds = { start: parse(startParam), finish: parse(finishParam), time: decodeURIComponent(timeParam || '') };
       }
 
       url.searchParams.delete('start');
       url.searchParams.delete('finish');
-
+      url.searchParams.delete('t');
       url.searchParams.set('room', room());
       window.history.replaceState(null, '', url);
       connectAndJoin(room(), user(), color(), initialBounds);

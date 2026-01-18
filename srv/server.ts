@@ -259,12 +259,17 @@ const server = serve<WSData>({
         room.startPos = message.startPos; // Expecting [lat, lng] or null
         room.finishPos = message.finishPos;
 
+        if (message.startTime) {
+          room.virtualTime = message.startTime;
+        }
+
         if (room.startPos) {
           const [newLat, newLng] = room.startPos;
 
-          const changed = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+          const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+          const timeChanged = message.startTime !== undefined;
 
-          if (changed) {
+          if (posChanged || timeChanged) {
             for (const pid in room.players) {
               const p = room.players[pid];
               const spawn = getSpawnPoint(newLat, newLng);
