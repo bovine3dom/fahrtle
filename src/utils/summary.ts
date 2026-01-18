@@ -22,9 +22,9 @@ const getTravelSummaryObj = (player: Player) => {
 import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number }) => {
+export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number }, stealth = false) => {
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
-    let travel = waypoints.map((wp) => {
+    let travel = stealth ? waypoints.map((wp) => { if (wp.emoji == "🐾") return; return `${wp.emoji}`; }).filter(s => s).join('') : waypoints.map((wp) => {
         if (wp.emoji == "🐾") return;
         return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
     }).filter(s => s).join('\n');

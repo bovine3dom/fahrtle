@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { type Player, $gameBounds } from './store';
 import { getTravelSummary } from './utils/summary';
 
@@ -8,16 +8,19 @@ interface WinModalProps {
 }
 
 const WinModal = (props: WinModalProps) => {
-    const summary = createMemo(() => {
-        return getTravelSummary(props.player, $gameBounds.get());
-    });
-
     const [copied, setCopied] = createSignal(false);
+    const [stealthCopied, setStealthCopied] = createSignal(false);
 
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(summary());
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const copyToClipboard = (stealth = false) => {
+        navigator.clipboard.writeText(getTravelSummary(props.player, $gameBounds.get(), stealth));
+        if (stealth) {
+            setStealthCopied(true);
+            setTimeout(() => setStealthCopied(false), 2000);
+        }
+        else {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
     };
 
     return (
@@ -45,7 +48,7 @@ const WinModal = (props: WinModalProps) => {
                     'max-height': '200px', 'overflow-y': 'auto', 'border': '1px solid #e2e8f0',
                     'color': '#334155'
                 }}>
-                    {summary()}
+                    {getTravelSummary(props.player, $gameBounds.get())}
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
@@ -61,7 +64,20 @@ const WinModal = (props: WinModalProps) => {
                         Spectate 🔭
                     </button>
                     <button
-                        onClick={copyToClipboard}
+                        onClick={() => copyToClipboard(true)}
+                        style={{
+                            flex: 1, padding: '10px',
+                            background: stealthCopied() ? '#10b981' : '#a7a7a7ff',
+                            color: 'white', border: 'none',
+                            'border-radius': '8px', cursor: 'pointer',
+                            'font-weight': 'bold', 'font-size': '0.9em',
+                            transition: 'background 0.2s'
+                        }}
+                    >
+                        {stealthCopied() ? 'Copied! ✓' : 'Stealth copy 🥷'}
+                    </button>
+                    <button
+                        onClick={() => copyToClipboard(false)}
                         style={{
                             flex: 1, padding: '10px',
                             background: copied() ? '#10b981' : '#3b82f6',
