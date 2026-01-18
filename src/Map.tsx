@@ -210,6 +210,7 @@ export default function MapView() {
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
+  const playerMarkers = new Map<string, maplibregl.Marker>();
 
   onMount(() => {
 
@@ -308,7 +309,11 @@ export default function MapView() {
         }
       });
 
-      mapInstance!.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance!.addSource('routes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        attribution: '<a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
+      });
 
       mapInstance!.addLayer({
         id: 'routes-casing', type: 'line', source: 'routes',
@@ -328,20 +333,6 @@ export default function MapView() {
           'line-opacity': 1.0
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
-
-      mapInstance!.addSource('vehicles', {
-        type: 'geojson', data: { type: 'FeatureCollection', features: [] },
-        attribution: '<a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
-      });
-      mapInstance!.addLayer({
-        id: 'vehicles-circle', type: 'circle', source: 'vehicles',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#fff'
-        }
       });
 
       mapInstance!.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -656,6 +647,9 @@ export default function MapView() {
 
       const SMOOTHING_TIME_CONSTANT = 100;
       const alpha = 1 - Math.exp(-dt / SMOOTHING_TIME_CONSTANT);
+      const myId = $myPlayerId.get();
+      let myTargetPos: [number, number] | null = null;
+      let myTargetSpeed = 0;
 
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
@@ -707,8 +701,10 @@ export default function MapView() {
             properties: { id: player.id, color: player.color }
           });
 
-          const myId = $myPlayerId.get();
           if (pid === myId) {
+            myTargetPos = targetPos;
+            myTargetSpeed = currentSpeeds[pid] || 0;
+
             if (frameCount % 60 === 0) {
               const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
               if ($playerTimeZone.get() !== zone) {
@@ -736,30 +732,64 @@ export default function MapView() {
         }
       }
 
-      const finish = $gameBounds.get().finish;
-      if (finish) {
-        setFinishPointer(getPointer(finish[0], finish[1]));
-      } else {
-        setFinishPointer(null);
+      const updateMarkers = () => {
+        for (const pid in allPlayers) {
+          const player = allPlayers[pid];
+          const pos = playerPositions[pid];
+          if (!pos) continue;
+
+          let marker = playerMarkers.get(pid);
+          if (!marker) {
+            const el = document.createElement('div');
+            el.className = 'player-marker';
+            el.style.width = '12px';
+            el.style.height = '12px';
+            el.style.borderRadius = '50%';
+            el.style.background = player.color;
+            el.style.border = '2px solid white';
+            el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
+
+            marker = new maplibregl.Marker({ element: el })
+              .setLngLat(pos)
+              .addTo(mapInstance!);
+            playerMarkers.set(pid, marker);
+          } else {
+            marker.setLngLat(pos);
+            marker.getElement().style.background = player.color;
+          }
+        }
+
+        playerMarkers.forEach((marker, pid) => {
+          if (!allPlayers[pid]) {
+            marker.remove();
+            playerMarkers.delete(pid);
+          }
+        });
+      };
+
+      updateMarkers();
+
+      if (frameCount % 10 === 0) {
+        $playerSpeeds.set(currentSpeeds);
+        $playerDistances.set(currentDists);
+
+        const finish = $gameBounds.get().finish;
+        if (finish) {
+          setFinishPointer(getPointer(finish[0], finish[1]));
+        } else {
+          setFinishPointer(null);
+        }
+
+        const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
+          const pointer = getPointer(pos[1], pos[0]);
+          return { pid, pointer };
+        });
+        setPlayerPointers(t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]);
       }
 
-      const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
-        const pointer = getPointer(pos[1], pos[0]);
-        return { pid, pointer };
-      });
-      setPlayerPointers(t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]);
-
-      const vSource = mapInstance.getSource('vehicles') as maplibregl.GeoJSONSource;
-
-      if (vSource) vSource.setData({ type: 'FeatureCollection', features: vehicleFeatures });
-
-      $playerSpeeds.set(currentSpeeds);
-      $playerDistances.set(currentDists);
-
       if (isFollowing() && mapInstance) {
-        const myId = $myPlayerId.get();
-        const myPos = myId ? playerPositions[myId] : null;
-        const mySpeed = myId ? currentSpeeds[myId] : 0;
+        const myPos = myTargetPos;
+        const mySpeed = myTargetSpeed;
         const centre = mapInstance.getCenter();
         const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
 
@@ -793,6 +823,8 @@ export default function MapView() {
 
   onCleanup(() => {
     cancelAnimationFrame(frameId);
+    playerMarkers.forEach(m => m.remove());
+    playerMarkers.clear();
     mapInstance?.remove();
   });
 

@@ -523,6 +523,7 @@ function App() {
                               'color': p().id === myId() ? '#0f172a' : '#334155',
                               cursor: 'pointer',
                               padding: '4px',
+                              'min-height': '42px',
                               'border-radius': '4px',
                               transition: 'background 0.2s',
                               'background': isFinished() ? 'rgba(255, 237, 74, 0.1)' : 'transparent',
