@@ -28,6 +28,7 @@ type Player = {
   waypoints: Waypoint[];
   desiredRate: number; // 1.0 or 500.0
   finishTime: number | null;
+  disconnectedAt: number | null;
 };
 
 type Room = {
@@ -168,7 +169,12 @@ const server = serve<WSData>({
             }],
             desiredRate: 1.0,
             finishTime: null,
+            disconnectedAt: null,
           };
+        } else {
+          // Player is re-joining
+          room.players[playerId].disconnectedAt = null;
+          room.players[playerId].desiredRate = 1.0;
         }
 
         ws.data.roomId = roomId;
@@ -465,9 +471,21 @@ const server = serve<WSData>({
       if (d.roomId && d.playerId) {
         const room = rooms.get(d.roomId);
         if (room) {
-          const roomConnections = server.subscriberCount(d.roomId);
-          if (roomConnections === 0) {
-            room.emptySince = Date.now();
+          const player = room.players[d.playerId];
+          if (player) {
+            player.disconnectedAt = Date.now();
+
+            const roomConnections = server.subscriberCount(d.roomId);
+            if (roomConnections > 0) {
+              player.desiredRate = 500.0;
+              server.publish(d.roomId, JSON.stringify({
+                type: 'PLAYER_JOINED',
+                player: player
+              }));
+            } else {
+              room.emptySince = Date.now();
+              room.playbackRate = 0;
+            }
           }
         }
       }
@@ -531,6 +549,19 @@ function updateRoom(roomId: string) {
     }
   }
 
+  for (const pid in room.players) {
+    const p = room.players[pid];
+    if (p.disconnectedAt && Date.now() - p.disconnectedAt > 60000) {
+      console.log(`[Room: ${roomId}]: Kicking player ${pid} after 1 minute disconnect.`);
+      delete room.players[pid];
+      server.publish(roomId, JSON.stringify({
+        type: 'PLAYER_LEFT',
+        playerId: pid
+      }));
+      checkCountdown(room);
+    }
+  }
+
   // Handle countdown completion
   if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
     room.state = 'RUNNING';
@@ -540,6 +571,15 @@ function updateRoom(roomId: string) {
   }
 
   if (room.state !== 'RUNNING') return;
+
+  const subscriberCount = server.subscriberCount(roomId);
+  if (subscriberCount === 0) {
+    if (room.playbackRate !== 0) {
+      room.playbackRate = 0;
+      broadcastRoomState(room); // (🌲 -> 🪵) && 🚫👂 ? 🔊 : 🔇
+    }
+    return;
+  }
 
   let minSpeed = 1.0;
   const activeFactors: number[] = [];

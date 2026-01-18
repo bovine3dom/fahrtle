@@ -182,6 +182,11 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
           if (p.waypoints.length > 0) {
             const spawn = p.waypoints[0];
             $playerTimeZone.set(getTimeZone(spawn.y, spawn.x));
+
+            const isMoving = p.waypoints.some((wp: any) => wp.arrivalTime > msg.serverTime);
+            if (isMoving && msg.state === 'RUNNING') {
+              $isFollowing.set(true);
+            }
           }
         }
       }
