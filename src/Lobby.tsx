@@ -29,8 +29,8 @@ export default function Lobby() {
     if (room() && user()) {
       const url = new URL(window.location.href);
 
-      const startParam = url.searchParams.get('start');
-      const finishParam = url.searchParams.get('finish');
+      const startParam = url.searchParams.get('s');
+      const finishParam = url.searchParams.get('f');
       const timeParam = url.searchParams.get('t');
       let initialBounds;
 
@@ -39,8 +39,8 @@ export default function Lobby() {
         initialBounds = { start: parse(startParam), finish: parse(finishParam), time: decodeURIComponent(timeParam || '') };
       }
 
-      url.searchParams.delete('start');
-      url.searchParams.delete('finish');
+      url.searchParams.delete('s');
+      url.searchParams.delete('f');
       url.searchParams.delete('t');
       url.searchParams.set('room', room());
       window.history.replaceState(null, '', url);

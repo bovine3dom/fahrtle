@@ -35,10 +35,10 @@ export const getTravelSummary = (player: Player, gameBounds: { start: [number, n
 
     const url = new URL(window.location.origin + window.location.pathname);
     if (gameBounds.start) {
-        url.searchParams.set('start', `${gameBounds.start[0].toFixed(4)},${gameBounds.start[1].toFixed(4)}`);
+        url.searchParams.set('s', `${gameBounds.start[0].toFixed(4)},${gameBounds.start[1].toFixed(4)}`);
     }
     if (gameBounds.finish) {
-        url.searchParams.set('finish', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
+        url.searchParams.set('f', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
     }
     if (gameBounds.time && gameBounds.start) {
         const tz = getTimeZone(gameBounds.start[0], gameBounds.start[1]);
