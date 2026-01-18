@@ -63,7 +63,7 @@ function logStats(message: string) {
     for (const room of rooms.values()) {
       totalSubscribers += server.subscriberCount(room.id);
     }
-    console.log(`${message} | Total players: ${totalSubscribers}`);
+    console.log(`${new Date().toISOString()} | ${message} | Total players: ${totalSubscribers}`);
   }, 10); // tiny delay allows subscribers to actually subscribe
 }
 
