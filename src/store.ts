@@ -306,6 +306,10 @@ export function submitWaypointsBatch(points: {
 }
 
 export function leaveRoom() {
+  // clear the room id from the URL search params
+  const url = new URL(window.location.href);
+  url.searchParams.delete('room');
+  window.history.replaceState(null, '', url); // bug: it flashes back up again instantly, but we don't rejoin, so that's nice
   if (ws) ws.close();
   $currentRoom.set(null);
   $players.set({});
