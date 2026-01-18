@@ -51,7 +51,9 @@ function App() {
         origin: pos ? { x: pos.x, y: pos.y } : { y: 0.6 }
       });
       setTimeout(() => {
-        (p.desiredRate || 1) <= 1 && toggleSnooze();
+        // only snooze if there are players who haven't finished
+        const leftToFinish = Object.values(players()).filter(p => !p.finishTime).length;
+        ((p.desiredRate || 1) && leftToFinish > 0) && toggleSnooze();
         setShowWinModal(true)
       }, 3000);
     }
