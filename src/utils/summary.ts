@@ -19,8 +19,10 @@ const getTravelSummaryObj = (player: Player) => {
     return uniqueWaypoints;
 }
 
+import { getTimeZone } from '../timezone';
+
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null }) => {
+export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number }) => {
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
     let travel = waypoints.map((wp) => {
         if (wp.emoji == "🐾") return;
@@ -37,6 +39,13 @@ export const getTravelSummary = (player: Player, gameBounds: { start: [number, n
     }
     if (gameBounds.finish) {
         url.searchParams.set('finish', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
+    }
+    if (gameBounds.time && gameBounds.start) {
+        const tz = getTimeZone(gameBounds.start[0], gameBounds.start[1]);
+        const timeStr = new Intl.DateTimeFormat('en-GB', {
+            timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+        }).format(new Date(gameBounds.time));
+        url.searchParams.set('t', timeStr);
     }
 
     travel = `I just played fahrtle!\n${startCity} ➡️ ${finishCity} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
