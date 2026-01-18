@@ -655,6 +655,7 @@ function App() {
         <WinModal
           player={players()[myId()!]!}
           onSpectate={handleSpectate}
+          onClose={() => setShowWinModal(false)}
         />
       )}
     </>
