@@ -144,7 +144,7 @@ export default function DepartureBoard() {
   const handlePreviewClick = (row: DepartureResult) => {
     const query = `
           SELECT stop_lat, stop_lon
-          FROM transitous_everything_stop_times_one_day_even_saner
+          FROM transitous_everything_20260117_stop_times_one_day_even_saner
           WHERE "ru.source" = '${row['source']}'
             AND "ru.trip_id" = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
@@ -174,7 +174,7 @@ export default function DepartureBoard() {
     setLoadingTripKey(key);
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
-      FROM transitous_everything_stop_times_one_day_even_saner
+      FROM transitous_everything_20260117_stop_times_one_day_even_saner
       WHERE "ru.source" = '${row['source']}'
         AND "ru.trip_id" = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'

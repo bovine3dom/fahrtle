@@ -97,7 +97,7 @@ const updateStops = async (map: maplibregl.Map) => {
       stop_lon,
       stop_name,
       route_type
-    FROM transitous_everything_stop_statistics${zoom >= 16 ? "_unmerged" : ""}
+    FROM transitous_everything_20260117_stop_statistics${zoom >= 16 ? "_unmerged" : ""}
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
     LIMIT 500
@@ -470,7 +470,7 @@ export default function MapView() {
           const targetMinutes = hour * 60 + minute;
           const query = `
             SELECT *
-            FROM transitous_everything_edgelist_fahrtle
+            FROM transitous_everything_20260117_edgelist_fahrtle
             WHERE h3 IN (${h3Conditions})
             ORDER by (
               ((toHour(departure_time) * 60 + toMinute(departure_time)) - ${targetMinutes} + 1440) % 1440
