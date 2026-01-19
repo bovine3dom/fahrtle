@@ -79,15 +79,37 @@ const getCrowKmColor = (crowKm: number): string => {
   return interpolateSpectral(normalized);
 };
 
+let lastUpdatePos: [number, number] | null = null;
+let lastUpdateTime = 0;
+let isStopsLayerVisible = false;
+
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
   if (zoom < 14) {
-    const source = map.getSource('stops') as maplibregl.GeoJSONSource;
-    if (source) {
-      source.setData({ type: 'FeatureCollection', features: [] });
+    if (isStopsLayerVisible) {
+      const source = map.getSource('stops') as maplibregl.GeoJSONSource;
+      if (source) {
+        source.setData({ type: 'FeatureCollection', features: [] });
+      }
+      isStopsLayerVisible = false;
     }
     return;
   }
+
+  isStopsLayerVisible = true;
+
+  const center = map.getCenter();
+  const now = Date.now();
+  if (lastUpdatePos) {
+    const dist = haversineDist([center.lng, center.lat], lastUpdatePos);
+    // don't update if we haven't moved at least 100m and it's been less than 5 seconds
+    if (dist !== null && dist < 0.1 && (now - lastUpdateTime) < 5000) {
+      return;
+    }
+  }
+
+  lastUpdatePos = [center.lng, center.lat];
+  lastUpdateTime = now;
 
   const bounds = map.getBounds();
   const query = `
@@ -386,10 +408,10 @@ export default function MapView() {
       let clickTimeout: any = null;
 
       mapInstance!.on('moveend', () => {
-        if (mapInstance && !isFollowing()) updateStops(mapInstance);
+        if (mapInstance) updateStops(mapInstance);
       });
       mapInstance!.on('zoomend', () => {
-        if (mapInstance && !isFollowing()) updateStops(mapInstance);
+        if (mapInstance) updateStops(mapInstance);
       });
 
       const disableFollowing = () => $isFollowing.set(false);
@@ -812,10 +834,6 @@ export default function MapView() {
               center: myPos,
               zoom: nextZoom
             });
-
-            if (frameCount % 120 === 0) {
-              updateStops(mapInstance);
-            }
           }
         }
       }
