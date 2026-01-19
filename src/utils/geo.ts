@@ -39,3 +39,11 @@ export function getBearing(startLat: number, startLon: number, destLat: number, 
     const brng = toDeg(Math.atan2(y, x));
     return (brng + 360) % 360; // Normalize to 0-360
 }
+
+// northbound, eastbound etc
+export function bearingToCardinal(bearing: number) {
+    if (bearing < 45 || bearing > 315) return 'Northbound';
+    if (bearing >= 45 && bearing < 135) return 'Eastbound';
+    if (bearing >= 135 && bearing < 225) return 'Southbound';
+    return 'Westbound';
+}

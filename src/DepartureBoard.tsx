@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
-import { haversineDist } from './utils/geo';
+import { haversineDist, bearingToCardinal } from './utils/geo';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
@@ -388,7 +388,7 @@ export default function DepartureBoard() {
                           </span>
                         </div>
                         <div class="col-dest">
-                          <div class="dest-main">{row.trip_headsign || row.stop_name}</div>
+                          <div class="dest-main">{row.trip_headsign || bearingToCardinal(row.bearing)}</div>
                           <div class="route-long">{row.route_long_name}</div>
                         </div>
 
