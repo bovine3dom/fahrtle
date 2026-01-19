@@ -793,7 +793,7 @@ export default function MapView() {
         const centre = mapInstance.getCenter();
         const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
 
-        if (myPos && !approxEq(myPos[0], centre.lng) && !approxEq(myPos[1], centre.lat)) {
+        if (myPos) {
           const REFERENCE_SPEED = 50; // km/h
           const REFERENCE_ZOOM = 15;  // zoom level at reference speed
           const MIN_ZOOM = 5;
@@ -807,13 +807,15 @@ export default function MapView() {
           const currentZoom = mapInstance.getZoom();
           const nextZoom = lerp(currentZoom, targetZoom, alpha);
 
-          mapInstance.jumpTo({
-            center: myPos,
-            zoom: nextZoom
-          });
+          if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || Math.abs(currentZoom - targetZoom) > 0.01) {
+            mapInstance.jumpTo({
+              center: myPos,
+              zoom: nextZoom
+            });
 
-          if (frameCount % 120 === 0) {
-            updateStops(mapInstance);
+            if (frameCount % 120 === 0) {
+              updateStops(mapInstance);
+            }
           }
         }
       }
