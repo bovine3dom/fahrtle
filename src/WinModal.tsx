@@ -78,7 +78,7 @@ const WinModal = (props: WinModalProps) => {
             {!stealthMode() ? 'Stealth 🥷' : 'Nerd 🤓'}
           </button>
           <button
-            onClick={() => copyToClipboard}
+            onClick={copyToClipboard}
             style={{
               flex: 1, padding: '10px',
               background: copied() ? '#10b981' : '#3b82f6',
