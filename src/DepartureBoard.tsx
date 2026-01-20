@@ -47,9 +47,10 @@ const ActionButton = (props: {
   loading?: boolean;
   spinnerStyle?: any;
   buttonStyle?: any;
+  class?: string;
 }) => (
   <button
-    class="preview-btn"
+    class={`preview-btn ${props.class || ''}`}
     onClick={(e) => {
       e.stopPropagation();
       props.onClick(e);
@@ -72,6 +73,8 @@ export default function DepartureBoard() {
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
   const mapZoom = useStore($mapZoom);
+  const preview = useStore($previewRoute);
+
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
   const [isTooFar, setIsTooFar] = createSignal(false);
@@ -195,6 +198,7 @@ export default function DepartureBoard() {
     $departureBoardResults.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
+    $previewRoute.set(null);
   };
 
   const handlePreviewClick = (row: DepartureResult) => {
@@ -213,7 +217,7 @@ export default function DepartureBoard() {
       .then(res => {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
-          $previewRoute.set(coords as [number, number][]);
+          $previewRoute.set({ coords: coords as [number, number][], row });
         }
       })
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
@@ -323,16 +327,57 @@ export default function DepartureBoard() {
           onClick={(e) => e.stopPropagation()}
         >
           <div class="board-header">
-            <div class="header-main">
-              <h1>{getDepartureLabel(getTimeZoneLanguage(stopZone()))}</h1>
-              <div class="stop-name">
-                {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
+            <Show when={preview()} fallback={
+              <div class="header-main">
+                <h1>{getDepartureLabel(getTimeZoneLanguage(stopZone()))}</h1>
+                <div class="stop-name">
+                  {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
+                </div>
               </div>
-            </div>
+            }>
+              {(p) => (
+                <div class="header-main preview-header">
+                  <div class="preview-details">
+                    <div class="preview-time-line">
+                      <span class="preview-time">{formatRowTime(p().row.departure_time || '')}</span>
+                      <RoutePill row={p().row} class="preview-pill" />
+                      <span class="preview-type">{getRouteEmoji(p().row.route_type)}</span>
+                    </div>
+                    <div class="preview-dest">{p().row.trip_headsign || p().row.route_long_name}</div>
+                  </div>
+                </div>
+              )}
+            </Show>
             <div class="header-controls">
+              <Show when={preview()}>
+                {(p) => (
+                  <ActionButton
+                    icon="🛂"
+                    title={blockingReason() || "Board"}
+                    onClick={() => {
+                      $previewRoute.set(null);
+                      if (blockingReason()) {
+                        setFlashError(false);
+                        setTimeout(() => setFlashError(true), 500);
+                        setTimeout(() => setFlashError(false), 1000);
+                        $boardMinimized.set(false);
+                        return;
+                      }
+                      handleTripDoubleClick(p().row);
+                    }}
+                    disabled={loadingTripKey() !== null}
+                    loading={loadingTripKey() === `${p().row.source}-${p().row.trip_id}-${p().row.departure_time}`}
+                    class="control-btn board-control-btn"
+                  />
+                )}
+              </Show>
               <button
                 class="control-btn minimize-btn"
-                onClick={() => $boardMinimized.set(!isMinimized())}
+                onClick={() => {
+                  const nextMin = !isMinimized();
+                  $boardMinimized.set(nextMin);
+                  if (!nextMin) $previewRoute.set(null);
+                }}
                 title={isMinimized() ? "Expand" : "Minimize"}
               >
                 <span class="cross-line" style={{ transform: isMinimized() ? 'rotate(90deg)' : 'none' }}></span>
@@ -346,20 +391,22 @@ export default function DepartureBoard() {
             </div>
           </div>
 
-          <Show when={blockingReason()}>
-            <div
-              class="banner banner-error"
-              classList={{ 'flash-animation': flashError() }}
-              style={{ opacity: flashError() ? 1 : 0.9 }}
-            >
-              {blockingReason()}
-            </div>
-          </Show>
+          <Show when={!isMinimized()}>
+            <Show when={blockingReason()}>
+              <div
+                class="banner banner-error"
+                classList={{ 'flash-animation': flashError() }}
+                style={{ opacity: flashError() ? 1 : 0.9 }}
+              >
+                {blockingReason()}
+              </div>
+            </Show>
 
-          <Show when={mapZoom() < 16}>
-            <div class="banner banner-warning">
-              ⚠️ Some stops are hidden until you zoom in further
-            </div>
+            <Show when={mapZoom() < 16}>
+              <div class="banner banner-warning">
+                ⚠️ Some stops are hidden until you zoom in further
+              </div>
+            </Show>
           </Show>
 
           {/* Type Filter Toolbar */}
@@ -545,7 +592,7 @@ export default function DepartureBoard() {
             </div>
           </div>
         </div>
-      </div>
+      </div >
 
       <style>{`
         .departure-board-overlay {
@@ -714,9 +761,58 @@ export default function DepartureBoard() {
           margin-top: 2px;
         }
 
+        .preview-header {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex: 1;
+        }
+
+        .preview-details {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .preview-time-line {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .preview-time {
+          font-weight: 900;
+          font-size: 1.2rem;
+          color: #ffed02;
+        }
+
+        .preview-dest {
+          font-weight: 700;
+          font-size: 0.9rem;
+          color: #fff;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .departure-board.minimized .preview-header {
+          margin-right: 120px;
+        }
+
         .departure-board.minimized .board-header {
-          padding: 0;
+          padding: 0 32px;
           min-height: 0;
+        }
+
+        .board-control-btn {
+          color: #000 !important;
+          border: none !important;
+        }
+
+        .board-control-btn:hover {
+          transform: scale(1.1);
         }
 
         .header-controls {
@@ -836,6 +932,10 @@ export default function DepartureBoard() {
         }
 
         .type-filter-toolbar::-webkit-scrollbar {
+          display: none;
+        }
+
+        .departure-board.minimized .type-filter-toolbar {
           display: none;
         }
 
@@ -1049,7 +1149,19 @@ export default function DepartureBoard() {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+
         @media (max-width: 768px) {
+            .preview-header {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 4px;
+            }
+            .preview-time {
+              font-size: 1rem;
+            }
+            .preview-dest {
+              font-size: 0.8rem;
+            }
             .status-dot { margin-top: 10px; }
             .type-filter-toolbar { background: #fff; padding-top: 8px; padding-bottom: 12px; }
             .filter-btn {
@@ -1096,23 +1208,43 @@ export default function DepartureBoard() {
             .table-body::-webkit-scrollbar-thumb { background: var(--db-accent-red); border-radius: 10px; }
             .route-pill { font-size: 0.6rem; padding: 2px 8px; border-radius: 4px; min-width: 25px; box-shadow: none; }
             .departure-board.minimized {
-              height: 52px;
-              width: 260px;
+              height: 60px;
+              width: calc(100% - 24px);
+              max-width: 450px;
               bottom: 24px;
               left: 50%;
               transform: translateX(-50%);
-              border-radius: 26px;
               background: var(--db-accent-red);
               padding: 0 16px;
-              justify-content: space-between;
               border: 1px solid rgba(255,255,255,0.2);
+              justify-content: center;
             }
-            .departure-board.minimized .board-header { background: transparent !important; }
+            .departure-board.minimized .board-header { 
+              background: transparent !important; 
+              flex-direction: row;
+              align-items: center;
+              padding: 0 12px;
+              height: 100%;
+              width: 100%;
+              gap: 8px;
+            }
+            .departure-board.minimized .preview-header {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 0;
+              margin-right: 80px;
+            }
             .departure-board.minimized .stop-name { font-size: 1.1rem; max-width: 130px; }
-            .departure-board.minimized .control-btn { background: rgba(255, 255, 255, 0.2); width: 18px; height: 18px; font-size: 14px; }
+            .departure-board.minimized .control-btn { background: rgba(255, 255, 255, 0.2); width: 24px; height: 24px; font-size: 14px; }
             .departure-board.minimized .cross-line { width: 12px; }
+            .departure-board.minimized .header-controls {
+              top: 50%;
+              transform: translateY(-50%);
+              right: 12px;
+              flex-shrink: 0;
+            }
         }
       `}</style>
-    </Show>
+    </Show >
   );
 }

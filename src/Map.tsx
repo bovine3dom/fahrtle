@@ -610,13 +610,13 @@ export default function MapView() {
     if (preview) {
       source.setData({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: preview },
+        geometry: { type: 'LineString', coordinates: preview.coords },
         properties: { color: '#000' }
       });
 
-      if (preview.length > 0) {
+      if (preview.coords.length > 0) {
         const bounds = new maplibregl.LngLatBounds();
-        preview.forEach(coord => bounds.extend(coord));
+        preview.coords.forEach(coord => bounds.extend(coord));
         mapInstance?.fitBounds(bounds, { padding: 80, duration: 1500 });
       }
       $boardMinimized.set(true);

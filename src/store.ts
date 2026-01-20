@@ -104,7 +104,12 @@ export const $playerTimeZone = atom<string>('Europe/Paris');
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
 export const $clock = atom(0);
-export const $previewRoute = atom<[number, number][] | null>(null);
+export interface PreviewRoute {
+  coords: [number, number][];
+  row: DepartureResult;
+}
+
+export const $previewRoute = atom<PreviewRoute | null>(null);
 export const $boardMinimized = atom(false);
 export const $isFollowing = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
