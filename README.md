@@ -27,7 +27,7 @@ fahrtle is a real-time multiplayer racing game built on global public transport 
 ## Tech stack
 
 - **Mapping**: [MapLibre GL JS](https://maplibre.org/) with [H3](https://h3geo.org/) for proximity / containment calculations.
-- **Data**: ClickHouse for querying large transport datasets, very badly documented on [gtfs-ffs](https://github.com/bovine3dom/gtfs-ffs)
+- **Data**: ClickHouse for querying large transport datasets, very badly documented on [gtfs_ffs](https://github.com/bovine3dom/gtfs_ffs)
 
 ## Development
 
