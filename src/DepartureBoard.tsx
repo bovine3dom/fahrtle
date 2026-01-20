@@ -455,7 +455,9 @@ export default function DepartureBoard() {
                             </span>
                           </div>
                           <div class="mobile-dest-arrow">→</div>
-                          <div class="mobile-dest-name">{row.trip_headsign || row.stop_name}</div>
+                          <div class="mobile-dest-name">
+                            {row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }))}
+                          </div>
                         </div>
                         <div class="mobile-row-bottom">
                           <div class="mobile-secondary-info">
