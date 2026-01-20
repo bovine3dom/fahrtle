@@ -686,8 +686,8 @@ export default function DepartureBoard() {
         }
 
         .col-status { width: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .col-time { width: 120px; flex-shrink: 0; }
-        .col-route { width: 100px; flex-shrink: 0; }
+        .col-time { width: 80px; flex-shrink: 0; }
+        .col-route { width: 150px; flex-shrink: 0; }
         .col-dir { width: 50px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .col-type { width: 80px; text-align: center; flex-shrink: 0; }
         .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
@@ -945,6 +945,9 @@ export default function DepartureBoard() {
           font-size: 0.9rem;
           display: inline-block;
           min-width: 50px;
+          max-width: 120px;
+          text-overflow: ellipsis;
+          overflow: hidden;
           text-align: center;
           box-shadow: inset 0 0 4px rgba(0,0,0,0.3);
         }
