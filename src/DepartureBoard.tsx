@@ -9,6 +9,61 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
 
+const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
+  <Show when={props.isImminent}>
+    <span class={`status-dot imminent ${props.class || ''}`} style={props.style}></span>
+  </Show>
+);
+
+const RoutePill = (props: { row: DepartureResult; class?: string }) => (
+  <span
+    class={`route-pill ${props.class || ''}`}
+    style={{
+      'background-color': props.row.route_color ? `#${props.row.route_color}` : '#333',
+      color: props.row.route_text_color ? `#${props.row.route_text_color}` : '#fff',
+    }}
+  >
+    {props.row.route_short_name || '??'}
+  </span>
+);
+
+const DirectionIcon = (props: { bearing: number; class?: string }) => (
+  <svg
+    class={`dir-icon ${props.class || ''}`}
+    viewBox="0 0 24 24"
+    style={{
+      transform: `rotate(${props.bearing || 0}deg)`,
+    }}
+  >
+    <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.29 19.5 20.29L12 2Z" />
+  </svg>
+);
+
+const ActionButton = (props: {
+  icon: any;
+  title?: string;
+  onClick: (e: MouseEvent) => void;
+  disabled?: boolean;
+  loading?: boolean;
+  spinnerStyle?: any;
+  buttonStyle?: any;
+}) => (
+  <button
+    class="preview-btn"
+    onClick={(e) => {
+      e.stopPropagation();
+      props.onClick(e);
+    }}
+    title={props.title}
+    disabled={props.disabled}
+    style={props.buttonStyle}
+  >
+    <Show when={props.loading} fallback={props.icon}>
+      <span class="spinner-small" style={props.spinnerStyle}></span>
+    </Show>
+  </button>
+);
+
 export default function DepartureBoard() {
   const results = useStore($departureBoardResults);
   const currentTime = useStore($clock);
@@ -270,7 +325,7 @@ export default function DepartureBoard() {
           <div class="board-header">
             <div class="header-main">
               <h1>{getDepartureLabel(getTimeZoneLanguage(stopZone()))}</h1>
-              <div class="stop-name" style={{ color: '#ffed02', "font-weight": "900", }}>
+              <div class="stop-name">
                 {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
               </div>
             </div>
@@ -285,7 +340,7 @@ export default function DepartureBoard() {
               </button>
               <button class="control-btn close-btn" onClick={close} title="Close Board">✕</button>
             </div>
-            <div class="header-clock" style={{ background: getTimeZoneColor(stopZone()) }}>
+            <div class="header-clock" style={{ "--clock-bg": getTimeZoneColor(stopZone()) }}>
               <div class="clock-time">{formatClockTime(currentTime(), true)}</div>
               <div class="clock-zone">{stopZone()}</div>
             </div>
@@ -293,34 +348,16 @@ export default function DepartureBoard() {
 
           <Show when={blockingReason()}>
             <div
+              class="banner banner-error"
               classList={{ 'flash-animation': flashError() }}
-              style={{
-                background: '#dc2626',
-                color: 'white',
-                padding: '8px',
-                'text-align': 'center',
-                'font-weight': 'bold',
-                'font-size': '0.9em',
-                transition: 'opacity 0.1s',
-                opacity: flashError() ? 1 : 0.9
-              }}
+              style={{ opacity: flashError() ? 1 : 0.9 }}
             >
               {blockingReason()}
             </div>
           </Show>
 
           <Show when={mapZoom() < 16}>
-            <div
-              style={{
-                background: '#ffe96bff',
-                color: '#000',
-                padding: '8px',
-                'text-align': 'center',
-                'font-weight': 'bold',
-                'font-size': '0.9em',
-                transition: 'opacity 0.1s',
-              }}
-            >
+            <div class="banner banner-warning">
               ⚠️ Some stops are hidden until you zoom in further
             </div>
           </Show>
@@ -374,18 +411,29 @@ export default function DepartureBoard() {
 
                   const [copied, setCopied] = createSignal(false);
 
+                  const mainDestText = createMemo(() => row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon })));
+                  const finalDestText = createMemo(() => findClosestCity({ latitude: row.final_lat, longitude: row.final_lon }));
+
+                  const handleBoardClick = () => handleTripDoubleClick(row);
+                  const handlePreview = () => handlePreviewClick(row);
+                  const handleCopy = () => {
+                    navigator.clipboard.writeText(JSON.stringify(row));
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  };
+
+                  const isLoading = createMemo(() => loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`);
+
                   return (
                     <div
                       class="table-row"
                       style={{ cursor: 'pointer' }}
-                      onDblClick={() => handleTripDoubleClick(row)}
+                      onDblClick={handleBoardClick}
                     >
                       {/* Desktop Layout (visible on >768px) */}
                       <div class="desktop-row-content">
                         <div class="col-status">
-                          <Show when={isImminent()}>
-                            <span class="status-dot imminent"></span>
-                          </Show>
+                          <StatusDot isImminent={isImminent()} />
                         </div>
                         <div class="col-time" style={{ "line-height": "1.1" }}>
                           <div>{formatRowTime(row.departure_time || '')}</div>
@@ -396,74 +444,42 @@ export default function DepartureBoard() {
                           </Show>
                         </div>
                         <div class="col-route">
-                          <span
-                            class="route-pill"
-                            style={{
-                              "background-color": row.route_color ? `#${row.route_color}` : '#333',
-                              "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
-                            }}
-                          >
-                            {row.route_short_name || '??'}
-                          </span>
+                          <RoutePill row={row} />
                         </div>
                         <div class="col-dest">
-                          <div class="dest-main">{row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }))}</div>
+                          <div class="dest-main">{mainDestText()}</div>
                           <div class="route-long">{row.route_long_name}</div>
                           <Show when={$gameBounds.get().difficulty === 'Easy'}>
                             <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
-                              {findClosestCity({ latitude: row.final_lat, longitude: row.final_lon })} ({formatRowTime(row.final_arrival || '')})
+                              {finalDestText()} ({formatRowTime(row.final_arrival || '')})
                             </div>
                           </Show>
                         </div>
 
                         <div class="col-dir">
-                          <svg
-                            class="dir-icon"
-                            viewBox="0 0 24 24"
-                            style={{
-                              transform: `rotate(${row.bearing || 0}deg)`
-                            }}
-                          >
-                            <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
-                          </svg>
+                          <DirectionIcon bearing={row.bearing} />
                         </div>
 
                         <div class="col-type">{getRouteEmoji(row.route_type)}</div>
                         <div class="col-preview">
-                          <button
-                            class="preview-btn"
-                            onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
-                            title="Preview Trip Route"
-                          >
-                            🔍
-                          </button>
+                          <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
                         </div>
                         <div class="col-board">
-                          <button
-                            class="preview-btn"
-                            onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
+                          <ActionButton
+                            icon="🛂"
                             title={blockingReason() || "Board"}
+                            onClick={handleBoardClick}
                             disabled={loadingTripKey() !== null}
-                          >
-                            <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
-                              <span class="spinner-small"></span>
-                            </Show>
-                          </button>
+                            loading={isLoading()}
+                          />
                         </div>
                         <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
                           <div class="col-board">
-                            <button
-                              class="preview-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(JSON.stringify(row));
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 2000);
-                              }}
+                            <ActionButton
+                              icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
                               title={copied() ? "Copied!" : "Copy raw data to clipboard"}
-                            >
-                              {copied() ? 'Debug data copied to clipboard!' : '💻'}
-                            </button>
+                              onClick={handleCopy}
+                            />
                           </div>
                         </Show>
                       </div>
@@ -475,31 +491,21 @@ export default function DepartureBoard() {
                             <div style={{ display: "flex", "align-items": "center" }}>
                               {formatRowTime(row.departure_time || '')}
                             </div>
-                            <Show when={isImminent()}>
-                              <span class="status-dot imminent" style={{ "margin-left": "4px" }}></span>
-                            </Show>
+                            <StatusDot isImminent={isImminent()} style={{ "margin-left": "4px" }} />
                             <Show when={isTomorrow()}>
                               <div class="mobile-tomorrow">tomorrow</div>
                             </Show>
                           </div>
                           <div class="mobile-route-info">
                             <span class="mobile-emoji">{getRouteEmoji(row.route_type)}</span>
-                            <span
-                              class="route-pill"
-                              style={{
-                                "background-color": row.route_color ? `#${row.route_color}` : '#333',
-                                "color": row.route_text_color ? `#${row.route_text_color}` : '#fff'
-                              }}
-                            >
-                              {row.route_short_name || '??'}
-                            </span>
+                            <RoutePill row={row} />
                           </div>
                           <div class="mobile-dest-arrow">→</div>
                           <div class="mobile-dest-name">
-                            {row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }))}
+                            {mainDestText()}
                             <Show when={$gameBounds.get().difficulty === 'Easy'}>
                               <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
-                                {findClosestCity({ latitude: row.final_lat, longitude: row.final_lon })} ({formatRowTime(row.final_arrival || '')})
+                                {finalDestText()} ({formatRowTime(row.final_arrival || '')})
                               </div>
                             </Show>
                           </div>
@@ -509,49 +515,25 @@ export default function DepartureBoard() {
                             {row.route_long_name}
                           </div>
                           <div class="mobile-actions">
-
                             <div class="col-dir">
-                              <svg
-                                class="dir-icon"
-                                viewBox="0 0 24 24"
-                                style={{
-                                  transform: `rotate(${row.bearing || 0}deg)`
-                                }}
-                              >
-                                <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.93 19.5 20.29L12 2Z" />
-                              </svg>
+                              <DirectionIcon bearing={row.bearing} />
                             </div>
-                            <button
-                              class="preview-btn"
-                              onClick={(e) => { e.stopPropagation(); handlePreviewClick(row); }}
-                              title="Preview Trip Route"
-                            >
-                              🔍
-                            </button>
-                            <button
-                              class="preview-btn"
-                              onClick={(e) => { e.stopPropagation(); handleTripDoubleClick(row); }}
+                            <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
+                            <ActionButton
+                              icon="🛂"
                               title={blockingReason() || "Board"}
+                              onClick={handleBoardClick}
                               disabled={loadingTripKey() !== null}
-                            >
-                              <Show when={loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`} fallback={"🛂"}>
-                                <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>
-                              </Show>
-                            </button>
+                              loading={isLoading()}
+                              spinnerStyle={{ "border-top-color": "#000" }}
+                            />
                             <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
-                              <button
-                                class="preview-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(JSON.stringify(row));
-                                  setCopied(true);
-                                  setTimeout(() => setCopied(false), 2000);
-                                }}
+                              <ActionButton
+                                icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
                                 title={copied() ? "Copied!" : "Copy raw data to clipboard"}
-                                style={{ "color": "#000" }}
-                              >
-                                {copied() ? 'Debug data copied to clipboard!' : '💻'}
-                              </button>
+                                onClick={handleCopy}
+                                buttonStyle={{ "color": "#000" }}
+                              />
                             </Show>
                           </div>
                         </div>
@@ -566,54 +548,27 @@ export default function DepartureBoard() {
       </div>
 
       <style>{`
-        /* Imminent Departure Indicator */
-        .status-dot {
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          margin-right: 8px;
-          vertical-align: middle;
-        }
-
-        .status-dot.imminent {
-          background-color: #ff9800; /* Orange */
-          box-shadow: 0 0 8px #e0b0ff; /* Mauve glow */
-          animation: pulse-orange-mauve 1.5s infinite;
-        }
-
-        @keyframes pulse-orange-mauve {
-          0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7), 0 0 0 0 rgba(224, 176, 255, 0.4); }
-          70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0), 0 0 15px 10px rgba(224, 176, 255, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(224, 176, 255, 0); }
-        }
-
-        @keyframes flash-warning {
-          0%, 100% { background-color: #dc2626; transform: scale(1); }
-          25% { background-color: #fbbf24; transform: scale(1.05); color: #000; }
-          50% { background-color: #dc2626; transform: scale(1); color: #fff; }
-          75% { background-color: #fbbf24; transform: scale(1.05); color: #000; }
-        }
-
-        .flash-animation {
-          animation: flash-warning 0.5s ease-in-out;
-        }
-
-        .spinner-small {
-          display: inline-block;
-          width: 14px;
-          height: 14px;
-          border: 2px solid rgba(255,255,255,0.3);
-          border-radius: 50%;
-          border-top-color: #fff;
-          animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
         .departure-board-overlay {
+          /* Theme Variables - Desktop (SNCF style) */
+          --db-bg: #0064ab;
+          --db-bg-dark: #003a79;
+          --db-header-bg: #0064ab;
+          --db-header-border: #003a79;
+          --db-accent-yellow: #ffed02;
+          --db-text-main: #ffffff;
+          --db-text-muted: rgba(255, 255, 255, 0.6);
+          --db-text-dim: rgba(255, 255, 255, 0.7);
+          --db-error: #dc2626;
+          --db-warning: #ffe96bff;
+          --db-imminent: #ff9800;
+          --db-imminent-glow: #e0b0ff;
+          
+          --db-br-outer: 12px;
+          --db-br-inner: 8px;
+          --db-pad-base: 16px;
+          --db-trans-med: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          --db-shadow: 0 30px 60px rgba(0,0,0,0.5);
+
           position: fixed;
           top: 0;
           left: 0;
@@ -628,6 +583,18 @@ export default function DepartureBoard() {
           transition: all 0.4s ease;
         }
 
+        @media (max-width: 768px) {
+          .departure-board-overlay {
+            /* Theme Variables - Mobile (OEBB style) */
+            --db-header-bg: #c1121c;
+            --db-accent-red: #c1121c;
+            --db-bg: #ffffff;
+            --db-text-main: #333333;
+            --db-br-outer: 20px;
+            align-items: flex-end;
+          }
+        }
+
         .departure-board-overlay.minimized {
           background: transparent;
           backdrop-filter: none;
@@ -635,18 +602,18 @@ export default function DepartureBoard() {
         }
 
         .departure-board {
-          background: #0064ab; /* Official SNCF Blue */
+          background: var(--db-bg);
           width: 90vw;
           max-width: 1000px;
           height: 80vh;
-          border-radius: 12px;
+          border-radius: var(--db-br-outer);
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          box-shadow: 0 30px 60px rgba(0,0,0,0.5);
-          border: 4px solid #003a79;
+          box-shadow: var(--db-shadow);
+          border: 4px solid var(--db-bg-dark);
           position: relative;
-          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: var(--db-trans-med);
           font-family: 'Avenir', 'Inter', -apple-system, sans-serif;
           pointer-events: auto;
           animation: slideIn 0.3s ease-out;
@@ -658,9 +625,9 @@ export default function DepartureBoard() {
           position: absolute;
           bottom: 20px;
           left: 20px;
-          border-radius: 8px;
+          border-radius: var(--db-br-inner);
           box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-          border: 2px solid #003a79;
+          border: 2px solid var(--db-bg-dark);
         }
 
         @keyframes slideIn {
@@ -670,8 +637,8 @@ export default function DepartureBoard() {
 
         .board-header {
           padding: 24px 32px;
-          background: #0064ab;
-          border-bottom: 2px solid #003a79;
+          background: var(--db-header-bg);
+          border-bottom: 2px solid var(--db-bg-dark);
           display: flex;
           align-items: center;
           position: relative;
@@ -691,7 +658,7 @@ export default function DepartureBoard() {
           font-size: 14px;
           text-transform: uppercase;
           letter-spacing: 2px;
-          color: rgba(255,255,255,0.6);
+          color: var(--db-text-muted);
           transition: all 0.3s ease;
         }
 
@@ -705,9 +672,9 @@ export default function DepartureBoard() {
 
         .stop-name {
           font-size: 32px;
-          font-weight: 800;
+          font-weight: 900;
           margin: 0;
-          color: #fff;
+          color: var(--db-accent-yellow);
         }
 
         .departure-board.minimized .stop-name {
@@ -715,7 +682,36 @@ export default function DepartureBoard() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          color: #ffed02;
+          color: var(--db-accent-yellow);
+        }
+
+        .col-status { width: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .col-time { width: 120px; flex-shrink: 0; }
+        .col-route { width: 100px; flex-shrink: 0; }
+        .col-dir { width: 50px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .col-type { width: 80px; text-align: center; flex-shrink: 0; }
+        .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
+        .col-board { width: 60px; text-align: right; flex-shrink: 0; }
+
+        .col-dest { 
+          flex: 1; 
+          color: #fff; 
+          overflow: hidden; 
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          padding-right: 20px;
+        }
+
+        .dest-main {
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: #fff;
+        }
+
+        .route-long {
+          font-size: 0.8rem;
+          color: #a0c4ff;
+          margin-top: 2px;
         }
 
         .departure-board.minimized .board-header {
@@ -772,13 +768,18 @@ export default function DepartureBoard() {
           font-weight: bold;
         }
 
+        .table-row:hover {
+          background: rgba(255, 255, 255, 0.1) !important;
+          box-shadow: inset 0 0 0 1px #fff;
+        }
+
         .header-clock {
           position: absolute;
           left: 50%;
           top: 50%;
           transform: translate(-50%, -50%);
           padding: 8px 20px;
-          border-radius: 8px;
+          border-radius: var(--db-br-inner);
           color: #fff;
           text-align: center;
           border: 1px solid rgba(255,255,255,0.2);
@@ -786,6 +787,7 @@ export default function DepartureBoard() {
           flex-direction: column;
           align-items: center;
           transition: background 1.5s ease;
+          background: var(--clock-bg, transparent);
         }
 
         .departure-board.minimized .header-clock {
@@ -825,16 +827,16 @@ export default function DepartureBoard() {
 
         .type-filter-toolbar {
           padding: 8px 20px;
-          background: #003a79;
+          background: var(--db-bg-dark);
           display: flex;
           gap: 8px;
           overflow-x: auto;
           flex-shrink: 0;
-          scrollbar-width: none; /* Firefox */
+          scrollbar-width: none;
         }
 
         .type-filter-toolbar::-webkit-scrollbar {
-          display: none; /* Chrome/Safari */
+          display: none;
         }
 
         .filter-btn {
@@ -849,18 +851,13 @@ export default function DepartureBoard() {
         }
 
         .filter-btn.active {
-          background: #ffed02;
+          background: var(--db-accent-yellow);
           color: #000;
-        }
-
-        .board-table {
-          width: 100%;
-          padding: 0;
         }
 
         .table-container {
           flex: 1;
-          background: #0064ab;
+          background: var(--db-bg);
           transition: all 0.4s ease;
         }
 
@@ -872,16 +869,16 @@ export default function DepartureBoard() {
 
         .table-head {
           display: flex;
-          background: #003a79;
+          background: var(--db-bg-dark);
           padding: 12px 20px;
-          border-bottom: 2px solid #0064ab;
+          border-bottom: 2px solid var(--db-bg);
         }
 
         .table-head > div {
           font-weight: 800;
           text-transform: uppercase;
           font-size: 0.9rem;
-          color: rgba(255,255,255,0.7);
+          color: var(--db-text-dim);
           letter-spacing: 0.1em;
           display: flex;
           align-items: center;
@@ -895,43 +892,19 @@ export default function DepartureBoard() {
         .table-row {
           display: flex;
           align-items: center;
-          padding: 16px 20px;
+          padding: var(--db-pad-base) 20px;
           border-bottom: 1px solid rgba(255,255,255,0.05);
           transition: background 0.2s;
         }
 
         .table-row:nth-child(even) {
-          background: #003a79 !important;
-        }
-
-        .table-row:hover {
-          background: rgba(255, 255, 255, 0.1) !important;
-          box-shadow: inset 0 0 0 1px #fff;
+          background: var(--db-bg-dark) !important;
         }
 
         .desktop-row-content {
           display: flex;
           align-items: center;
           width: 100%;
-        }
-
-        .col-status { width: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .col-time { width: 120px; flex-shrink: 0; }
-        .col-route { width: 100px; flex-shrink: 0; }
-        .col-dest { 
-          flex: 1; 
-          color: #fff; 
-          overflow: hidden; 
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          padding-right: 20px;
-        }
-
-        .table-body .col-time {
-          color: #ffed02; /* SNCF Time Yellow */
-          font-weight: 900;
-          font-size: 2.2rem;
-          letter-spacing: -0.02em;
         }
 
         .table-body .col-dest {
@@ -946,28 +919,12 @@ export default function DepartureBoard() {
           gap: 4px;
         }
 
-        .table-body .col-type { width: 80px; text-align: center; flex-shrink: 0; border: 1px solid #fff; border-radius: 44px; background: rgba(255,255,255,0.8); }
-        .col-preview { width: 60px; text-align: right; flex-shrink: 0; }
-
-        .col-dir {
-          width: 50px;
-          flex-shrink: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        
         .dir-icon {
           width: 24px;
           height: 24px;
           fill: rgba(255, 255, 255, 0.9);
           filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
           transition: transform 0.2s ease;
-        }
-
-        .control-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
-          transform: scale(1.1);
         }
 
         .preview-btn {
@@ -979,21 +936,6 @@ export default function DepartureBoard() {
           font-size: 14px;
           padding: 2px 6px;
           transition: all 0.2s ease;
-        }
-
-        .preview-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
-          transform: scale(1.1);
-        }
-
-        .table-body .col-time { 
-          font-weight: 700; 
-          color: #ffeb3b; 
-          font-size: 1.1rem; 
-        }
-
-        .table-body .col-type {
-          font-size: 1.5rem;
         }
 
         .route-pill {
@@ -1013,13 +955,6 @@ export default function DepartureBoard() {
           color: #fff;
         }
 
-        .route-long {
-          font-size: 0.8rem;
-          color: #a0c4ff;
-          margin-top: 2px;
-        }
-
-        /* Customize Scrollbar */
         .table-body::-webkit-scrollbar {
           width: 8px;
         }
@@ -1030,21 +965,90 @@ export default function DepartureBoard() {
           background: #004a99;
           border-radius: 4px;
         }
-       @media (max-width: 768px) {
-            .departure-board-overlay {
-              align-items: flex-end; /* Align to bottom like a sheet */
-            }
 
-            .status-dot {
-              margin-top: 10px;
-            }
+        .table-body .col-time {
+          color: var(--db-accent-yellow);
+          font-weight: 700;
+          font-size: 1.1rem;
+          letter-spacing: -0.02em;
+        }
 
-            .type-filter-toolbar {
-              background: #fff;
-              padding-top: 8px;
-              padding-bottom: 12px;
-            }
+        .table-body .col-type {
+          width: 60px;
+          height: 32px;
+          line-height: 32px;
+          text-align: center;
+          flex-shrink: 0;
+          border: 1px solid #fff;
+          border-radius: 44px;
+          background: rgba(255,255,255,0.8);
+          font-size: 1.4rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
 
+        /* Status Dot & Imminent */
+        .status-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          margin-right: 8px;
+          vertical-align: middle;
+        }
+        .status-dot.imminent {
+          background-color: var(--db-imminent);
+          box-shadow: 0 0 8px var(--db-imminent-glow);
+          animation: pulse-orange-mauve 1.5s infinite;
+        }
+        @keyframes pulse-orange-mauve {
+          0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7), 0 0 0 0 rgba(224, 176, 255, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0), 0 0 15px 10px rgba(224, 176, 255, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0), 0 0 0 0 rgba(224, 176, 255, 0); }
+        }
+
+        /* Warning Banners */
+        .banner {
+          padding: 8px;
+          text-align: center;
+          font-weight: bold;
+          font-size: 0.9em;
+          transition: opacity 0.1s;
+        }
+        .banner-error {
+          background: var(--db-error);
+          color: #fff;
+          opacity: 0.9;
+        }
+        .banner-warning {
+          background: var(--db-warning);
+          color: #000;
+        }
+        @keyframes flash-warning {
+          0%, 100% { background-color: var(--db-error); transform: scale(1); }
+          25% { background-color: var(--db-accent-yellow); transform: scale(1.05); color: #000; }
+          50% { background-color: var(--db-error); transform: scale(1); color: #fff; }
+          75% { background-color: var(--db-accent-yellow); transform: scale(1.05); color: #000; }
+        }
+        .flash-animation {
+          animation: flash-warning 0.5s ease-in-out;
+        }
+
+        .spinner-small {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top-color: #fff;
+          animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            .status-dot { margin-top: 10px; }
+            .type-filter-toolbar { background: #fff; padding-top: 8px; padding-bottom: 12px; }
             .filter-btn {
               background: #f0f0f0;
               color: #000;
@@ -1057,276 +1061,53 @@ export default function DepartureBoard() {
               justify-content: center;
               padding: 0;
               font-size: 1.4rem;
-              flex-shrink: 0;
             }
-
             .filter-btn.active {
-              background: #ffed02;
+              background: var(--db-accent-yellow);
               box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
-
-            .dir-icon {
-              fill: #000;
-              filter: none;
-            }
-
-            .departure-board {
-              width: 100%;
-              height: 90vh; /* Taller on mobile for better viewing */
-              border-radius: 20px 20px 0 0; 
-              border: none;
-            }
-
-            .board-header {
-              flex-direction: column;
-              align-items: flex-start;
-              padding: 20px;
-              height: auto;
-              min-height: auto;
-              gap: 12px;
-              background: #c1121c; /* OEBB Red Header */
-            }
-
-            .header-main {
-              width: 100%;
-              padding-right: 60px;
-            }
-
-            .header-main h1 {
-              font-size: 14px;
-              color: rgba(255,255,255,0.9);
-              font-weight: bold;
-              text-transform: none;
-              letter-spacing: normal;
-            }
-
-            .stop-name {
-              font-size: 1rem;
-              color: #fff !important;
-              line-height: 1.2;
-              white-space: normal;
-            }
-
-            .header-clock {
-              position: relative;
-              top: auto;
-              left: auto;
-              transform: none;
-              width: 100%;
-              background: rgba(0,0,0,0.1);
-              border: none;
-              padding: 8px 12px;
-              flex-direction: row;
-              justify-content: space-between;
-              margin: 0;
-            }
-
-            .clock-time {
-               font-size: 1.6rem;
-            }
-
-            .header-controls {
-              top: 20px;
-              right: 20px;
-            }
-
-            .table-head {
-               display: none; /* Hide headers on mobile */
-            }
-
-            .table-row {
-               padding: 16px;
-               border-bottom: 1px solid #eee;
-               background: #fff !important; /* White rows like Scotty */
-               color: #333;
-            }
-
-            .table-row:nth-child(even) {
-               background: #f9f9f9 !important;
-            }
-
-            .desktop-row-content {
-              display: none;
-            }
-
-            .mobile-row-content {
-              display: flex;
-            }
-
-            .mobile-row-top {
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              font-size: 0.8rem;
-            }
-
-            .mobile-time {
-              font-weight: 800;
-              width: 55px;
-              color: #000;
-              display: flex;
-              flex-direction: column;
-              line-height: 1;
-              justify-content: center;
-            }
-
-            .mobile-route-info {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-            }
-
-            .mobile-emoji {
-              font-size: 1.2rem;
-            }
-
-            .mobile-dest-arrow {
-              color: #888;
-              font-weight: 300;
-            }
-
-            .mobile-dest-name {
-              font-weight: 600;
-              color: #000;
-              flex: 1;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-
-            .mobile-row-bottom {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-left: 67px; /* Align with dest name */
-              margin-top: 2px;
-            }
-
-            .mobile-secondary-info {
-              font-size: 0.8rem;
-              color: #666;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              flex: 1;
-              padding-right: 10px;
-            }
-
-            .mobile-tomorrow {
-              color: #c1121c;
-              font-weight: bold;
-              font-size: 0.6rem;
-              margin-top: 2px;
-            }
-
-            .mobile-actions {
-              display: flex;
-              gap: 8px;
-            }
-
-            .table-container {
-               background: #fff !important;
-               display: flex;
-               flex-direction: column;
-               flex: 1;
-               min-height: 0; /* Allow the container to shrink and scroll its contents */
-               overflow: hidden;
-            }
-
-            .table-body {
-               flex: 1;
-               overflow-y: auto !important;
-               -webkit-overflow-scrolling: touch;
-               min-height: 0;
-               max-height: none !important;
-            }
-
-            /* Mobile Scrollbar Style (White/Red) */
-            .table-body::-webkit-scrollbar-track {
-               background: #f0f0f0;
-            }
-            .table-body::-webkit-scrollbar-thumb {
-               background: #c1121c; /* OEBB Red thumb */
-               border-radius: 10px;
-            }
-
-            .route-pill {
-              font-size: 0.6rem;
-              padding: 2px 8px;
-              border-radius: 4px;
-              min-width: 25px;
-              box-shadow: none;
-            }
-
+            .dir-icon { fill: #000; filter: none; }
+            .departure-board { width: 100%; height: 90vh; border-radius: var(--db-br-outer) var(--db-br-outer) 0 0; border: none; }
+            .board-header { flex-direction: column; align-items: flex-start; padding: 20px; height: auto; min-height: auto; gap: 12px; }
+            .header-main h1 { font-size: 14px; color: rgba(255,255,255,0.9); font-weight: bold; text-transform: none; letter-spacing: normal; }
+            .stop-name { font-size: 1rem; color: #fff !important; white-space: normal; }
+            .header-clock { position: relative; width: 100%; background: rgba(0,0,0,0.1); border: none; padding: 8px 12px; flex-direction: row; justify-content: space-between; margin: 0; transform: none; left: auto; top: auto; }
+            .clock-time { font-size: 1.6rem; }
+            .table-head { display: none; }
+            .table-row { padding: 16px; border-bottom: 1px solid #eee; background: #fff !important; color: var(--db-text-main); }
+            .table-row:nth-child(even) { background: #f9f9f9 !important; }
+            .desktop-row-content { display: none; }
+            .mobile-row-content { display: flex; flex-direction: column; gap: 4px; }
+            .mobile-row-top { display: flex; align-items: center; gap: 12px; font-size: 0.8rem; }
+            .mobile-time { font-weight: 800; width: 55px; color: #000; display: flex; flex-direction: column; line-height: 1; justify-content: center; }
+            .mobile-route-info { display: flex; align-items: center; gap: 4px; }
+            .mobile-emoji { font-size: 1.2rem; }
+            .mobile-dest-arrow { color: #888; font-weight: 300; }
+            .mobile-dest-name { font-weight: 600; color: #000; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .mobile-row-bottom { display: flex; justify-content: space-between; align-items: center; margin-left: 67px; margin-top: 2px; }
+            .mobile-secondary-info { font-size: 0.8rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 10px; }
+            .mobile-tomorrow { color: var(--db-accent-red); font-weight: bold; font-size: 0.6rem; margin-top: 2px; }
+            .mobile-actions { display: flex; gap: 8px; }
+            .table-container { background: #fff !important; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+            .table-body { flex: 1; overflow-y: auto !important; -webkit-overflow-scrolling: touch; min-height: 0; max-height: none !important; }
+            .table-body::-webkit-scrollbar-thumb { background: var(--db-accent-red); border-radius: 10px; }
+            .route-pill { font-size: 0.6rem; padding: 2px 8px; border-radius: 4px; min-width: 25px; box-shadow: none; }
             .departure-board.minimized {
               height: 52px;
               width: 260px;
-              max-width: calc(100% - 40px);
-              position: absolute;
               bottom: 24px;
               left: 50%;
               transform: translateX(-50%);
               border-radius: 26px;
-              box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-              background: #c1121c; /* OEBB Red */
-              border: 1px solid rgba(255,255,255,0.2);
-              display: flex;
-              align-items: center;
+              background: var(--db-accent-red);
               padding: 0 16px;
               justify-content: space-between;
-              overflow: hidden;
+              border: 1px solid rgba(255,255,255,0.2);
             }
-
-            .departure-board.minimized .board-header {
-              background: transparent !important;
-              padding: 0;
-              min-height: 0;
-              flex: 1;
-              display: flex;
-              align-items: center;
-              gap: 8px;
-            }
-
-            .departure-board.minimized .header-main {
-              padding: 0;
-            }
-
-            .departure-board.minimized .stop-name {
-              font-size: 1.1rem;
-              margin: 0;
-              color: #fff !important;
-              max-width: 130px;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
-
-            .departure-board.minimized .header-controls {
-               position: static;
-               transform: none;
-               display: flex;
-               gap: 8px;
-            }
-
-            .departure-board.minimized .type-filter-toolbar,
-            .departure-board.minimized .table-container,
-            .departure-board.minimized .header-clock,
-            .departure-board.minimized .header-main h1 {
-              display: none !important;
-            }
-
-            .departure-board.minimized .control-btn {
-               background: rgba(255, 255, 255, 0.2);
-               border: 1px solid rgba(255, 255, 255, 0.3);
-               color: #fff;
-               width: 18px;
-               height: 18px;
-               font-size: 14px;
-            }
-
-            .departure-board.minimized .cross-line {
-              width: 12px;
-            }
+            .departure-board.minimized .board-header { background: transparent !important; }
+            .departure-board.minimized .stop-name { font-size: 1.1rem; max-width: 130px; }
+            .departure-board.minimized .control-btn { background: rgba(255, 255, 255, 0.2); width: 18px; height: 18px; font-size: 14px; }
+            .departure-board.minimized .cross-line { width: 12px; }
         }
       `}</style>
     </Show>
