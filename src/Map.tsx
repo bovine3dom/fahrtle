@@ -369,9 +369,8 @@ export default function MapView() {
       mapInstance!.addLayer({
         id: 'preview-route-line', type: 'line', source: 'preview-route',
         paint: {
-          'line-color': '#000',
-          'line-width': 4,
-          'line-dasharray': [2, 1]
+          'line-color': '#444',
+          'line-width': 6,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
@@ -512,6 +511,7 @@ export default function MapView() {
                   return row;
                 })
                 $departureBoardResults.set(data);
+                $previewRoute.set(null);
                 $boardMinimized.set(false);
               }
             })
