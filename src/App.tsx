@@ -537,7 +537,10 @@ function App() {
                     <For each={sortedPlayerIds()}>
                       {(id, index) => {
                         const p = () => players()[id];
-                        const isFinished = () => p().finishTime != null;
+                        const isFinished = createMemo(() => p().finishTime != null);
+                        const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time()));
+                        const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
+                        const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
                         // onClick={() => flyToPlayer(p().id)}
                         return (
@@ -590,45 +593,41 @@ function App() {
                                 </Show>
                                 {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && '💤'}
                               </div>
-                              {(() => {
-                                if (isFinished()) {
-                                  return (
-                                    <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
-                                      Finished in {formatDuration(p().finishTime!)}
-                                    </div>
-                                  );
-                                }
-                                const nextWp = p().waypoints.find((wp: any) => wp.arrivalTime > time());
-                                if (nextWp && nextWp.stopName) {
-                                  return (
-                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
-                                      <Show when={nextWp.route_short_name}>
-                                        <span
-                                          class="route-pill"
-                                          style={{
-                                            "background-color": nextWp.route_color ? `#${nextWp.route_color}` : '#333',
-                                            "color": '#fff'
-                                          }}
-                                        >
-                                          {nextWp.route_short_name}
-                                        </span>
-                                      </Show>
-                                      {nextWp.emoji + " " || ''} &rarr; {nextWp.stopName}
-                                    </div>
-                                  );
-                                } else if (p().viewingStopName) {
-                                  return (
+                              <Show when={isFinished()}>
+                                <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
+                                  Finished in {formatDuration(p().finishTime!)}
+                                </div>
+                              </Show>
+                              <Show when={!isFinished()}>
+                                <Show when={nextWp()} fallback={
+                                  <Show when={p().viewingStopName}>
                                     <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
                                       🔍 Looking at departures @ {p().viewingStopName}
                                     </div>
-                                  );
-                                }
-                                return null;
-                              })()}
+                                  </Show>
+                                }>
+                                  {(wp) => (
+                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                      <Show when={wp().route_short_name}>
+                                        <span
+                                          class="route-pill"
+                                          style={{
+                                            "background-color": wp().route_color ? `#${wp().route_color}` : '#333',
+                                            "color": '#fff'
+                                          }}
+                                        >
+                                          {wp().route_short_name}
+                                        </span>
+                                      </Show>
+                                      {wp().emoji + " " || ''} &rarr; {wp().stopName}
+                                    </div>
+                                  )}
+                                </Show>
+                              </Show>
                             </div>
 
                             {/* Speed / Ready Status */}
-                            {roomState() === 'RUNNING' && !isFinished() && (
+                            <Show when={roomState() === 'RUNNING' && !isFinished()}>
                               <span style={{
                                 'font-size': '0.75em',
                                 'font-family': 'monospace',
@@ -637,9 +636,9 @@ function App() {
                                 'min-width': '60px',
                                 'text-align': 'right'
                               }}>
-                                {(speeds()[p().id] || 0).toFixed(0)} km/h {sensibleNumber(distances()[p().id] || 0)} km
+                                {mySpeed()} km/h {myDist()} km
                               </span>
-                            )}
+                            </Show>
                             {roomState() !== 'RUNNING' && (
                               p().isReady ? (
                                 <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
@@ -717,42 +716,45 @@ function App() {
                   </button>
 
                   {/* Snooze Button */}
-                  {roomState() === 'RUNNING' && (() => {
-                    const me = players()[myId()!];
-                    const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
-                    return (
-                      <button
-                        onClick={() => toggleSnooze()}
-                        style={{
-                          width: '100%', padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
-                          color: isSnoozing ? 'white' : '#475569',
-                          border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                          'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                          'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                        }}
-                        title="Request 500x speed simulation"
-                      >
-                        <span>{isSnoozing ? '⏩' : '💤'}</span> {isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
-                      </button>
-                    );
-                  })()}
-                  {(() => {
-                    const me = players()[myId()!];
-                    if ((roomState() === 'RUNNING') && me.finishTime)
-                      return <button
-                        onClick={() => setShowWinModal(true)}
-                        style={{
-                          width: '100%', padding: '8px', 'background': '#f1f5f9',
-                          color: '#475569',
-                          border: '1px solid #cbd5e1',
-                          'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                          'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                        }}
-                        title="Show results"
-                      >
-                        Show results 📝
-                      </button>
-                  })()}
+                  <Show when={roomState() === 'RUNNING'}>
+                    <Show when={players()[myId()!]}>
+                      {(me) => {
+                        const isSnoozing = createMemo(() => (me().desiredRate || 1.0) > 1.0);
+                        return (
+                          <>
+                            <button
+                              onClick={() => toggleSnooze()}
+                              style={{
+                                width: '100%', padding: '8px', 'background': isSnoozing() ? '#3b82f6' : '#f1f5f9',
+                                color: isSnoozing() ? 'white' : '#475569',
+                                border: isSnoozing() ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                                'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                                'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                              }}
+                              title="Request 500x speed simulation"
+                            >
+                              <span>{isSnoozing() ? '⏩' : '💤'}</span> {isSnoozing() ? 'Snoozing (500x)' : 'Snooze'}
+                            </button>
+                            <Show when={me().finishTime}>
+                              <button
+                                onClick={() => setShowWinModal(true)}
+                                style={{
+                                  width: '100%', padding: '8px', 'background': '#f1f5f9',
+                                  color: '#475569',
+                                  border: '1px solid #cbd5e1',
+                                  'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                                  'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                                }}
+                                title="Show results"
+                              >
+                                Show results 📝
+                              </button>
+                            </Show>
+                          </>
+                        );
+                      }}
+                    </Show>
+                  </Show>
                   <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
                     {roomState() === 'RUNNING' ? <a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8' }}>Click map for departures, double click to board or walk<br />Click here for more information</a> : 'Waiting for game to start...'}
                   </div>
