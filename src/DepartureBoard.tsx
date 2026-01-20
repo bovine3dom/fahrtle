@@ -131,6 +131,29 @@ export default function DepartureBoard() {
     return null;
   });
 
+  const isPreviewImminent = createMemo(() => {
+    const p = preview();
+    if (!p) return false;
+    const depSeconds = getRowSeconds(p.row.departure_time || '');
+    const now = currentTime();
+    const zone = stopZone();
+    const localSeconds = getLocalSeconds(now, zone);
+    const diff = depSeconds - localSeconds;
+    return diff > 0 && diff <= 120;
+  });
+
+  createEffect(() => {
+    const p = preview();
+    if (!p) return;
+    const depSeconds = getRowSeconds(p.row.departure_time || '');
+    const now = currentTime();
+    const zone = stopZone();
+    const localSeconds = getLocalSeconds(now, zone);
+    if (localSeconds > depSeconds + 10) {
+      $previewRoute.set(null);
+    }
+  });
+
   createEffect(() => {
     if (!results() || results()!.length === 0) {
       $boardMinimized.set(false);
@@ -339,6 +362,7 @@ export default function DepartureBoard() {
                 <div class="header-main preview-header">
                   <div class="preview-details">
                     <div class="preview-time-line">
+                      <StatusDot isImminent={isPreviewImminent()} />
                       <span class="preview-time">{formatRowTime(p().row.departure_time || '')}</span>
                       <RoutePill row={p().row} class="preview-pill" />
                       <span class="preview-type">{getRouteEmoji(p().row.route_type)}</span>
