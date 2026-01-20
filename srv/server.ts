@@ -155,7 +155,7 @@ const server = serve<WSData>({
             lastRealTime: now,
             playbackRate: 1.0,
             loopInterval: setInterval(() => updateRoom(roomId), 100),
-            difficulty: 'Normal'
+            difficulty: 'Easy'
           };
           rooms.set(roomId, room);
           logStats(`[Room: ${roomId}]: New room created.`);

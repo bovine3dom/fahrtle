@@ -36,7 +36,7 @@ function App() {
   const [startStr, setStartStr] = createSignal("");
   const [startTimeStr, setStartTimeStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
-  const [diff, setDiff] = createSignal<Difficulty>("Normal");
+  const [diff, setDiff] = createSignal<Difficulty>("Easy");
   const [showWinModal, setShowWinModal] = createSignal(false);
 
   // victory handler

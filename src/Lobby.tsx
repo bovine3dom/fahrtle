@@ -15,7 +15,7 @@ export default function Lobby() {
   const [room, setRoom] = createSignal(localStorage.getItem('fahrtle_room') || generateRandomRoom());
   const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
-  const [difficulty, setDifficulty] = createSignal<Difficulty>('Normal');
+  const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
 
   const handleJoin = (e?: Event) => {
     e?.preventDefault();
