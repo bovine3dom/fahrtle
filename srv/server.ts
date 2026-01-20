@@ -52,6 +52,8 @@ type Room = {
 
   // Game Loop
   loopInterval: ReturnType<typeof setInterval>;
+
+  difficulty: 'Easy' | 'Normal' | 'Transport nerd';
 };
 
 const rooms = new Map<string, Room>();
@@ -152,7 +154,8 @@ const server = serve<WSData>({
             virtualTime: now,
             lastRealTime: now,
             playbackRate: 1.0,
-            loopInterval: setInterval(() => updateRoom(roomId), 100)
+            loopInterval: setInterval(() => updateRoom(roomId), 100),
+            difficulty: 'Normal'
           };
           rooms.set(roomId, room);
           logStats(`[Room: ${roomId}]: New room created.`);
@@ -204,6 +207,7 @@ const server = serve<WSData>({
           serverTime: room.virtualTime,
           startPos: room.startPos,
           finishPos: room.finishPos,
+          difficulty: room.difficulty,
           realTime: now,
           rate: room.state === 'RUNNING' ? room.playbackRate : 0,
           players: room.players
@@ -279,6 +283,7 @@ const server = serve<WSData>({
         const prevStart = room.startPos;
         room.startPos = message.startPos; // Expecting [lat, lng] or null
         room.finishPos = message.finishPos;
+        room.difficulty = message.difficulty || 'Normal';
 
         if (message.startTime) {
           room.virtualTime = message.startTime;
@@ -565,6 +570,7 @@ function broadcastRoomState(room: Room) {
     gameStartTime: room.gameStartTime,
     startPos: room.startPos,
     finishPos: room.finishPos,
+    difficulty: room.difficulty,
     serverTime: room.virtualTime,
     realTime: Date.now(),
     rate: room.state === 'RUNNING' ? room.playbackRate : 0

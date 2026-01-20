@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, findClosestCity } from './utils/geo';
@@ -388,8 +388,13 @@ export default function DepartureBoard() {
                           </span>
                         </div>
                         <div class="col-dest">
-                          <div class="dest-main">{row.trip_headsign || (bearingToCardinal(row.bearing)+ " via " + findClosestCity({latitude: row.next_lat, longitude: row.next_lon}))}</div>
+                          <div class="dest-main">{row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }))}</div>
                           <div class="route-long">{row.route_long_name}</div>
+                          <Show when={$gameBounds.get().difficulty === 'Easy'}>
+                            <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
+                              {findClosestCity({ latitude: row.final_lat, longitude: row.final_lon })} ({formatRowTime(row.final_arrival || '')})
+                            </div>
+                          </Show>
                         </div>
 
                         <div class="col-dir">
@@ -457,6 +462,11 @@ export default function DepartureBoard() {
                           <div class="mobile-dest-arrow">→</div>
                           <div class="mobile-dest-name">
                             {row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }))}
+                            <Show when={$gameBounds.get().difficulty === 'Easy'}>
+                              <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
+                                {findClosestCity({ latitude: row.final_lat, longitude: row.final_lon })} ({formatRowTime(row.final_arrival || '')})
+                              </div>
+                            </Show>
                           </div>
                         </div>
                         <div class="mobile-row-bottom">

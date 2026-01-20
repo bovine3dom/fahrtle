@@ -1,6 +1,6 @@
 // ==> src/Lobby.tsx <==
 import { createEffect, createSignal, onMount } from 'solid-js';
-import { connectAndJoin } from './store';
+import { connectAndJoin, type Difficulty } from './store';
 import { generatePilotName } from './names';
 import bgImage from './assets/h3_hero.png';
 import favicon from '../public/favicon.svg';
@@ -15,6 +15,7 @@ export default function Lobby() {
   const [room, setRoom] = createSignal(localStorage.getItem('fahrtle_room') || generateRandomRoom());
   const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
+  const [difficulty, setDifficulty] = createSignal<Difficulty>('Normal');
 
   const handleJoin = (e?: Event) => {
     e?.preventDefault();
@@ -28,16 +29,23 @@ export default function Lobby() {
       const startParam = url.searchParams.get('s');
       const finishParam = url.searchParams.get('f');
       const timeParam = url.searchParams.get('t');
+      const difficultyParam = url.searchParams.get('d') as Difficulty;
       let initialBounds;
 
-      if (startParam || finishParam || timeParam) {
+      if (startParam || finishParam || timeParam || difficultyParam) {
         const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
-        initialBounds = { start: parse(startParam), finish: parse(finishParam), time: decodeURIComponent(timeParam || '') };
+        initialBounds = {
+          start: parse(startParam),
+          finish: parse(finishParam),
+          time: decodeURIComponent(timeParam || ''),
+          difficulty: difficultyParam || difficulty()
+        };
       }
 
       url.searchParams.delete('s');
       url.searchParams.delete('f');
       url.searchParams.delete('t');
+      url.searchParams.delete('d');
       url.searchParams.set('room', room());
       window.history.replaceState(null, '', url);
       connectAndJoin(room(), user(), color(), initialBounds);
@@ -47,6 +55,10 @@ export default function Lobby() {
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const sharedRoom = params.get('room');
+    const sharedDifficulty = params.get('d') as Difficulty;
+    if (sharedDifficulty) {
+      setDifficulty(sharedDifficulty);
+    }
     if (sharedRoom) {
       setRoom(sharedRoom);
       // auto-join to handle reloads

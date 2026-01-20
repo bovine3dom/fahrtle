@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -36,6 +36,7 @@ function App() {
   const [startStr, setStartStr] = createSignal("");
   const [startTimeStr, setStartTimeStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
+  const [diff, setDiff] = createSignal<Difficulty>("Normal");
   const [showWinModal, setShowWinModal] = createSignal(false);
 
   // victory handler
@@ -110,6 +111,8 @@ function App() {
       setStartTimeStr(serverTimeStr);
     }
     else if (!b.time && !startTimeStr()) setStartTimeStr("");
+
+    setDiff(b.difficulty);
   });
 
 
@@ -149,6 +152,8 @@ function App() {
       if (normalizedUserTime !== serverTimeStr) return false;
     }
 
+    if (b.difficulty !== diff()) return false;
+
     return checkField(startStr(), b.start) && checkField(finishStr(), b.finish);
   });
 
@@ -163,7 +168,7 @@ function App() {
       if (p) ts = p;
     }
 
-    setGameBounds(s, f, ts);
+    setGameBounds(s, f, ts, diff());
   };
 
   const togglePicker = (mode: 'start' | 'finish') => {
@@ -472,6 +477,26 @@ function App() {
                         >
                           🧭
                         </button>
+                      </div>
+                    </div>
+                    <div style={{ 'margin-bottom': '12px' }}>
+                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Difficulty: </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="1"
+                        value={['Easy', 'Normal', 'Transport nerd'].indexOf(diff())}
+                        onInput={e => {
+                          const values: Difficulty[] = ['Easy', 'Normal', 'Transport nerd'];
+                          setDiff(values[parseInt(e.currentTarget.value)]);
+                        }}
+                        style={{ width: '100%', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', 'justify-content': 'space-between', 'font-size': '0.65rem', 'color': '#64748b' }}>
+                        <span style={{ opacity: diff() === 'Easy' ? 1 : 0.5 }}>Easy</span>
+                        <span style={{ opacity: diff() === 'Normal' ? 1 : 0.5 }}>Normal</span>
+                        <span style={{ opacity: diff() === 'Transport nerd' ? 1 : 0.5 }}>Nerd</span>
                       </div>
                     </div>
 

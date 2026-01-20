@@ -1,4 +1,4 @@
-import type { Player } from '../store';
+import type { Player, Difficulty } from '../store';
 import { formatRowTime, sensibleNumber } from './format';
 import { findClosestCity, haversineDist } from './geo';
 import { formatDuration } from './time';
@@ -22,7 +22,7 @@ const getTravelSummaryObj = (player: Player) => {
 import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number }, stealth = false) => {
+export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
     let travel = stealth ? waypoints.map((wp) => { if (wp.emoji == "🐾") return; return `${wp.emoji}`; }).filter(s => s).join('') : waypoints.map((wp) => {
         if (wp.emoji == "🐾") return;
@@ -39,6 +39,9 @@ export const getTravelSummary = (player: Player, gameBounds: { start: [number, n
     }
     if (gameBounds.finish) {
         url.searchParams.set('f', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
+    }
+    if (gameBounds.difficulty) {
+        url.searchParams.set('d', gameBounds.difficulty);
     }
     if (gameBounds.time && gameBounds.start) {
         const tz = getTimeZone(gameBounds.start[0], gameBounds.start[1]);
