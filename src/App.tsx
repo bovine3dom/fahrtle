@@ -261,7 +261,7 @@ function App() {
       {!room() ? (
         <Lobby />
       ) : (
-        <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
 
           {/* Overlay UI */}
           <div style={{
@@ -271,7 +271,7 @@ function App() {
             'width': minimized() ? '280px' : 'auto',
             'min-width': '200px',
             'max-width': 'calc(100vw - 20px)',
-            'max-height': 'calc(100vh - 100px)',
+            'max-height': 'calc(100% - 100px)',
             'display': 'flex',
             'flex-direction': 'column',
             transition: 'all 0.2s ease-in-out'
@@ -764,7 +764,7 @@ function App() {
 
           <Suspense fallback={
             <div style={{
-              color: 'white', background: '#333', height: '100vh',
+              color: 'white', background: '#333', height: '100%',
               display: 'flex', 'justify-content': 'center', 'align-items': 'center'
             }}>
               Loading Map Engine...
