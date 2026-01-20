@@ -100,7 +100,8 @@ const updateStops = async (map: maplibregl.Map) => {
 
   const center = map.getCenter();
   const now = Date.now();
-  if (lastUpdatePos) {
+
+  if ($isFollowing.get() && lastUpdatePos) {
     const dist = haversineDist([center.lng, center.lat], lastUpdatePos);
     // don't update if we haven't moved at least 100m and it's been less than 5 seconds
     if (dist !== null && dist < 0.1 && (now - lastUpdateTime) < 5000) {
