@@ -355,6 +355,8 @@ export default function DepartureBoard() {
                     return diff > 0 && diff <= 120;
                   });
 
+                  const [copied, setCopied] = createSignal(false);
+
                   return (
                     <div
                       class="table-row"
@@ -431,6 +433,22 @@ export default function DepartureBoard() {
                             </Show>
                           </button>
                         </div>
+                        <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
+                          <div class="col-board">
+                            <button
+                              class="preview-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(JSON.stringify(row));
+                                setCopied(true);
+                                setTimeout(() => setCopied(false), 2000);
+                              }}
+                              title={copied() ? "Copied!" : "Copy raw data to clipboard"}
+                            >
+                              {copied() ? 'Debug data copied to clipboard!' : '💻'}
+                            </button>
+                          </div>
+                        </Show>
                       </div>
 
                       {/* Mobile Layout (visible on <=768px) */}
@@ -503,6 +521,21 @@ export default function DepartureBoard() {
                                 <span class="spinner-small" style={{ "border-top-color": "#000" }}></span>
                               </Show>
                             </button>
+                            <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
+                              <button
+                                class="preview-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(JSON.stringify(row));
+                                  setCopied(true);
+                                  setTimeout(() => setCopied(false), 2000);
+                                }}
+                                title={copied() ? "Copied!" : "Copy raw data to clipboard"}
+                                style={{ "color": "#000" }}
+                              >
+                                {copied() ? 'Debug data copied to clipboard!' : '💻'}
+                              </button>
+                            </Show>
                           </div>
                         </div>
                       </div>
