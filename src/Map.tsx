@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } fr
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -12,6 +12,7 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
+import { throttle } from 'throttle-debounce';
 
 let mapInstance: maplibregl.Map | undefined;
 
@@ -408,12 +409,14 @@ export default function MapView() {
 
       let clickTimeout: any = null;
 
-      mapInstance!.on('moveend', () => {
-        if (mapInstance) updateStops(mapInstance);
+      const throttledUpdate = throttle(200, () => {
+        if (mapInstance) {
+          updateStops(mapInstance);
+          $mapZoom.set(mapInstance.getZoom());
+        }
       });
-      mapInstance!.on('zoomend', () => {
-        if (mapInstance) updateStops(mapInstance);
-      });
+      mapInstance!.on('moveend', throttledUpdate);
+      mapInstance!.on('zoomend', throttledUpdate);
 
       const disableFollowing = () => $isFollowing.set(false);
       mapInstance!.on('dragstart', disableFollowing);
@@ -517,7 +520,9 @@ export default function MapView() {
           clickTimeout = null;
         }, 300);
       });
-      mapInstance && updateStops(mapInstance);
+      if (mapInstance) {
+        throttledUpdate();
+      }
       setMapReady(true);
       startAnimationLoop();
     });

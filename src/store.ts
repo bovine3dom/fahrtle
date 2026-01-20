@@ -113,6 +113,7 @@ export const $gameBounds = atom<{ start: [number, number] | null, finish: [numbe
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
+export const $mapZoom = atom(14);
 
 let ws: WebSocket | null = null;
 

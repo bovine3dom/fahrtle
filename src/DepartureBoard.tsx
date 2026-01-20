@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, findClosestCity } from './utils/geo';
@@ -16,6 +16,7 @@ export default function DepartureBoard() {
 
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
+  const mapZoom = useStore($mapZoom);
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
   const [isTooFar, setIsTooFar] = createSignal(false);
@@ -305,6 +306,22 @@ export default function DepartureBoard() {
               }}
             >
               {blockingReason()}
+            </div>
+          </Show>
+
+          <Show when={mapZoom() < 16}>
+            <div
+              style={{
+                background: '#ffe96bff',
+                color: '#000',
+                padding: '8px',
+                'text-align': 'center',
+                'font-weight': 'bold',
+                'font-size': '0.9em',
+                transition: 'opacity 0.1s',
+              }}
+            >
+              ⚠️ Some stops are hidden until you zoom in further
             </div>
           </Show>
 
