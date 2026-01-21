@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } fr
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $boardMode, $lastClickContext } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -490,36 +490,50 @@ export default function MapView() {
           const localDate = new Date(localDateStr);
           const hour = localDate.getHours();
           const minute = localDate.getMinutes();
+          $stopTimeZone.set(stopZone);
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const targetMinutes = hour * 60 + minute;
-          const query = `
-            SELECT *
-            FROM transitous_everything_20260117_edgelist_fahrtle
-            WHERE h3 IN (${h3Conditions})
-            ORDER by (
-              ((toHour(departure_time) * 60 + toMinute(departure_time)) - ${targetMinutes} + 1440) % 1440
-            ) ASC
-            LIMIT 100
-          `;
 
-          chQuery(query)
-            .then(res => {
-              if (res && res.data) {
-                const data = res.data.map((row: DepartureResult) => {
-                  row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
-                  return row;
-                })
-                $departureBoardResults.set(data);
-                $previewRoute.set(null);
-                $boardMinimized.set(false);
-              }
-            })
-            .catch(err => console.error(`[ClickHouse] Query failed:`, err));
+          $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone });
 
           clickTimeout = null;
         }, 300);
       });
+
+      createEffect(() => {
+        const context = useStore($lastClickContext)();
+        const mode = useStore($boardMode)();
+        if (!context) return;
+
+        const timeField = mode === 'departures' ? 'departure_time' : 'next_arrival';
+        const h3Field = mode === 'departures' ? 'h3' : 'next_h3';
+
+        const query = `
+          SELECT *
+          FROM transitous_everything_20260117_edgelist_fahrtle
+          WHERE ${h3Field} IN (${context.h3Conditions})
+          ORDER by (
+            ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context.targetMinutes} + 1440) % 1440
+          ) ASC
+          LIMIT 100
+        `;
+
+        chQuery(query)
+          .then(res => {
+            if (res && res.data) {
+              const data = res.data.map((row: DepartureResult) => {
+                row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
+                return row;
+              })
+              $departureBoardResults.set(data);
+              $previewRoute.set(null);
+              $boardMinimized.set(false);
+            }
+          })
+          .catch(err => console.error(`[ClickHouse] Query failed:`, err));
+      });
+
       if (mapInstance) {
         throttledUpdate();
       }

@@ -1,10 +1,10 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom, $boardMode } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, findClosestCity } from './utils/geo';
 import { chQuery } from './clickhouse';
-import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel } from './timezone';
+import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel, getArrivalLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
@@ -69,6 +69,7 @@ export default function DepartureBoard() {
   const results = useStore($departureBoardResults);
   const currentTime = useStore($clock);
   const roomState = useStore($roomState);
+  const mode = useStore($boardMode);
 
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
@@ -134,7 +135,8 @@ export default function DepartureBoard() {
   const isPreviewImminent = createMemo(() => {
     const p = preview();
     if (!p) return false;
-    const depSeconds = getRowSeconds(p.row.departure_time || '');
+    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
+    const depSeconds = getRowSeconds(timeVal || '');
     const now = currentTime();
     const zone = stopZone();
     const localSeconds = getLocalSeconds(now, zone);
@@ -145,7 +147,8 @@ export default function DepartureBoard() {
   createEffect(() => {
     const p = preview();
     if (!p) return;
-    const depSeconds = getRowSeconds(p.row.departure_time || '');
+    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
+    const depSeconds = getRowSeconds(timeVal || '');
     const now = currentTime();
     const zone = stopZone();
     const localSeconds = getLocalSeconds(now, zone);
@@ -184,11 +187,13 @@ export default function DepartureBoard() {
     const now = currentTime();
     const zone = stopZone();
     const localSeconds = getLocalSeconds(now, zone);
+    const currentMode = mode();
 
     const filtered = []
     let seenNonTomorrow = false;
     for (const row of raw) {
-      const depSeconds = getRowSeconds(row.departure_time || '');
+      const timeVal = currentMode === 'departures' ? row.departure_time : row.next_arrival;
+      const depSeconds = getRowSeconds(timeVal || '');
       const isRowTomorrow = depSeconds < localSeconds;
       if (isRowTomorrow) {
         if (seenNonTomorrow) {
@@ -218,21 +223,22 @@ export default function DepartureBoard() {
   });
 
   const close = () => {
+    // $boardMode.set('departures'); // eugh but reactivity causes the board to pop up instantly
     $departureBoardResults.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
     $previewRoute.set(null);
   };
 
-  const handlePreviewClick = (row: DepartureResult) => {
+  const handlePreviewClick = (row: DepartureResult, direction: "forwards" | "backwards" = "forwards") => {
     const query = `
           SELECT stop_lat, stop_lon
           FROM transitous_everything_20260117_stop_times_one_day_even_saner
           WHERE "ru.source" = '${row['source']}'
             AND "ru.trip_id" = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
-            AND departure_time >= '${row.departure_time}'
-          ORDER BY departure_time ASC
+            AND departure_time ${direction === 'forwards' ? '>=' : '<='} '${direction === 'forwards' ? row.departure_time : row.next_arrival}'
+          ORDER BY departure_time ${direction === 'forwards' ? 'ASC' : 'DESC'}
           LIMIT 100
         `;
 
@@ -343,7 +349,7 @@ export default function DepartureBoard() {
     <Show when={results() && results()!.length > 0}>
       <div
         class="departure-board-overlay"
-        classList={{ minimized: isMinimized() }}
+        classList={{ minimized: isMinimized(), 'arrivals-mode': mode() === 'arrivals' }}
         onClick={close}
       >
         <div
@@ -354,7 +360,29 @@ export default function DepartureBoard() {
           <div class="board-header">
             <Show when={preview()} fallback={
               <div class="header-main">
-                <h1>{getDepartureLabel(getTimeZoneLanguage(stopZone()))}</h1>
+                <div class="mode-switcher">
+                  <div
+                    class="mode-option"
+                    classList={{ active: mode() === 'departures' }}
+                    onClick={() => $boardMode.set('departures')}
+                  >
+                    {getDepartureLabel(getTimeZoneLanguage(stopZone()))}
+                  </div>
+                  <div
+                    class="mode-option"
+                    classList={{ active: mode() === 'arrivals' }}
+                    onClick={() => $boardMode.set('arrivals')}
+                  >
+                    {getArrivalLabel(getTimeZoneLanguage(stopZone()))}
+                  </div>
+                  <div
+                    class="mode-indicator"
+                    style={{
+                      transform: `translateX(${mode() === 'departures' ? '0' : '100'}%)`,
+                      background: mode() === 'arrivals' ? '#3cd578' : '#31a9ff',
+                    }}
+                  />
+                </div>
                 <div class="stop-name">
                   {deduplicatedResults()[0]?.stop_name || 'Railway Station'}
                 </div>
@@ -365,7 +393,7 @@ export default function DepartureBoard() {
                   <div class="preview-details">
                     <div class="preview-time-line">
                       <StatusDot isImminent={isPreviewImminent()} />
-                      <span class="preview-time">{formatRowTime(p().row.departure_time || '')}</span>
+                      <span class="preview-time">{formatRowTime((mode() === 'departures' ? p().row.departure_time : p().row.next_arrival) || '')}</span>
                       <RoutePill row={p().row} class="preview-pill" />
                       <span class="preview-type">{getRouteEmoji(p().row.route_type)}</span>
                     </div>
@@ -375,7 +403,7 @@ export default function DepartureBoard() {
               )}
             </Show>
             <div class="header-controls">
-              <Show when={preview()}>
+              <Show when={mode() === 'departures' ? preview() : null}>
                 {(p) => (
                   <ActionButton
                     icon="🛂"
@@ -455,9 +483,9 @@ export default function DepartureBoard() {
           <div class="table-container">
             <div class="table-head">
               <div class="col-status"></div>
-              <div class="col-time">Time</div>
+              <div class="col-time">{mode() === 'departures' ? 'Dep.' : 'Arr.'}</div>
               <div class="col-route">Line</div>
-              <div class="col-dest">Destination</div>
+              <div class="col-dest">{mode() === 'departures' ? 'Destination' : 'Route name'}</div>
               <div class="col-dir">Dir</div> {/* New Header */}
               <div class="col-type">Type</div>
               <div class="col-preview"></div>
@@ -470,12 +498,14 @@ export default function DepartureBoard() {
                     const now = currentTime();
                     const zone = stopZone();
                     const localSeconds = getLocalSeconds(now, zone);
-                    const depSeconds = getRowSeconds(row.departure_time || '');
+                    const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
+                    const depSeconds = getRowSeconds(timeVal || '');
                     return depSeconds < localSeconds;
                   });
 
                   const isImminent = createMemo(() => {
-                    const depSeconds = getRowSeconds(row.departure_time || '');
+                    const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
+                    const depSeconds = getRowSeconds(timeVal || '');
                     const now = currentTime();
                     const zone = stopZone();
                     const localSeconds = getLocalSeconds(now, zone);
@@ -485,11 +515,14 @@ export default function DepartureBoard() {
 
                   const [copied, setCopied] = createSignal(false);
 
-                  const mainDestText = createMemo(() => row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon })));
-                  const finalDestText = createMemo(() => findClosestCity({ latitude: row.final_lat, longitude: row.final_lon }));
+                  const mainDestText = createMemo(() => {
+                    // todo: think about arrivals
+                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }));
+                  });
+                  const finalDestText = createMemo(() => findClosestCity({ latitude: $boardMode.get() === 'departures' ? row.final_lat : row.stop_lat, longitude: $boardMode.get() === 'departures' ? row.final_lon : row.stop_lon }));
 
                   const handleBoardClick = () => handleTripDoubleClick(row);
-                  const handlePreview = () => handlePreviewClick(row);
+                  const handlePreview = () => handlePreviewClick(row, $boardMode.get() === 'departures' ? 'forwards' : 'backwards');
                   const handleCopy = () => {
                     navigator.clipboard.writeText(JSON.stringify(row));
                     setCopied(true);
@@ -510,7 +543,7 @@ export default function DepartureBoard() {
                           <StatusDot isImminent={isImminent()} />
                         </div>
                         <div class="col-time" style={{ "line-height": "1.1" }}>
-                          <div>{formatRowTime(row.departure_time || '')}</div>
+                          <div>{formatRowTime((mode() === 'departures' ? row.departure_time : row.next_arrival) || '')}</div>
                           <Show when={isTomorrow()}>
                             <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
                               (tmrw.)
@@ -525,28 +558,30 @@ export default function DepartureBoard() {
                           <div class="route-long">{row.route_long_name}</div>
                           <Show when={$gameBounds.get().difficulty === 'Easy'}>
                             <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
-                              {finalDestText()} ({formatRowTime(row.final_arrival || '')})
+                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')})
                             </div>
                           </Show>
                         </div>
 
                         <div class="col-dir">
-                          <DirectionIcon bearing={row.bearing} />
+                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : (row.bearing + 180) % 360} />
                         </div>
 
                         <div class="col-type">{getRouteEmoji(row.route_type)}</div>
                         <div class="col-preview">
                           <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
                         </div>
-                        <div class="col-board">
-                          <ActionButton
-                            icon="🛂"
-                            title={blockingReason() || "Board"}
-                            onClick={handleBoardClick}
-                            disabled={loadingTripKey() !== null}
-                            loading={isLoading()}
-                          />
-                        </div>
+                        <Show when={mode() === 'departures'}>
+                          <div class="col-board">
+                            <ActionButton
+                              icon="🛂"
+                              title={blockingReason() || "Board"}
+                              onClick={handleBoardClick}
+                              disabled={loadingTripKey() !== null}
+                              loading={isLoading()}
+                            />
+                          </div>
+                        </Show>
                         <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
                           <div class="col-board">
                             <ActionButton
@@ -563,7 +598,7 @@ export default function DepartureBoard() {
                         <div class="mobile-row-top">
                           <div class="mobile-time">
                             <div style={{ display: "flex", "align-items": "center" }}>
-                              {formatRowTime(row.departure_time || '')}
+                              {formatRowTime((mode() === 'departures' ? row.departure_time : row.next_arrival) || '')}
                             </div>
                             <StatusDot isImminent={isImminent()} style={{ "margin-left": "4px" }} />
                             <Show when={isTomorrow()}>
@@ -590,17 +625,19 @@ export default function DepartureBoard() {
                           </div>
                           <div class="mobile-actions">
                             <div class="col-dir">
-                              <DirectionIcon bearing={row.bearing} />
+                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : (row.bearing + 180) % 360} />
                             </div>
                             <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
-                            <ActionButton
-                              icon="🛂"
-                              title={blockingReason() || "Board"}
-                              onClick={handleBoardClick}
-                              disabled={loadingTripKey() !== null}
-                              loading={isLoading()}
-                              spinnerStyle={{ "border-top-color": "#000" }}
-                            />
+                            <Show when={mode() === 'departures'}>
+                              <ActionButton
+                                icon="🛂"
+                                title={blockingReason() || "Board"}
+                                onClick={handleBoardClick}
+                                disabled={loadingTripKey() !== null}
+                                loading={isLoading()}
+                                spinnerStyle={{ "border-top-color": "#000" }}
+                              />
+                            </Show>
                             <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
                               <ActionButton
                                 icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
@@ -636,7 +673,8 @@ export default function DepartureBoard() {
           --db-warning: #ffe96bff;
           --db-imminent: #ff9800;
           --db-imminent-glow: #e0b0ff;
-          
+          --db-scrollbar-track: #001a35;
+          --db-scrollbar-thumb: #004a99;
           --db-br-outer: 12px;
           --db-br-inner: 8px;
           --db-pad-base: 16px;
@@ -655,6 +693,19 @@ export default function DepartureBoard() {
           z-index: 1000;
           backdrop-filter: blur(2px);
           transition: all 0.4s ease;
+        }
+
+        /* SNCF green theme for arrivals */
+        @media (min-width: 769px) {
+          .departure-board-overlay.arrivals-mode {
+            --db-bg: #187936;
+            --db-bg-dark: #1f5628;
+            --db-header-bg: #187936;
+            --db-header-border: #1f5628;
+            --db-accent-yellow: #ffed02;
+            --db-scrollbar-track: #153c1d;
+            --db-scrollbar-thumb: #3cd578;
+          }
         }
 
         @media (max-width: 768px) {
@@ -744,11 +795,54 @@ export default function DepartureBoard() {
           display: none;
         }
 
+        .mode-switcher {
+          display: flex;
+          position: relative;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 4px;
+          padding: 2px;
+          margin-bottom: 8px;
+          width: fit-content;
+        }
+
+        .mode-option {
+          padding: 4px 16px;
+          cursor: pointer;
+          font-weight: 800;
+          font-size: 0.8rem;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: #fff;
+          opacity: 0.6;
+          transition: all 0.3s ease;
+          position: relative;
+          z-index: 1;
+        }
+
+        .mode-option.active {
+          opacity: 1;
+        }
+
+        .mode-indicator {
+          position: absolute;
+          left: 2px;
+          top: 2px;
+          bottom: 2px;
+          width: calc(50% - 2px);
+          border-radius: 3px;
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+        }
+
         .stop-name {
           font-size: 32px;
           font-weight: 900;
           margin: 0;
           color: var(--db-accent-yellow);
+          transition: color 0.3s ease;
+        }
+
+        .arrivals-mode .stop-name {
+          color: #fff;
         }
 
         .departure-board.minimized .stop-name {
@@ -1089,10 +1183,10 @@ export default function DepartureBoard() {
           width: 8px;
         }
         .table-body::-webkit-scrollbar-track {
-          background: #001a35;
+          background: var(--db-scrollbar-track);
         }
         .table-body::-webkit-scrollbar-thumb {
-          background: #004a99;
+          background: var(--db-scrollbar-thumb);
           border-radius: 4px;
         }
 
@@ -1101,6 +1195,15 @@ export default function DepartureBoard() {
           font-weight: 700;
           font-size: 1.1rem;
           letter-spacing: -0.02em;
+          transition: color 0.3s ease;
+        }
+
+        .arrivals-mode .table-body .col-time {
+          color: #ffed02; /* SNCF Yellow */
+        }
+        .arrivals-mode .route-long {
+          color: #fff;
+          opacity: 0.6;
         }
 
         .table-body .col-type {

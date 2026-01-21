@@ -119,7 +119,7 @@ export function getTimeZoneLanguage(timeZone: string): string {
         'Europe/Athens': 'el',
         'Europe/Dublin': 'en',
         'Europe/Amsterdam': 'nl',
-        'Europe/Brussels': 'fr', 
+        'Europe/Brussels': 'fr',
         'Europe/Prague': 'cs',
         'Europe/Warsaw': 'pl',
         'Europe/Budapest': 'hu',
@@ -160,7 +160,7 @@ export function getTimeZoneLanguage(timeZone: string): string {
         'Asia/Shanghai': 'zh',
         'Asia/Hong_Kong': 'zh',
         'Asia/Taipei': 'zh',
-        'Asia/Singapore': 'en', 
+        'Asia/Singapore': 'en',
         'Asia/Kuala_Lumpur': 'ms',
         'Asia/Manila': 'en', // English is official for transport, or 'tl'
         'Asia/Bangkok': 'th',
@@ -203,7 +203,7 @@ export const departuresLabels: Record<string, string> = {
     'es': 'Salidas',         // Spanish
     'pt': 'Partidas',        // Portuguese
     'nl': 'Vertrek',         // Dutch
-    
+
     // Nordic
     'da': 'Afgang',          // Danish
     'sv': 'Avgång',          // Swedish
@@ -235,6 +235,44 @@ export const departuresLabels: Record<string, string> = {
     'id': 'Keberangkatan',   // Indonesian
     'ms': 'Pelepasan',       // Malay
 };
+
+export const arrivalsLabels: Record<string, string> = {
+    'en': 'Arrivals',
+    'fr': 'Arrivées',
+    'de': 'Ankunft',
+    'it': 'Arrivi',
+    'es': 'Llegadas',
+    'pt': 'Chegadas',
+    'nl': 'Aankomst',
+    'da': 'Ankomst',
+    'sv': 'Ankomst',
+    'no': 'Ankomster',
+    'fi': 'Saapuvat',
+    'is': 'Komur',
+    'el': 'Αφίξεις',
+    'cs': 'Příjezdy',
+    'pl': 'Przyjazdy',
+    'hu': 'Érkezés',
+    'ru': 'Прибытие',
+    'uk': 'Прибуття',
+    'ro': 'Sosiri',
+    'tr': 'Varış',
+    'ar': 'الوصول',
+    'he': 'נחיתות',
+    'ja': '到着',
+    'ko': '도착',
+    'zh': '到达',
+    'hi': 'आगमन',
+    'th': 'ขาเข้า',
+    'vi': 'Đến',
+    'id': 'Kedatangan',
+    'ms': 'Ketibaan',
+};
+
+export function getArrivalLabel(langCode: string): string {
+    const normalizedLang = langCode.split('-')[0].toLowerCase();
+    return arrivalsLabels[normalizedLang] || 'Arrivals';
+}
 
 export function getDepartureLabel(langCode: string): string {
     const normalizedLang = langCode.split('-')[0].toLowerCase();
