@@ -1,6 +1,7 @@
-// ==> src/Lobby.tsx <==
+// src/Lobby.tsx
 import { createEffect, createSignal, onMount } from 'solid-js';
-import { connectAndJoin, type Difficulty } from './store';
+import { useStore } from '@nanostores/solid';
+import { connectAndJoin, type Difficulty, $isSinglePlayer } from './store';
 import { generatePilotName } from './names';
 import bgImage from './assets/h3_hero.png';
 import favicon from '../public/favicon.svg';
@@ -17,12 +18,17 @@ export default function Lobby() {
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
 
+  const isSinglePlayer = useStore($isSinglePlayer);
+
   const handleJoin = (e?: Event) => {
     e?.preventDefault();
-    if (room() && user()) {
-      localStorage.setItem('fahrtle_user', user());
+    const currentRoom = room();
+    const currentUser = user();
+    if (currentRoom && currentUser) {
+      localStorage.setItem('fahrtle_user', currentUser);
       localStorage.setItem('fahrtle_color', color());
-      localStorage.setItem('fahrtle_room', room());
+      localStorage.setItem('fahrtle_room', currentRoom);
+      localStorage.setItem('fahrtle_singleplayer', String(isSinglePlayer()));
 
       const url = new URL(window.location.href);
 
@@ -46,9 +52,9 @@ export default function Lobby() {
       url.searchParams.delete('f');
       url.searchParams.delete('t');
       url.searchParams.delete('d');
-      url.searchParams.set('room', room());
+      url.searchParams.set('room', currentRoom);
       window.history.replaceState(null, '', url);
-      connectAndJoin(room(), user(), color(), initialBounds);
+      connectAndJoin(currentRoom, currentUser, color(), initialBounds);
     }
   };
 
@@ -111,7 +117,55 @@ export default function Lobby() {
           </h2>
         </div>
 
-        <div>
+        <div style={{
+          display: 'flex',
+          'background': 'rgba(15, 23, 42, 0.4)',
+          'padding': '4px',
+          'border-radius': '8px',
+          'margin-bottom': '8px'
+        }}>
+          <button
+            type="button"
+            onClick={() => $isSinglePlayer.set(false)}
+            style={{
+              flex: 1,
+              padding: '8px',
+              border: 'none',
+              'border-radius': '6px',
+              background: !isSinglePlayer() ? '#3b82f6' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              'font-weight': !isSinglePlayer() ? 'bold' : 'normal',
+              'font-family': 'inherit'
+            }}
+          >
+            Multiplayer
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              $isSinglePlayer.set(true);
+              setRoom('solo');
+            }}
+            style={{
+              flex: 1,
+              padding: '8px',
+              border: 'none',
+              'border-radius': '6px',
+              background: isSinglePlayer() ? '#3b82f6' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              'font-weight': isSinglePlayer() ? 'bold' : 'normal',
+              'font-family': 'inherit'
+            }}
+          >
+            Single player
+          </button>
+        </div>
+
+        <div style={{ opacity: isSinglePlayer() ? 0.5 : 1, 'pointer-events': isSinglePlayer() ? 'none' : 'auto' }}>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -123,15 +177,17 @@ export default function Lobby() {
                 padding: '8px', 'border-radius': '4px', border: 'none',
                 width: '160px', flex: '1'
               }}
+              disabled={isSinglePlayer()}
             />
             <button
               type="button"
-              onClick={() => setRoom(generateRandomRoom)}
+              onClick={() => setRoom(generateRandomRoom())}
               title="Generate Random ID"
               style={{
                 background: '#475569', border: 'none', cursor: 'pointer',
                 'border-radius': '4px', 'font-size': '1.2rem', padding: '0 8px'
               }}
+              disabled={isSinglePlayer()}
             >
               🎲
             </button>
@@ -145,7 +201,7 @@ export default function Lobby() {
               value={user()} onInput={e => setUser(e.currentTarget.value)}
               style={{ padding: '8px', 'border-radius': '4px', border: 'none', width: '160px', flex: '1' }}
             />
-            <div style={{ position: 'relative', width: '16px', height: '16px' }}>
+            <div style={{ position: 'relative', width: '24px', height: '24px' }}>
               <input
                 type="color"
                 value={color()}
@@ -156,7 +212,7 @@ export default function Lobby() {
                 }}
               />
               <div style={{
-                width: '16px', height: '16px', 'border-radius': '50%', background: color(),
+                width: '24px', height: '24px', 'border-radius': '50%', background: color(),
                 border: '2px solid white', 'box-shadow': '0 0 5px rgba(0,0,0,0.3)', 'flex-shrink': 0
               }} />
             </div>
@@ -211,5 +267,5 @@ export default function Lobby() {
         <span>readme.md</span>
       </a>
     </div>
-  )
+  );
 }

@@ -4,6 +4,9 @@ import { syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
+import { sharedFakeServer } from './fakeServer';
+import { type Difficulty } from './shared/gameLogic';
+export type { Difficulty };
 
 if (typeof window !== 'undefined') {
   (window as any).getGameState = () => ({
@@ -91,7 +94,7 @@ export interface DepartureResult {
   bearing: number; // Added client-side
 }
 
-export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
+export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);
 
 export const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
@@ -120,15 +123,30 @@ export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | '
 export const $gameStartTime = atom<number | null>(null);
 export const $mapZoom = atom(14);
 
-let ws: WebSocket | null = null;
+interface GenericWebSocket {
+  onopen: ((this: any, ev: any) => any) | null;
+  onmessage: ((this: any, ev: any) => any) | null;
+  onclose: ((this: any, ev: any) => any) | null;
+  readyState: number;
+  send(msg: string): void;
+  close(): void;
+}
+
+let ws: GenericWebSocket | null = null;
 
 export function connectAndJoin(roomId: string, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty }) {
   if (ws) ws.close();
 
-  const wsUri = import.meta.env.PROD
-    ? import.meta.env.VITE_FAHRTLE_WS_URI
-    : 'ws://localhost:8080';
-  ws = new WebSocket(wsUri);
+  if ($isSinglePlayer.get()) {
+    ws = sharedFakeServer.connect(roomId, playerId) as any;
+  } else {
+    const wsUri = import.meta.env.PROD
+      ? import.meta.env.VITE_FAHRTLE_WS_URI
+      : 'ws://localhost:8080';
+    ws = new WebSocket(wsUri) as any;
+  }
+
+  if (!ws) return;
 
   ws.onopen = () => {
     $connected.set(true);
@@ -283,7 +301,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
 }
 
 export function submitWaypoint(lat: number, lng: number) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
   const myId = $myPlayerId.get();
   const allPlayers = $players.get();
@@ -312,7 +330,7 @@ export function submitWaypointsBatch(points: {
   emoji?: string,
   route_departure_time?: string | null
 }[]) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
   const player = $players.get()[$myPlayerId.get() ?? ''];
   if (!player || points.length === 0) return;
@@ -358,7 +376,7 @@ export function leaveRoom() {
 }
 
 const throttledSetColor = throttle(200, (color: string) => {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'UPDATE_PLAYER_COLOR', color }));
 });
 
@@ -372,12 +390,12 @@ export function toggleReady() {
 }
 
 export function toggleSnooze() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'TOGGLE_SNOOZE' }));
 }
 
 export function cancelNavigation() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) {
     console.error('WebSocket not open, cannot cancel navigation');
     return;
   }
@@ -386,7 +404,7 @@ export function cancelNavigation() {
 }
 
 export function stopImmediately() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY' }));
 }
 
@@ -427,7 +445,7 @@ export function setGameBounds(start: [number, number] | null, finish: [number, n
 }
 
 export function finishRace(finishTime: number) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({
     type: 'PLAYER_FINISHED',
     finishTime: finishTime
@@ -435,6 +453,6 @@ export function finishRace(finishTime: number) {
 }
 
 export function setViewingStop(stopName: string | null) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'SET_VIEWING_STOP', stopName }));
 }
