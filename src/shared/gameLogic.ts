@@ -97,6 +97,7 @@ export interface GameHooks {
     onRoomDeleted?: (roomId: string) => void;
     sendToSender: (message: any) => void;
     subscribeToRoom: (roomId: string) => void;
+    shouldDeletePlayer?: (roomId: string, playerId: string) => boolean;
 }
 
 export function handleIncomingMessage(
@@ -153,6 +154,9 @@ export function handleIncomingMessage(
                 difficulty: 'Easy'
             };
             rooms.set(roomId, room);
+        }
+
+        if (!room.loopInterval) {
             room.loopInterval = setInterval(() => updateRoomCallback(roomId), 100);
         }
 
@@ -181,8 +185,13 @@ export function handleIncomingMessage(
                 viewingStopName: null,
             };
         } else {
-            room.players[playerId].disconnectedAt = null;
-            room.players[playerId].desiredRate = 1.0;
+            const player = room.players[playerId];
+            if (player) {
+                player.disconnectedAt = null;
+                if (player.desiredRate === 500.0) {
+                    player.desiredRate = 1.0;
+                }
+            }
         }
 
         wsData.roomId = roomId;
@@ -511,12 +520,14 @@ export function updateRoomLogic(room: Room, hooks: GameHooks) {
     for (const pid in room.players) {
         const p = room.players[pid];
         if (p.disconnectedAt && Date.now() - p.disconnectedAt > 60000) {
-            delete room.players[pid];
-            hooks.publish(room.id, {
-                type: 'PLAYER_LEFT',
-                playerId: pid
-            });
-            checkCountdownLogic(room, hooks);
+            if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
+                delete room.players[pid];
+                hooks.publish(room.id, {
+                    type: 'PLAYER_LEFT',
+                    playerId: pid
+                });
+                checkCountdownLogic(room, hooks);
+            }
         }
     }
 

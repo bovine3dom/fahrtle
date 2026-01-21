@@ -14,21 +14,22 @@ export default function Lobby() {
     return randomId;
   };
 
-  const [room, setRoom] = createSignal(localStorage.getItem('fahrtle_room') || generateRandomRoom());
+  const isSinglePlayer = useStore($isSinglePlayer);
+  const [room, setRoom] = createSignal<string>(localStorage.getItem('fahrtle_room') || generateRandomRoom());
   const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
-
-  const isSinglePlayer = useStore($isSinglePlayer);
 
   const handleJoin = (e?: Event) => {
     e?.preventDefault();
     const currentRoom = room();
     const currentUser = user();
-    if (currentRoom && currentUser) {
+    if (currentUser && (isSinglePlayer() || currentRoom)) {
       localStorage.setItem('fahrtle_user', currentUser);
       localStorage.setItem('fahrtle_color', color());
-      localStorage.setItem('fahrtle_room', currentRoom);
+      if (currentRoom) {
+        localStorage.setItem('fahrtle_room', currentRoom);
+      }
       localStorage.setItem('fahrtle_singleplayer', String(isSinglePlayer()));
 
       const url = new URL(window.location.href);
@@ -53,9 +54,13 @@ export default function Lobby() {
       url.searchParams.delete('f');
       url.searchParams.delete('t');
       url.searchParams.delete('d');
-      url.searchParams.set('room', currentRoom);
+      if (isSinglePlayer()) {
+        url.searchParams.delete('room');
+      } else {
+        url.searchParams.set('room', currentRoom);
+      }
       window.history.replaceState(null, '', url);
-      connectAndJoin(currentRoom, currentUser, color(), initialBounds);
+      connectAndJoin(isSinglePlayer() ? null : currentRoom, currentUser, color(), initialBounds);
     }
   };
 
@@ -83,7 +88,12 @@ export default function Lobby() {
 
   createEffect(() => {
     const url = new URL(window.location.href);
-    url.searchParams.set('room', room());
+    const r = room();
+    if (r && !isSinglePlayer()) {
+      url.searchParams.set('room', r);
+    } else {
+      url.searchParams.delete('room');
+    }
     window.history.replaceState(null, '', url);
   })
 
@@ -134,7 +144,9 @@ export default function Lobby() {
         }}>
           <button
             type="button"
-            onClick={() => $isSinglePlayer.set(false)}
+            onClick={() => {
+              $isSinglePlayer.set(false);
+            }}
             style={{
               flex: 1,
               padding: '8px',
@@ -154,7 +166,6 @@ export default function Lobby() {
             type="button"
             onClick={() => {
               $isSinglePlayer.set(true);
-              setRoom('solo');
             }}
             style={{
               flex: 1,
@@ -173,8 +184,8 @@ export default function Lobby() {
           </button>
         </div>
 
-        <div style={{ opacity: isSinglePlayer() ? 0.5 : 1, 'pointer-events': isSinglePlayer() ? 'none' : 'auto' }}>
-          <Show when={!isSinglePlayer()}>
+        <Show when={!isSinglePlayer()}>
+          <div style={{ opacity: isSinglePlayer() ? 0.5 : 1 }}>
             <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
@@ -198,8 +209,8 @@ export default function Lobby() {
                 🎲
               </button>
             </div>
-          </Show>
-        </div>
+          </div>
+        </Show>
 
         <div>
           <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Callsign</label>

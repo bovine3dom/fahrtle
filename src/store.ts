@@ -134,11 +134,11 @@ interface GenericWebSocket {
 
 let ws: GenericWebSocket | null = null;
 
-export function connectAndJoin(roomId: string, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty }) {
+export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty }) {
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
-    ws = sharedFakeServer.connect(roomId, playerId) as any;
+    ws = sharedFakeServer.connect(roomId || 'solo', playerId) as any;
   } else {
     const wsUri = import.meta.env.PROD
       ? import.meta.env.VITE_FAHRTLE_WS_URI
@@ -154,10 +154,10 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
     ws?.send(JSON.stringify({
       type: 'SYNC_REQUEST',
       clientSendTime: Date.now(),
-      roomId: roomId
+      roomId: roomId || 'solo'
     }));
 
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId, playerId, color }));
+    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: roomId || 'solo', playerId, color }));
 
     if (initialBounds) {
       let startTime: number | undefined;
@@ -185,7 +185,7 @@ export function connectAndJoin(roomId: string, playerId: string, color?: string,
       });
     }
 
-    $currentRoom.set(roomId);
+    $currentRoom.set(roomId || 'solo');
     $myPlayerId.set(playerId);
   };
 

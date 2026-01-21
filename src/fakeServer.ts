@@ -104,8 +104,10 @@ export class FakeServer {
             getSubscriberCount: (roomId: string) => this.getSubscriberCount(roomId),
             onRoomDeleted: (roomId: string) => {
                 const room = this.rooms.get(roomId);
-                if (room?.loopInterval) clearInterval(room.loopInterval);
-                this.rooms.delete(roomId);
+                if (room?.loopInterval) {
+                    clearInterval(room.loopInterval);
+                    room.loopInterval = undefined;
+                }
                 this.saveToLocalStorage();
             },
             sendToSender: (messageValue: any) => {
@@ -113,7 +115,8 @@ export class FakeServer {
                     ws.onmessage?.({ data: JSON.stringify(messageValue) });
                 }
             },
-            subscribeToRoom: (_roomId: string) => { /* No-op in fake server */ }
+            subscribeToRoom: (_roomId: string) => { /* No-op in fake server */ },
+            shouldDeletePlayer: () => false
         };
     }
 
