@@ -2,6 +2,7 @@
 import { createEffect, createSignal, onMount } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer } from './store';
+import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import bgImage from './assets/h3_hero.png';
 import favicon from '../public/favicon.svg';
@@ -56,6 +57,12 @@ export default function Lobby() {
       window.history.replaceState(null, '', url);
       connectAndJoin(currentRoom, currentUser, color(), initialBounds);
     }
+  };
+
+  const handleNewGame = (e: Event) => {
+    e.preventDefault();
+    sharedFakeServer.clearState();
+    handleJoin();
   };
 
   onMount(() => {
@@ -219,12 +226,49 @@ export default function Lobby() {
           </div>
         </div>
 
-        <button type="submit" style={{
-          padding: '10px', 'background': '#3b82f6', color: 'white', border: 'none',
-          'border-radius': '4px', 'font-weight': 'bold', cursor: 'pointer'
-        }}>
-          Launch
-        </button>
+        {isSinglePlayer() && sharedFakeServer.hasPersistentGame() ? (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => handleJoin()}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                'border-radius': '4px',
+                'font-weight': 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              Resume game
+            </button>
+            <button
+              type="button"
+              onClick={handleNewGame}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                'border-radius': '4px',
+                'font-weight': 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              New game
+            </button>
+          </div>
+        ) : (
+          <button type="submit" style={{
+            padding: '10px', 'background': '#3b82f6', color: 'white', border: 'none',
+            'border-radius': '4px', 'font-weight': 'bold', cursor: 'pointer'
+          }}>
+            Launch
+          </button>
+        )}
       </form>
       <a
         href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle"

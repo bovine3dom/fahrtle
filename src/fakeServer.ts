@@ -34,9 +34,11 @@ class FakeWebSocket {
 export class FakeServer {
     private rooms = new Map<string, Room>();
     private sockets = new Set<FakeWebSocket>();
+    private STORAGE_KEY = 'fahrtle_solo_state';
 
     constructor() {
-        // No-op
+        this.loadFromLocalStorage();
+        setInterval(() => this.saveToLocalStorage(), 5000);
     }
 
     connect(_roomId: string, _playerId: string): FakeWebSocket {
@@ -48,11 +50,13 @@ export class FakeServer {
     handleMessage(ws: FakeWebSocket, msg: string) {
         const message = JSON.parse(msg);
         handleIncomingMessage(message, this.rooms, ws.data, this.getHooks(ws), (roomId: string) => this.updateRoom(roomId));
+        this.saveToLocalStorage();
     }
 
     handleClose(ws: FakeWebSocket) {
         handleGameClose(this.rooms, ws.data, this.getHooks(ws));
         this.sockets.delete(ws);
+        this.saveToLocalStorage();
     }
 
     private publish(roomId: string, message: any) {
@@ -102,6 +106,7 @@ export class FakeServer {
                 const room = this.rooms.get(roomId);
                 if (room?.loopInterval) clearInterval(room.loopInterval);
                 this.rooms.delete(roomId);
+                this.saveToLocalStorage();
             },
             sendToSender: (messageValue: any) => {
                 if (ws) {
@@ -110,6 +115,52 @@ export class FakeServer {
             },
             subscribeToRoom: (_roomId: string) => { /* No-op in fake server */ }
         };
+    }
+
+    private saveToLocalStorage() {
+        const data: Record<string, any> = {};
+        for (const [id, room] of this.rooms) {
+            // Don't serialize loopInterval
+            const { loopInterval, ...serializableRoom } = room;
+            data[id] = serializableRoom;
+        }
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+    }
+
+    private loadFromLocalStorage() {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            if (stored) {
+                const data = JSON.parse(stored);
+                for (const id in data) {
+                    const room = data[id] as Room;
+                    room.lastRealTime = Date.now(); // Reset sync time
+                    room.loopInterval = setInterval(() => this.updateRoom(id), 100);
+                    this.rooms.set(id, room);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load fake server state", e);
+        }
+    }
+
+    public clearState() {
+        for (const room of this.rooms.values()) {
+            if (room.loopInterval) clearInterval(room.loopInterval);
+        }
+        this.rooms.clear();
+        localStorage.removeItem(this.STORAGE_KEY);
+    }
+
+    public hasPersistentGame(): boolean {
+        const stored = localStorage.getItem(this.STORAGE_KEY);
+        if (!stored) return false;
+        try {
+            const data = JSON.parse(stored);
+            return Object.keys(data).length > 0;
+        } catch {
+            return false;
+        }
     }
 }
 
