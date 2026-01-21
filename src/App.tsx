@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty, $isSinglePlayer } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -286,7 +286,7 @@ function App() {
             }}>
               {/* If minimized, show Clock here. If expanded, show Room Name */}
               <Show when={!minimized()} fallback={<Clock style={{ flex: 1 }} />}>
-                <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>Room: {room()}</div>
+                <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>{$isSinglePlayer.get() ? 'Single player' : `Room: ${room()}`}</div>
               </Show>
 
               <button
@@ -322,7 +322,7 @@ function App() {
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                       }}
                     >
-                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready up'}
+                      {players()[myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
                     </button>
                   }>
                     <button disabled style={{
@@ -693,28 +693,9 @@ function App() {
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                       }}
                     >
-                      {players()[myId()!]?.isReady ? 'Unready' : 'Ready up'}
+                      {players()[myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      if (leaveConfirm()) {
-                        leaveRoom();
-                      } else {
-                        setLeaveConfirm(true);
-                      }
-                    }}
-                    style={{
-                      width: '100%', padding: '6px',
-                      'background': leaveConfirm() ? '#b91c1c' : '#fee2e2',
-                      'color': leaveConfirm() ? '#ffffff' : '#991b1b',
-                      border: '1px solid #fecaca', 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {leaveConfirm() ? 'Click again to confirm' : 'Leave room'}
-                  </button>
-
                   {/* Snooze Button */}
                   <Show when={roomState() === 'RUNNING'}>
                     <Show when={players()[myId()!]}>
@@ -755,6 +736,26 @@ function App() {
                       }}
                     </Show>
                   </Show>
+                  <button
+                    onClick={() => {
+                      if (leaveConfirm()) {
+                        leaveRoom();
+                      } else {
+                        setLeaveConfirm(true);
+                      }
+                    }}
+                    style={{
+                      width: '100%', padding: '6px',
+                      'background': leaveConfirm() ? '#b91c1c' : '#fee2e2',
+                      'color': leaveConfirm() ? '#ffffff' : '#991b1b',
+                      border: '1px solid #fecaca', 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
+                      'margin-top': '8px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {leaveConfirm() ? 'Click again to confirm' : $isSinglePlayer.get() ? 'Return to main menu' : 'Leave room'}
+                  </button>
+
                   <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
                     {roomState() === 'RUNNING' ? <a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8' }}>Click map for departures, double click to board or walk<br />Click here for more information</a> : 'Waiting for game to start...'}
                   </div>

@@ -1,5 +1,5 @@
 // src/Lobby.tsx
-import { createEffect, createSignal, onMount } from 'solid-js';
+import { createEffect, createSignal, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer } from './store';
 import { sharedFakeServer } from './fakeServer';
@@ -104,6 +104,7 @@ export default function Lobby() {
       <form onSubmit={handleJoin} style={{
         display: 'flex', 'flex-direction': 'column', gap: '16px',
         background: 'rgba(51, 65, 85, 0.6)',
+        width: '250px',
         'backdrop-filter': 'blur(1px)',
         padding: '2rem', 'border-radius': '12px', 'box-shadow': '0 10px 25px rgba(0,0,0,0.3)'
       }}>
@@ -173,32 +174,31 @@ export default function Lobby() {
         </div>
 
         <div style={{ opacity: isSinglePlayer() ? 0.5 : 1, 'pointer-events': isSinglePlayer() ? 'none' : 'auto' }}>
-          <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              value={room()}
-              onInput={e => setRoom(e.currentTarget.value)}
-              placeholder="Enter or create room ID"
-              style={{
-                padding: '8px', 'border-radius': '4px', border: 'none',
-                width: '160px', flex: '1'
-              }}
-              disabled={isSinglePlayer()}
-            />
-            <button
-              type="button"
-              onClick={() => setRoom(generateRandomRoom())}
-              title="Generate Random ID"
-              style={{
-                background: '#475569', border: 'none', cursor: 'pointer',
-                'border-radius': '4px', 'font-size': '1.2rem', padding: '0 8px'
-              }}
-              disabled={isSinglePlayer()}
-            >
-              🎲
-            </button>
-          </div>
+          <Show when={!isSinglePlayer()}>
+            <label style={{ display: 'block', 'font-size': '0.8rem', 'margin-bottom': '4px' }}>Room ID</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                value={room()}
+                onInput={e => setRoom(e.currentTarget.value)}
+                placeholder="Enter or create room ID"
+                style={{
+                  padding: '8px', 'border-radius': '4px', border: 'none',
+                  width: '160px', flex: '1'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setRoom(generateRandomRoom())}
+                title="Generate Random ID"
+                style={{
+                  background: '#475569', border: 'none', cursor: 'pointer',
+                  'border-radius': '4px', 'font-size': '1.2rem', padding: '0 8px'
+                }}
+              >
+                🎲
+              </button>
+            </div>
+          </Show>
         </div>
 
         <div>
