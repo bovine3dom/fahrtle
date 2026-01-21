@@ -6,6 +6,7 @@ import { getDailyRace } from './utils/daily';
 import { findClosestCity } from './utils/geo';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
+import { TODAYS_DATE } from './utils/daily';
 import bgImage from './assets/h3_hero.png';
 import favicon from '../public/favicon.svg';
 
@@ -274,7 +275,7 @@ export default function Lobby() {
             'text-align': 'center'
           }}>
             <div style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'margin-bottom': '4px', 'color': '#fbbf24' }}>
-              {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {TODAYS_DATE.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
             <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
               {(() => {
