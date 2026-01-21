@@ -95,6 +95,7 @@ export interface DepartureResult {
 }
 
 export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);
+export const $isDaily = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_daily') === 'true' : false);
 
 export const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
@@ -140,7 +141,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
-    ws = sharedFakeServer.connect(roomId || 'solo', playerId) as any;
+    ws = sharedFakeServer.connect(roomId || ($isDaily.get() ? 'daily' : 'solo'), playerId) as any;
   } else {
     const wsUri = import.meta.env.PROD
       ? import.meta.env.VITE_FAHRTLE_WS_URI
@@ -156,10 +157,10 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
     ws?.send(JSON.stringify({
       type: 'SYNC_REQUEST',
       clientSendTime: Date.now(),
-      roomId: roomId || 'solo'
+      roomId: roomId || ($isDaily.get() ? 'daily' : 'solo')
     }));
 
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: roomId || 'solo', playerId, color }));
+    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: roomId || ($isDaily.get() ? 'daily' : 'solo'), playerId, color }));
 
     if (initialBounds) {
       let startTime: number | undefined;
@@ -187,7 +188,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       });
     }
 
-    $currentRoom.set(roomId || 'solo');
+    $currentRoom.set(roomId || ($isDaily.get() ? 'daily' : 'solo'));
     $myPlayerId.set(playerId);
   };
 
@@ -374,6 +375,10 @@ export function leaveRoom() {
   window.history.replaceState(null, '', url); // bug: it flashes back up again instantly, but we don't rejoin, so that's nice
   if (ws) ws.close();
   $currentRoom.set(null);
+  $isDaily.set(false);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('fahrtle_daily');
+  }
   $players.set({});
 }
 

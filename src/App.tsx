@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty, $isSinglePlayer } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -31,6 +31,7 @@ function App() {
   const pickerMode = useStore($pickerMode);
   const pickedPoint = useStore($pickedPoint);
   const startTime = useStore($gameStartTime);
+  const isDaily = useStore($isDaily);
 
   const [minimized, setMinimized] = createSignal(false);
   const [startStr, setStartStr] = createSignal("");
@@ -286,7 +287,9 @@ function App() {
             }}>
               {/* If minimized, show Clock here. If expanded, show Room Name */}
               <Show when={!minimized()} fallback={<Clock style={{ flex: 1 }} />}>
-                <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>{$isSinglePlayer.get() ? 'Single player' : `Room: ${room()}`}</div>
+                <div style={{ 'font-size': '1.1em', 'font-weight': 'bold' }}>
+                  {isDaily() ? 'Daily race' : $isSinglePlayer.get() ? 'Single player' : `Room: ${room()}`}
+                </div>
               </Show>
 
               <button
@@ -420,65 +423,73 @@ function App() {
                       </div>
                     </Show>
 
-                    <div style={{ 'margin-bottom': '6px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          type="time"
-                          value={startTimeStr()}
-                          onInput={(e) => setStartTimeStr(e.currentTarget.value)}
-                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box', 'font-family': 'unset' }}
-                        />
+                    <Show when={!isDaily()}>
+                      <div style={{ 'margin-bottom': '6px' }}>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <input
+                            type="time"
+                            value={startTimeStr()}
+                            onInput={(e) => setStartTimeStr(e.currentTarget.value)}
+                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box', 'font-family': 'unset' }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    </Show>
 
-                    <div style={{ 'margin-bottom': '6px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, lng): </label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          type="text"
-                          value={startStr()}
-                          onInput={(e) => setStartStr(e.currentTarget.value)}
-                          placeholder="e.g. 55.953, -3.188"
-                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                        />
-                        <button
-                          onClick={() => togglePicker('start')}
-                          title="Pick on Map"
-                          style={{
-                            background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
-                            color: pickerMode() === 'start' ? 'white' : '#475569',
-                            border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
-                          }}
-                        >
-                          🧭
-                        </button>
+                    <Show when={!isDaily()}>
+                      <div style={{ 'margin-bottom': '6px' }}>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, lng): </label>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <input
+                            type="text"
+                            value={startStr()}
+                            onInput={(e) => setStartStr(e.currentTarget.value)}
+                            placeholder="e.g. 55.953, -3.188"
+                            style={{
+                              width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box',
+                              background: 'white',
+                              cursor: 'text'
+                            }}
+                          />
+                          <button
+                            onClick={() => togglePicker('start')}
+                            title="Pick on Map"
+                            style={{
+                              background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
+                              color: pickerMode() === 'start' ? 'white' : '#475569',
+                              border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
+                            }}
+                          >
+                            🧭
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    <div style={{ 'margin-bottom': '6px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          type="text"
-                          value={finishStr()}
-                          onInput={(e) => setFinishStr(e.currentTarget.value)}
-                          placeholder="e.g. 51.507, -0.127"
-                          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                        />
-                        <button
-                          onClick={() => togglePicker('finish')}
-                          title="Pick on Map"
-                          style={{
-                            background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
-                            color: pickerMode() === 'finish' ? 'white' : '#475569',
-                            border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
-                          }}
-                        >
-                          🧭
-                        </button>
+                      <div style={{ 'margin-bottom': '6px' }}>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <input
+                            type="text"
+                            value={finishStr()}
+                            onInput={(e) => setFinishStr(e.currentTarget.value)}
+                            placeholder="e.g. 51.507, -0.127"
+                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                          />
+                          <button
+                            onClick={() => togglePicker('finish')}
+                            title="Pick on Map"
+                            style={{
+                              background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
+                              color: pickerMode() === 'finish' ? 'white' : '#475569',
+                              border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
+                            }}
+                          >
+                            🧭
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    </Show>
                     <div style={{ 'margin-bottom': '12px' }}>
                       <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Difficulty: </label>
                       <input

@@ -1,7 +1,9 @@
 // src/Lobby.tsx
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { connectAndJoin, type Difficulty, $isSinglePlayer } from './store';
+import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily } from './store';
+import { getDailyRace } from './utils/daily';
+import { findClosestCity } from './utils/geo';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import bgImage from './assets/h3_hero.png';
@@ -15,6 +17,7 @@ export default function Lobby() {
   };
 
   const isSinglePlayer = useStore($isSinglePlayer);
+  const isDaily = useStore($isDaily);
   const [room, setRoom] = createSignal<string>(localStorage.getItem('fahrtle_room') || generateRandomRoom());
   const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
@@ -39,6 +42,7 @@ export default function Lobby() {
         localStorage.setItem('fahrtle_room', currentRoom);
       }
       localStorage.setItem('fahrtle_singleplayer', String(isSinglePlayer()));
+      localStorage.setItem('fahrtle_daily', String(isDaily()));
 
       const url = new URL(window.location.href);
 
@@ -58,10 +62,22 @@ export default function Lobby() {
         };
       }
 
+      if (isDaily()) {
+        const race = getDailyRace();
+        initialBounds = {
+          ...initialBounds,
+          start: race.start,
+          finish: race.finish,
+          time: race.time,
+          difficulty: initialBounds?.difficulty || difficulty()
+        };
+      }
+
       url.searchParams.delete('s');
       url.searchParams.delete('f');
       url.searchParams.delete('t');
       url.searchParams.delete('d');
+      url.searchParams.delete('daily');
       if (isSinglePlayer()) {
         url.searchParams.delete('room');
       } else {
@@ -84,6 +100,10 @@ export default function Lobby() {
     const sharedDifficulty = params.get('d') as Difficulty;
     if (sharedDifficulty) {
       setDifficulty(sharedDifficulty);
+    }
+    if (params.get('daily') === '1') {
+      $isSinglePlayer.set(true);
+      $isDaily.set(true);
     }
     if (sharedRoom) {
       setRoom(sharedRoom);
@@ -154,6 +174,7 @@ export default function Lobby() {
             type="button"
             onClick={() => {
               $isSinglePlayer.set(false);
+              $isDaily.set(false);
             }}
             style={{
               flex: 1,
@@ -165,30 +186,55 @@ export default function Lobby() {
               cursor: 'pointer',
               transition: 'all 0.2s',
               'font-weight': !isSinglePlayer() ? 'bold' : 'normal',
-              'font-family': 'inherit'
+              'font-family': 'inherit',
+              'font-size': '0.8rem'
             }}
           >
-            Multiplayer
+            Multi
           </button>
           <button
             type="button"
             onClick={() => {
               $isSinglePlayer.set(true);
+              $isDaily.set(false);
             }}
             style={{
               flex: 1,
               padding: '8px',
               border: 'none',
               'border-radius': '6px',
-              background: isSinglePlayer() ? '#3b82f6' : 'transparent',
+              background: (isSinglePlayer() && !isDaily()) ? '#3b82f6' : 'transparent',
               color: 'white',
               cursor: 'pointer',
               transition: 'all 0.2s',
-              'font-weight': isSinglePlayer() ? 'bold' : 'normal',
-              'font-family': 'inherit'
+              'font-weight': (isSinglePlayer() && !isDaily()) ? 'bold' : 'normal',
+              'font-family': 'inherit',
+              'font-size': '0.8rem'
             }}
           >
-            Single player
+            Solo
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              $isSinglePlayer.set(true);
+              $isDaily.set(true);
+            }}
+            style={{
+              flex: 1,
+              padding: '8px',
+              border: 'none',
+              'border-radius': '6px',
+              background: isDaily() ? '#3b82f6' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              'font-weight': isDaily() ? 'bold' : 'normal',
+              'font-family': 'inherit',
+              'font-size': '0.8rem'
+            }}
+          >
+            Daily
           </button>
         </div>
 
@@ -216,6 +262,25 @@ export default function Lobby() {
               >
                 🎲
               </button>
+            </div>
+          </div>
+        </Show>
+        <Show when={isDaily()}>
+          <div style={{
+            'background': 'rgba(15, 23, 42, 0.4)',
+            'padding': '8px',
+            'border-radius': '8px',
+            'margin-bottom': '4px',
+            'text-align': 'center'
+          }}>
+            <div style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'margin-bottom': '4px', 'color': '#fbbf24' }}>
+              {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
+            <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
+              {(() => {
+                const race = getDailyRace();
+                return `${findClosestCity({ latitude: race.start[0], longitude: race.start[1] })} ➡️ ${findClosestCity({ latitude: race.finish[0], longitude: race.finish[1] })}`
+              })()}
             </div>
           </div>
         </Show>
