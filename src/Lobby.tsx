@@ -1,5 +1,5 @@
 // src/Lobby.tsx
-import { createEffect, createSignal, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer } from './store';
 import { sharedFakeServer } from './fakeServer';
@@ -19,6 +19,14 @@ export default function Lobby() {
   const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
   const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
+  const [wipeConfirm, setWipeConfirm] = createSignal(false);
+
+  createEffect(() => {
+    if (wipeConfirm()) {
+      const t = setTimeout(() => setWipeConfirm(false), 5000);
+      onCleanup(() => clearTimeout(t));
+    }
+  });
 
   const handleJoin = (e?: Event) => {
     e?.preventDefault();
@@ -238,14 +246,37 @@ export default function Lobby() {
         </div>
 
         {isSinglePlayer() && sharedFakeServer.hasPersistentGame() ? (
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                if (wipeConfirm()) {
+                  handleNewGame(e);
+                } else {
+                  setWipeConfirm(true);
+                }
+              }
+              }
+              style={{
+                flex: 1,
+                padding: '10px',
+                'background': wipeConfirm() ? '#b91c1c' : '#fee2e2',
+                'color': wipeConfirm() ? '#ffffff' : '#991b1b',
+                border: 'none',
+                'border-radius': '4px',
+                'font-weight': 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {wipeConfirm() ? 'Click again to confirm' : 'Start new game'}
+            </button>
             <button
               type="button"
               onClick={() => handleJoin()}
               style={{
                 flex: 1,
                 padding: '10px',
-                background: '#10b981',
+                background: '#3b82f6',
                 color: 'white',
                 border: 'none',
                 'border-radius': '4px',
@@ -255,23 +286,7 @@ export default function Lobby() {
             >
               Resume game
             </button>
-            <button
-              type="button"
-              onClick={handleNewGame}
-              style={{
-                flex: 1,
-                padding: '10px',
-                background: '#ef4444',
-                color: 'white',
-                border: 'none',
-                'border-radius': '4px',
-                'font-weight': 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              New game
-            </button>
-          </div>
+          </>
         ) : (
           <button type="submit" style={{
             padding: '10px', 'background': '#3b82f6', color: 'white', border: 'none',
