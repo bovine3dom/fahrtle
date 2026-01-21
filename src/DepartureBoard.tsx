@@ -519,7 +519,7 @@ export default function DepartureBoard() {
                     // todo: think about arrivals
                     return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }));
                   });
-                  const finalDestText = createMemo(() => findClosestCity({ latitude: $boardMode.get() === 'departures' ? row.final_lat : row.stop_lat, longitude: $boardMode.get() === 'departures' ? row.final_lon : row.stop_lon }));
+                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + findClosestCity({ latitude: $boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, longitude: $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon }));
 
                   const handleBoardClick = () => handleTripDoubleClick(row);
                   const handlePreview = () => handlePreviewClick(row, $boardMode.get() === 'departures' ? 'forwards' : 'backwards');
@@ -564,7 +564,7 @@ export default function DepartureBoard() {
                         </div>
 
                         <div class="col-dir">
-                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : (row.bearing + 180) % 360} />
+                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin } />
                         </div>
 
                         <div class="col-type">{getRouteEmoji(row.route_type)}</div>
@@ -625,7 +625,7 @@ export default function DepartureBoard() {
                           </div>
                           <div class="mobile-actions">
                             <div class="col-dir">
-                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : (row.bearing + 180) % 360} />
+                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin } />
                             </div>
                             <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
                             <Show when={mode() === 'departures'}>

@@ -81,6 +81,10 @@ export interface DepartureResult {
   final_arrival: string | null;
   final_lat: number;
   final_lon: number;
+  final_name: string;
+  initial_lat: number;
+  initial_lon: number;
+  initial_name: string;
   travel_time: number | null;
   route_type: number;
   stop_name: string;
@@ -92,6 +96,7 @@ export interface DepartureResult {
   route_text_color: string;
   h3: number; // truncated UInt64 (!)
   bearing: number; // Added client-side
+  bearing_origin: number; // Added client-side
 }
 
 export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);

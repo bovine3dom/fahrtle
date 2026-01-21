@@ -524,6 +524,7 @@ export default function MapView() {
             if (res && res.data) {
               const data = res.data.map((row: DepartureResult) => {
                 row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
+                row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
                 return row;
               })
               $departureBoardResults.set(data);
