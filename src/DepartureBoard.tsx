@@ -247,7 +247,9 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: DepartureResult) => {
+    console.log("clicked");
     if (blockingReason()) {
+      console.log("denied");
       setFlashError(false);
       setTimeout(() => setFlashError(true), 0);
       setTimeout(() => setFlashError(false), 500);
@@ -379,15 +381,16 @@ export default function DepartureBoard() {
                     icon="🛂"
                     title={blockingReason() || "Board"}
                     onClick={() => {
-                      $previewRoute.set(null);
                       if (blockingReason()) {
                         setFlashError(false);
                         setTimeout(() => setFlashError(true), 500);
                         setTimeout(() => setFlashError(false), 1000);
                         $boardMinimized.set(false);
+                        $previewRoute.set(null);
                         return;
                       }
                       handleTripDoubleClick(p().row);
+                      $previewRoute.set(null);
                     }}
                     disabled={loadingTripKey() !== null}
                     loading={loadingTripKey() === `${p().row.source}-${p().row.trip_id}-${p().row.departure_time}`}
