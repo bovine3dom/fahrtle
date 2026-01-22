@@ -1,4 +1,5 @@
 import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -269,7 +270,7 @@ export default function MapView() {
   const [mapReady, setMapReady] = createSignal(false);
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
-  const [playerPointers, setPlayerPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
+  const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
   const playerMarkers = new Map<string, maplibregl.Marker>();
 
   onMount(() => {
@@ -1028,7 +1029,8 @@ export default function MapView() {
           const pointer = getPointer(pos[1], pos[0]);
           return { pid, pointer };
         });
-        setPlayerPointers(t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]);
+        const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
+        setPlayerPointers(reconcile(validPointers, { key: 'pid' }));
       }
 
       if (isFollowing() && mapInstance) {
@@ -1151,7 +1153,7 @@ export default function MapView() {
         )}
       </Show>
 
-      <For each={playerPointers()}>
+      <For each={playerPointers}>
         {(p) => (
           <div
             style={{
