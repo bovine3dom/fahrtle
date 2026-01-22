@@ -614,7 +614,7 @@ export default function DepartureBoard() {
                             {mainDestText()}
                             <Show when={$gameBounds.get().difficulty === 'Easy'}>
                               <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
-                                {finalDestText()} ({formatRowTime(row.final_arrival || '')})
+                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
                               </div>
                             </Show>
                           </div>
