@@ -269,20 +269,37 @@ export default function MapView() {
 
     mapInstance.on('load', () => {
 
-      if (!params.has('transport')) {
-        mapInstance!.addSource('openrailwaymap', {
-          type: 'raster',
-          tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
-        });
-        mapInstance!.addLayer({
-          id: 'openrailwaymap-layer',
-          type: 'raster',
-          source: 'openrailwaymap',
-          paint: { 'raster-opacity': 1 }
-        });
-      }
+      // todo: make configurable
+      mapInstance!.addSource('mapterhorn', {
+        type: 'raster-dem',
+        url: 'https://tiles.mapterhorn.com/tilejson.json',
+        maxzoom: 15,
+      });
+      mapInstance!.addLayer({
+        id: 'mapterhorn-layer',
+        type: 'hillshade',
+        source: 'mapterhorn',
+        paint: {
+          'hillshade-shadow-color': '#000',
+          'hillshade-highlight-color': '#fff',
+          'hillshade-accent-color': '#fff',
+          'hillshade-exaggeration': 0.1,
+          'hillshade-method': 'igor',
+        }
+      });
+
+      mapInstance!.addSource('openrailwaymap', {
+        type: 'raster',
+        tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
+      });
+      mapInstance!.addLayer({
+        id: 'openrailwaymap-layer',
+        type: 'raster',
+        source: 'openrailwaymap',
+        paint: { 'raster-opacity': 1 }
+      });
 
       mapInstance!.addSource('course-markers', {
         type: 'geojson',
