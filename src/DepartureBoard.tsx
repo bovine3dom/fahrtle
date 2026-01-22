@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom, $boardMode } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom, $boardMode, $playerSettings } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, findClosestCity } from './utils/geo';
@@ -320,7 +320,7 @@ export default function DepartureBoard() {
           }));
 
           submitWaypointsBatch(points);
-          $isFollowing.set(true);
+          $playerSettings.get().autoFollow && $isFollowing.set(true);
           close();
         }
         setLoadingTripKey(null);
@@ -564,7 +564,7 @@ export default function DepartureBoard() {
                         </div>
 
                         <div class="col-dir">
-                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin } />
+                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin} />
                         </div>
 
                         <div class="col-type">{getRouteEmoji(row.route_type)}</div>
@@ -625,7 +625,7 @@ export default function DepartureBoard() {
                           </div>
                           <div class="mobile-actions">
                             <div class="col-dir">
-                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin } />
+                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin} />
                             </div>
                             <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
                             <Show when={mode() === 'departures'}>

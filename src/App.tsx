@@ -16,6 +16,7 @@ const MapView = lazy(() => import('./Map'));
 import confetti from 'canvas-confetti';
 import { getTravelSummary } from './utils/summary';
 import WinModal from './WinModal';
+import SettingsModal from './SettingsModal';
 
 function App() {
   const room = useStore($currentRoom);
@@ -39,6 +40,7 @@ function App() {
   const [finishStr, setFinishStr] = createSignal("");
   const [diff, setDiff] = createSignal<Difficulty>("Easy");
   const [showWinModal, setShowWinModal] = createSignal(false);
+  const [showSettings, setShowSettings] = createSignal(false);
 
   // victory handler
   createEffect(() => {
@@ -292,17 +294,32 @@ function App() {
                 </div>
               </Show>
 
-              <button
-                onClick={() => setMinimized(!minimized())}
-                style={{
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
-                  'margin-left': '10px'
-                }}
-                title={minimized() ? "Expand" : "Minimize"}
-              >
-                {minimized() ? '▼' : '▲'}
-              </button>
+              <div style={{ display: 'flex', 'align-items': 'center' }}>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    opacity: 0.8, transition: 'opacity 0.2s'
+                  }}
+                  title="Settings"
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                >
+                  ⚙️
+                </button>
+                <button
+                  onClick={() => setMinimized(!minimized())}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    'margin-left': '4px'
+                  }}
+                  title={minimized() ? "Expand" : "Minimize"}
+                >
+                  {minimized() ? '▼' : '▲'}
+                </button>
+              </div>
             </div>
 
             {/* Persistent Controls (Minimized Only) */}
@@ -798,6 +815,10 @@ function App() {
               <div style={{ 'font-size': '6rem', 'font-weight': 'bold', 'line-height': 1 }}>{timeLeft()}</div>
             </div>
           )}
+
+          <Show when={showSettings()}>
+            <SettingsModal onClose={() => setShowSettings(false)} />
+          </Show>
         </div>
       )}
       {showWinModal() && players()[myId()!] && (

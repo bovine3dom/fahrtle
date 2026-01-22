@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } fr
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $boardMode, $lastClickContext } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $boardMode, $lastClickContext, $playerSettings } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -686,6 +686,7 @@ export default function MapView() {
   const startAnimationLoop = () => {
     let lastFrameTime = performance.now();
     let frameCount = 0;
+    let autoZoomEnabled = $playerSettings.get().autoZoom;
 
     const loop = (timestamp: number) => {
       frameId = requestAnimationFrame(loop);
@@ -766,6 +767,9 @@ export default function MapView() {
             myTargetSpeed = currentSpeeds[pid] || 0;
 
             if (frameCount % 60 === 0) {
+              // Update settings cache occasionally
+              autoZoomEnabled = $playerSettings.get().autoZoom;
+
               const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
               if ($playerTimeZone.get() !== zone) {
                 $playerTimeZone.set(zone);
@@ -861,17 +865,23 @@ export default function MapView() {
           const dilation = $globalRate.get() / 20; // normalise to walking dilation
           const safeSpeed = Math.max(1, mySpeed * dilation || 0);
 
-          let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
-          targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+          let nextZoom: number | undefined;
 
-          const currentZoom = mapInstance.getZoom();
-          const nextZoom = lerp(currentZoom, targetZoom, alpha);
+          if (autoZoomEnabled) {
+            let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
+            targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
 
-          if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || Math.abs(currentZoom - targetZoom) > 0.01) {
-            mapInstance.jumpTo({
-              center: myPos,
-              zoom: nextZoom
-            });
+            const currentZoom = mapInstance.getZoom();
+            // Only update zoom if we are far enough from target to avoid micro-jitters
+            if (Math.abs(currentZoom - targetZoom) > 0.01) {
+              nextZoom = lerp(currentZoom, targetZoom, alpha);
+            }
+          }
+
+          if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || nextZoom !== undefined) {
+            const jumpOptions: any = { center: myPos };
+            if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
+            mapInstance.jumpTo(jumpOptions);
           }
         }
       }

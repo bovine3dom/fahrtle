@@ -131,6 +131,60 @@ export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | '
 export const $gameStartTime = atom<number | null>(null);
 export const $mapZoom = atom(14);
 
+import { defaultPlayerSettings } from './utils/playerSettings';
+type SettingsType = typeof defaultPlayerSettings;
+type SettingsValue = { [K in keyof SettingsType]: any };
+
+const loadSettings = (): SettingsValue => {
+  if (typeof localStorage === 'undefined') return Object.fromEntries(Object.keys(defaultPlayerSettings).map(k => [k, defaultPlayerSettings[k as keyof SettingsType].value])) as SettingsValue;
+
+  const saved = localStorage.getItem('fahrtle_settings');
+  let loaded: any = {};
+  if (saved) {
+    try {
+      loaded = JSON.parse(saved);
+    } catch (e) { console.error("Failed to parse settings", e) }
+  }
+
+  // Backwards compatibility for name and color
+  if (!loaded.name && localStorage.getItem('fahrtle_user')) {
+    loaded.name = localStorage.getItem('fahrtle_user');
+  }
+  if (!loaded.color && localStorage.getItem('fahrtle_color')) {
+    loaded.color = localStorage.getItem('fahrtle_color');
+  }
+
+  const finalSettings: any = {};
+  for (const key of Object.keys(defaultPlayerSettings)) {
+    const k = key as keyof SettingsType;
+    if (loaded[k] !== undefined) {
+      finalSettings[k] = loaded[k];
+    } else {
+      finalSettings[k] = defaultPlayerSettings[k].value;
+    }
+  }
+  return finalSettings as SettingsValue;
+}
+
+export const $playerSettings = atom<SettingsValue>(loadSettings());
+
+export function updateSetting<K extends keyof SettingsValue>(key: K, value: SettingsValue[K]) {
+  const current = $playerSettings.get();
+  const next = { ...current, [key]: value };
+  $playerSettings.set(next);
+
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('fahrtle_settings', JSON.stringify(next));
+
+    // Sync legacy keys for backward compat
+    if (key === 'name') localStorage.setItem('fahrtle_user', value as string);
+    if (key === 'color') {
+      localStorage.setItem('fahrtle_color', value as string);
+      setPlayerColor(value as string);
+    }
+  }
+}
+
 interface GenericWebSocket {
   onopen: ((this: any, ev: any) => any) | null;
   onmessage: ((this: any, ev: any) => any) | null;

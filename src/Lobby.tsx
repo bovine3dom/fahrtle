@@ -1,7 +1,7 @@
 // src/Lobby.tsx
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily } from './store';
+import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
 import { getDailyRace } from './utils/daily';
 import { findClosestCity } from './utils/geo';
 import { sharedFakeServer } from './fakeServer';
@@ -20,8 +20,8 @@ export default function Lobby() {
   const isSinglePlayer = useStore($isSinglePlayer);
   const isDaily = useStore($isDaily);
   const [room, setRoom] = createSignal<string>(localStorage.getItem('fahrtle_room') || generateRandomRoom());
-  const [user, setUser] = createSignal(localStorage.getItem('fahrtle_user') || generatePilotName());
-  const [color, setColor] = createSignal(localStorage.getItem('fahrtle_color') || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
+  const [user, setUser] = createSignal($playerSettings.get().name || generatePilotName());
+  const [color, setColor] = createSignal($playerSettings.get().color || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
   const [wipeConfirm, setWipeConfirm] = createSignal(false);
 
@@ -37,8 +37,9 @@ export default function Lobby() {
     const currentRoom = room();
     const currentUser = user();
     if (currentUser && (isSinglePlayer() || currentRoom)) {
-      localStorage.setItem('fahrtle_user', currentUser);
-      localStorage.setItem('fahrtle_color', color());
+      updateSetting('name', currentUser);
+      updateSetting('color', color());
+
       if (currentRoom) {
         localStorage.setItem('fahrtle_room', currentRoom);
       }
