@@ -47,7 +47,7 @@ export type Room = {
     playbackRate: number;
 
     // Game Loop
-    timerId?: Timer;
+    timerId?: ReturnType<typeof setTimeout>;
 
     difficulty: Difficulty;
 };
