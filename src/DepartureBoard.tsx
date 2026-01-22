@@ -77,6 +77,7 @@ export default function DepartureBoard() {
   const preview = useStore($previewRoute);
 
   const [filterType, setFilterType] = createSignal<string | null>(null);
+  const [speedFilter, setSpeedFilter] = createSignal<number | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
   const [isTooFar, setIsTooFar] = createSignal(false);
   const [flashError, setFlashError] = createSignal(false);
@@ -217,9 +218,9 @@ export default function DepartureBoard() {
 
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
-    const filter = filterType(); // todo: filter by speed too
-    if (!filter) return rows;
-    return rows.filter(r => getRouteEmoji(r.route_type) === filter);
+    const emojiFilter = ((r: DepartureResult) => (filterType() === null) || getRouteEmoji(r.route_type) === filterType());
+    const neowmFilter = ((r: DepartureResult) => (speedFilter() === null) || r.speed >= (speedFilter() as number)); // ts is so dumb sometimes wtf
+    return rows.filter(emojiFilter).filter(neowmFilter);
   });
 
   const close = () => {
@@ -227,6 +228,7 @@ export default function DepartureBoard() {
     $departureBoardResults.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
+    setSpeedFilter(null);
     $previewRoute.set(null);
   };
 
@@ -478,6 +480,21 @@ export default function DepartureBoard() {
                 </button>
               )}
             </For>
+            <Show when={$gameBounds.get().difficulty === 'Easy'}>
+              <For each={[20, 40, 70, 100, 150].filter(n => deduplicatedResults().some(r => r.speed >= n))}>
+                {speed => (
+                  <button
+                    class="filter-btn"
+                    classList={{ active: speedFilter() === speed }}
+                    onClick={() => setSpeedFilter(speedFilter() === speed ? null : speed)}
+                    title={speedFilter() === speed ? 'Clear Filter' : `Filter by speeds greater than or equal to ${speed} km/h`}
+                    style={{"font-size": "0.8rem"}}
+                  >
+                    {speed} km/h+
+                  </button>
+                )}
+              </For>
+            </Show>
           </div>
 
           <div class="table-container">

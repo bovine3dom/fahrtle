@@ -527,7 +527,7 @@ function App() {
                         <span style={{ opacity: diff() === 'Transport nerd' ? 1 : 0.5 }}>Nerd</span>
                       </div>
                       <div style={{ 'font-size': '0.7em', 'color': '#777', 'font-style': 'italic', 'margin': '4px 0', 'min-height': '1.2em' }}>
-                        {diff() === 'Easy' && "Adds arrival times and destinations"}
+                        {diff() === 'Easy' && "Adds arrival times, speeds and destinations"}
                         {diff() === 'Normal' && "Adds cardinal directions"}
                         {diff() === 'Transport nerd' && "Adds debug info 💻"}
                       </div>
