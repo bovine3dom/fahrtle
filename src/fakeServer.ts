@@ -49,12 +49,23 @@ export class FakeServer {
 
     handleMessage(ws: FakeWebSocket, msg: string) {
         const message = JSON.parse(msg);
-        handleIncomingMessage(message, this.rooms, ws.data, this.getHooks(ws), (roomId: string) => this.updateRoom(roomId));
+        handleIncomingMessage(
+            message,
+            this.rooms,
+            ws.data,
+            this.getHooks(ws),
+            (roomId: string) => this.updateRoom(roomId)
+        );
         this.saveToLocalStorage();
     }
 
     handleClose(ws: FakeWebSocket) {
-        handleGameClose(this.rooms, ws.data, this.getHooks(ws));
+        handleGameClose(
+            this.rooms,
+            ws.data,
+            this.getHooks(ws),
+            (roomId: string) => this.updateRoom(roomId)
+        );
         this.sockets.delete(ws);
         this.saveToLocalStorage();
     }
@@ -94,7 +105,7 @@ export class FakeServer {
     private updateRoom(roomId: string) {
         const room = this.rooms.get(roomId);
         if (!room) return;
-        updateRoomLogic(room, this.getHooks());
+        updateRoomLogic(room, this.getHooks(), (id) => this.updateRoom(id));
     }
 
     private getHooks(ws?: FakeWebSocket): GameHooks {
@@ -104,10 +115,11 @@ export class FakeServer {
             getSubscriberCount: (roomId: string) => this.getSubscriberCount(roomId),
             onRoomDeleted: (roomId: string) => {
                 const room = this.rooms.get(roomId);
-                if (room?.loopInterval) {
-                    clearInterval(room.loopInterval);
-                    room.loopInterval = undefined;
+                if (room?.timerId) {
+                    clearTimeout(room.timerId);
+                    room.timerId = undefined;
                 }
+                this.rooms.delete(roomId);
                 this.saveToLocalStorage();
             },
             sendToSender: (messageValue: any) => {
@@ -123,8 +135,7 @@ export class FakeServer {
     private saveToLocalStorage() {
         const data: Record<string, any> = {};
         for (const [id, room] of this.rooms) {
-            // Don't serialize loopInterval
-            const { loopInterval, ...serializableRoom } = room;
+            const { timerId, ...serializableRoom } = room;
             data[id] = serializableRoom;
         }
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
@@ -137,9 +148,9 @@ export class FakeServer {
                 const data = JSON.parse(stored);
                 for (const id in data) {
                     const room = data[id] as Room;
-                    room.lastRealTime = Date.now(); // Reset sync time
-                    room.loopInterval = setInterval(() => this.updateRoom(id), 100);
+                    room.lastRealTime = Date.now();
                     this.rooms.set(id, room);
+                    this.updateRoom(id);
                 }
             }
         } catch (e) {
@@ -149,7 +160,7 @@ export class FakeServer {
 
     public clearState() {
         for (const room of this.rooms.values()) {
-            if (room.loopInterval) clearInterval(room.loopInterval);
+            if (room.timerId) clearTimeout(room.timerId);
         }
         this.rooms.clear();
         localStorage.removeItem(this.STORAGE_KEY);

@@ -14,17 +14,6 @@ type WSData = {
 
 const rooms = new Map<string, Room>();
 
-function logStats(message: string) {
-  setTimeout(() => {
-    let totalSubscribers = 0;
-    for (const room of rooms.values()) {
-      totalSubscribers += server.subscriberCount(room.id);
-    }
-    console.log(`${new Date().toISOString()} | ${message} | Total players: ${totalSubscribers}`);
-  }, 100); // tiny delay allows subscribers to actually subscribe
-}
-
-
 const server = serve<WSData>({
   port: 8080,
   fetch(req: Request, server: any) {
@@ -34,16 +23,13 @@ const server = serve<WSData>({
   websocket: {
     open(ws: ServerWebSocket<WSData>) {
       ws.data = { roomId: null, playerId: null };
-      logStats(`Client connected.`);
     },
     message(ws: ServerWebSocket<WSData>, msg: string | Uint8Array) {
       const message = JSON.parse(String(msg));
       handleIncomingMessage(message, rooms, ws.data, getwsHooks(ws), updateRoom);
     },
-
     close(ws: ServerWebSocket<WSData>) {
-      handleGameClose(rooms, ws.data, getwsHooks(ws));
-      logStats(`[Room: ${ws.data.roomId}]: Player ${ws.data.playerId} disconnected.`);
+      handleGameClose(rooms, ws.data, getwsHooks(ws), updateRoom);
     }
   }
 });
@@ -55,7 +41,7 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
     getSubscriberCount: (roomId: string) => server.subscriberCount(roomId),
     onRoomDeleted: (roomId: string) => {
       rooms.delete(roomId);
-      logStats(`[Room: ${roomId}]: Killed room after 1 minute of emptiness.`);
+      console.log(`[Room: ${roomId}]: Deleted.`);
     },
     sendToSender: (message: any) => ws.send(JSON.stringify(message)),
     subscribeToRoom: (roomId: string) => ws.subscribe(roomId)
@@ -68,7 +54,7 @@ const gameHooks: GameHooks = {
   getSubscriberCount: (roomId: string) => server.subscriberCount(roomId),
   onRoomDeleted: (roomId: string) => {
     rooms.delete(roomId);
-    logStats(`[Room: ${roomId}]: Killed room after 1 minute of emptiness.`);
+    console.log(`[Room: ${roomId}]: Deleted.`);
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
   subscribeToRoom: () => { /* Server root doesn't subscribe */ }
@@ -96,7 +82,7 @@ function broadcastRoomState(room: Room) {
 function updateRoom(roomId: string) {
   const room = rooms.get(roomId);
   if (!room) return;
-  updateRoomLogic(room, getGameHooks());
+  updateRoomLogic(room, getGameHooks(), updateRoom);
 }
 
 console.log(`Game Server listening on ${server.hostname}:${server.port}`);

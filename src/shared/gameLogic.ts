@@ -47,12 +47,13 @@ export type Room = {
     playbackRate: number;
 
     // Game Loop
-    loopInterval?: any; // ReturnType<typeof setInterval> or number
+    timerId?: Timer;
 
     difficulty: Difficulty;
 };
 
 export const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
+const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
 
 export function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
     const toRad = (x: number) => x * Math.PI / 180;
@@ -100,6 +101,48 @@ export interface GameHooks {
     shouldDeletePlayer?: (roomId: string, playerId: string) => boolean;
 }
 
+function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) {
+    if (room.timerId) {
+        clearTimeout(room.timerId);
+        room.timerId = undefined;
+    }
+
+    const now = Date.now();
+    let delay = MAX_IDLE_TIME;
+
+    if (room.state === 'COUNTDOWN' && room.countdownEnd) {
+        const timeToStart = room.countdownEnd - now;
+        delay = Math.max(0, timeToStart);
+    }
+    else if (room.state === 'RUNNING' && room.playbackRate > 0) {
+        let nextVirtualEvent = Number.MAX_VALUE;
+
+        for (const pid in room.players) {
+            const p = room.players[pid];
+            for (const wp of p.waypoints) {
+                if (wp.startTime > room.virtualTime) {
+                    nextVirtualEvent = Math.min(nextVirtualEvent, wp.startTime);
+                }
+                if (wp.startTime <= room.virtualTime && wp.arrivalTime > room.virtualTime) {
+                    nextVirtualEvent = Math.min(nextVirtualEvent, wp.arrivalTime);
+                }
+            }
+        }
+
+        if (nextVirtualEvent !== Number.MAX_VALUE) {
+            const virtualDiff = nextVirtualEvent - room.virtualTime;
+            const realDiff = virtualDiff / room.playbackRate;
+            delay = Math.min(delay, realDiff + 10);  // add buffer to make sure we're overdue
+        }
+    }
+
+    delay = Math.max(50, Math.min(delay, MAX_IDLE_TIME));
+
+    room.timerId = setTimeout(() => {
+        updateCallback(room.id);
+    }, delay);
+}
+
 export function handleIncomingMessage(
     message: any,
     rooms: Map<string, Room>,
@@ -109,17 +152,24 @@ export function handleIncomingMessage(
 ) {
     const now = Date.now();
 
+    const triggerUpdate = (rid: string) => {
+        const r = rooms.get(rid);
+        if (r) {
+            updateRoomLogic(r, hooks, updateRoomCallback);
+        }
+    };
+
     // --- SYNC ---
     if (message.type === 'SYNC_REQUEST') {
         const targetRoomId = message.roomId || wsData.roomId;
-
         let serverTime = now;
         let rate = 1.0;
 
         if (targetRoomId && rooms.has(targetRoomId)) {
             const r = rooms.get(targetRoomId)!;
             const elapsed = now - r.lastRealTime;
-            serverTime = r.virtualTime + (elapsed * r.playbackRate);
+            const vTime = r.state === 'RUNNING' ? r.virtualTime + (elapsed * r.playbackRate) : r.virtualTime;
+            serverTime = vTime;
             rate = r.playbackRate;
         }
 
@@ -156,16 +206,11 @@ export function handleIncomingMessage(
             rooms.set(roomId, room);
         }
 
-        if (!room.loopInterval) {
-            room.loopInterval = setInterval(() => updateRoomCallback(roomId), 100);
-        }
-
         room.emptySince = null;
 
         if (!room.players[playerId]) {
             const centerLat = room.startPos[0];
             const centerLng = room.startPos[1];
-
             const spawn = getSpawnPoint(centerLat, centerLng);
 
             room.players[playerId] = {
@@ -199,6 +244,8 @@ export function handleIncomingMessage(
 
         hooks.subscribeToRoom(roomId);
 
+        stepClock(room);
+
         hooks.sendToSender({
             type: 'ROOM_STATE',
             state: room.state,
@@ -217,6 +264,8 @@ export function handleIncomingMessage(
             type: 'PLAYER_JOINED',
             player: room.players[playerId]
         });
+
+        triggerUpdate(roomId);
     }
 
     // --- TOGGLE READY ---
@@ -235,6 +284,7 @@ export function handleIncomingMessage(
         });
 
         checkCountdownLogic(room, hooks);
+        triggerUpdate(wsData.roomId);
     }
 
     if (message.type === 'UPDATE_PLAYER_COLOR') {
@@ -259,13 +309,14 @@ export function handleIncomingMessage(
         const player = room.players[wsData.playerId];
         if (player) {
             player.desiredRate = player.desiredRate > 1.0 ? 1.0 : 500.0;
-            updateRoomCallback(wsData.roomId);
 
             hooks.publish(wsData.roomId, {
                 type: 'PLAYER_SNOOZE_UPDATE',
                 playerId: wsData.playerId,
                 desiredRate: player.desiredRate
             });
+
+            triggerUpdate(wsData.roomId);
         }
     }
 
@@ -309,8 +360,8 @@ export function handleIncomingMessage(
                 }
             }
         }
-
         hooks.broadcastRoomState(room);
+        triggerUpdate(wsData.roomId);
     }
 
     if (message.type === 'SET_VIEWING_STOP') {
@@ -378,7 +429,7 @@ export function handleIncomingMessage(
             waypoint: newWaypoint
         });
 
-        updateRoomCallback(wsData.roomId);
+        triggerUpdate(wsData.roomId);
     }
 
     // --- CANCEL NAVIGATION ---
@@ -402,6 +453,7 @@ export function handleIncomingMessage(
                 playerId: wsData.playerId,
                 waypoints: player.waypoints
             });
+            triggerUpdate(wsData.roomId);
         }
     }
 
@@ -440,7 +492,7 @@ export function handleIncomingMessage(
             currentPos.y = last.y;
         }
 
-        if (nextWpIndex !== -1) {
+         if (nextWpIndex !== -1) {
             const nextWp = player.waypoints[nextWpIndex];
             const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
             const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
@@ -469,6 +521,7 @@ export function handleIncomingMessage(
             playerId: wsData.playerId,
             waypoints: player.waypoints
         });
+        triggerUpdate(wsData.roomId);
     }
 
     if (message.type === 'PLAYER_FINISHED') {
@@ -504,14 +557,14 @@ export function checkCountdownLogic(room: Room, hooks: GameHooks) {
     }
 }
 
-export function updateRoomLogic(room: Room, hooks: GameHooks) {
+export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (roomId: string) => void) {
     stepClock(room);
 
     // Cleanup check
     if (room.emptySince !== null) {
         const emptyDuration = Date.now() - room.emptySince;
-        if (emptyDuration > 60000) { // 1 Minute
-            if (room.loopInterval) clearInterval(room.loopInterval);
+        if (emptyDuration > MAX_IDLE_TIME) {
+            if (room.timerId) clearTimeout(room.timerId);
             hooks.onRoomDeleted?.(room.id);
             return;
         }
@@ -519,7 +572,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks) {
 
     for (const pid in room.players) {
         const p = room.players[pid];
-        if (p.disconnectedAt && Date.now() - p.disconnectedAt > 60000) {
+        if (p.disconnectedAt && Date.now() - p.disconnectedAt > MAX_IDLE_TIME) {
             if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
                 delete room.players[pid];
                 hooks.publish(room.id, {
@@ -539,7 +592,10 @@ export function updateRoomLogic(room: Room, hooks: GameHooks) {
         hooks.broadcastRoomState(room);
     }
 
-    if (room.state !== 'RUNNING') return;
+    if (room.state !== 'RUNNING') {
+        scheduleNextTick(room, updateCallback);
+        return;
+    }
 
     const subscriberCount = hooks.getSubscriberCount(room.id);
     if (subscriberCount === 0) {
@@ -547,6 +603,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks) {
             room.playbackRate = 0;
             hooks.broadcastRoomState(room);
         }
+        scheduleNextTick(room, updateCallback);
         return;
     }
 
@@ -582,12 +639,15 @@ export function updateRoomLogic(room: Room, hooks: GameHooks) {
             rate: room.playbackRate
         });
     }
+
+    scheduleNextTick(room, updateCallback);
 }
 
 export function handleGameClose(
     rooms: Map<string, Room>,
     wsData: { roomId: string | null, playerId: string | null },
-    hooks: GameHooks
+    hooks: GameHooks,
+    updateRoomCallback: (roomId: string) => void
 ) {
     if (wsData.roomId && wsData.playerId) {
         const room = rooms.get(wsData.roomId);
@@ -604,9 +664,12 @@ export function handleGameClose(
                         playerId: wsData.playerId,
                         desiredRate: player.desiredRate
                     });
+
+                    updateRoomLogic(room, hooks, updateRoomCallback);
                 } else {
                     room.emptySince = Date.now();
                     room.playbackRate = 0;
+                    updateRoomLogic(room, hooks, updateRoomCallback);
                 }
             }
         }
