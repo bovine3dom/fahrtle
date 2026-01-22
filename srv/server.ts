@@ -41,6 +41,7 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
     getSubscriberCount: (roomId: string) => server.subscriberCount(roomId),
     onRoomDeleted: (roomId: string) => {
       rooms.delete(roomId);
+      process.stdout.write('\n'); // don't overwrite status line
       console.log(`[Room: ${roomId}]: Deleted.`);
     },
     sendToSender: (message: any) => ws.send(JSON.stringify(message)),
@@ -54,6 +55,7 @@ const gameHooks: GameHooks = {
   getSubscriberCount: (roomId: string) => server.subscriberCount(roomId),
   onRoomDeleted: (roomId: string) => {
     rooms.delete(roomId);
+    process.stdout.write('\n');
     console.log(`[Room: ${roomId}]: Deleted.`);
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
@@ -84,5 +86,16 @@ function updateRoom(roomId: string) {
   if (!room) return;
   updateRoomLogic(room, getGameHooks(), updateRoom);
 }
+
+setInterval(() => {
+  let totalPlayers = 0;
+  for (const room of rooms.values()) {
+    totalPlayers += server.subscriberCount(room.id);
+  }
+  const timestamp = new Date().toLocaleTimeString();
+  // \r moves cursor to start of line, \x1b[K clears the rest of the line
+  const statusLine = `\r[${timestamp}] Active Rooms: ${rooms.size} | Total Players: ${totalPlayers}\x1b[K`;
+  process.stdout.write(statusLine);
+}, 60000);
 
 console.log(`Game Server listening on ${server.hostname}:${server.port}`);
