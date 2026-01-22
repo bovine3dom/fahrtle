@@ -1,7 +1,7 @@
 import type { Player, Difficulty } from '../store';
 import { getDailyRaceIndex } from './daily';
 import { formatRowTime, sensibleNumber } from './format';
-import { findClosestCity, haversineDist } from './geo';
+import { createClosestCity, haversineDist } from './geo';
 import { formatDuration } from './time';
 
 const getTravelSummaryObj = (player: Player) => {
@@ -23,16 +23,17 @@ const getTravelSummaryObj = (player: Player) => {
 import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
+export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
     let travel = stealth ? waypoints.map((wp) => { if (wp.emoji == "🐾") return; return `${wp.emoji}`; }).filter(s => s).join('') : waypoints.map((wp) => {
         if (wp.emoji == "🐾") return;
         return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
     }).filter(s => s).join('\n');
 
-    // Fallback if no specific finish city can be determined from the bounds
-    const finishCity = gameBounds.finish ? findClosestCity({ latitude: gameBounds.finish[0], longitude: gameBounds.finish[1] }) : "";
-    const startCity = gameBounds.start ? findClosestCity({ latitude: gameBounds.start[0], longitude: gameBounds.start[1] }) : "";
+    const [finishCity, startCity] = [
+        gameBounds.finish ? createClosestCity(() => gameBounds.finish) : (() => ""),
+        gameBounds.start ? createClosestCity(() => gameBounds.start) : (() => "")
+    ];
     const isDaily = typeof localStorage !== 'undefined' && localStorage.getItem('fahrtle_daily') === 'true';
 
     const url = new URL(window.location.origin + window.location.pathname);
@@ -60,8 +61,8 @@ export const getTravelSummary = (player: Player, gameBounds: { start: [number, n
     }
 
 
-    const dayPrefix = isDaily ? ` daily #${getDailyRaceIndex()}!` : '';
+    const dayPrefix = isDaily ? ` daily #${await getDailyRaceIndex()}!` : '';
 
-    travel = `I just played fahrtle${dayPrefix}\n${startCity} ➡️ ${finishCity} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
+    travel = `I just played fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
     return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${url.toString()}`;
 }

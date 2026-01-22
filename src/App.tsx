@@ -9,7 +9,7 @@ import { fitGameBounds, getPlayerScreenPosition } from './Map';
 import DepartureBoard from './DepartureBoard';
 import { formatDuration, parseUserTime } from './utils/time';
 import { parseCoords, sensibleNumber } from './utils/format';
-import { findClosestCity } from './utils/geo';
+import { createClosestCity } from './utils/geo';
 import { getTimeZone } from './timezone';
 const MapView = lazy(() => import('./Map'));
 
@@ -417,7 +417,7 @@ function App() {
                 <div style={{ 'margin-bottom': '8px' }}>
                   <Clock />
                   <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px', 'text-align': 'center' }}>
-                    {findClosestCity({ latitude: bounds()!.start?.[0] || 0, longitude: bounds()!.start?.[1] || 0 })} ➡️ {findClosestCity({ latitude: bounds()!.finish?.[0] || 0, longitude: bounds()!.finish?.[1] || 0 })}
+                    {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
                   </div>
                   <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
                     Time dilation: {rate().toFixed(2)}x
@@ -436,7 +436,7 @@ function App() {
                   }}>
                     <Show when={bounds()}>
                       <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
-                        {findClosestCity({ latitude: bounds()!.start?.[0] || 0, longitude: bounds()!.start?.[1] || 0 })} ➡️ {findClosestCity({ latitude: bounds()!.finish?.[0] || 0, longitude: bounds()!.finish?.[1] || 0 })}
+                        {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
                       </div>
                     </Show>
 

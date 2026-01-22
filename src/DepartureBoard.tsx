@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom, $boardMode, $playerSettings } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
-import { haversineDist, bearingToCardinal, findClosestCity } from './utils/geo';
+import { haversineDist, bearingToCardinal, createClosestCity } from './utils/geo';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel, getArrivalLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
@@ -517,9 +517,9 @@ export default function DepartureBoard() {
 
                   const mainDestText = createMemo(() => {
                     // todo: think about arrivals
-                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + findClosestCity({ latitude: row.next_lat, longitude: row.next_lon }));
+                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + createClosestCity(() => [row.next_lat, row.next_lon])());
                   });
-                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + findClosestCity({ latitude: $boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, longitude: $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon }));
+                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + createClosestCity(() => [$boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon])());
 
                   const handleBoardClick = () => handleTripDoubleClick(row);
                   const handlePreview = () => handlePreviewClick(row, $boardMode.get() === 'departures' ? 'forwards' : 'backwards');

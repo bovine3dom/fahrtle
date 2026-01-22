@@ -3,7 +3,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
 import { getDailyRace } from './utils/daily';
-import { findClosestCity } from './utils/geo';
+import { createClosestCity } from './utils/geo';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import { TODAYS_DATE } from './utils/daily';
@@ -24,6 +24,15 @@ export default function Lobby() {
   const [color, setColor] = createSignal($playerSettings.get().color || ('#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')));
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
   const [wipeConfirm, setWipeConfirm] = createSignal(false);
+  const [dailyRace, setDailyRace] = createSignal<{ start: [number, number], finish: [number, number], time: string } | null>(null);
+
+  createEffect(() => {
+    if (isDaily()) {
+      getDailyRace().then(race => setDailyRace(race));
+    } else {
+      setDailyRace(null);
+    }
+  });
 
   createEffect(() => {
     if (wipeConfirm()) {
@@ -32,7 +41,7 @@ export default function Lobby() {
     }
   });
 
-  const handleJoin = (e?: Event) => {
+  const handleJoin = async (e?: Event) => {
     e?.preventDefault();
     const currentRoom = room();
     const currentUser = user();
@@ -65,7 +74,7 @@ export default function Lobby() {
       }
 
       if (isDaily()) {
-        const race = getDailyRace();
+        const race = await getDailyRace();
         initialBounds = {
           ...initialBounds,
           start: race.start,
@@ -279,10 +288,9 @@ export default function Lobby() {
               {TODAYS_DATE.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
             <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
-              {(() => {
-                const race = getDailyRace();
-                return `${findClosestCity({ latitude: race.start[0], longitude: race.start[1] })} ➡️ ${findClosestCity({ latitude: race.finish[0], longitude: race.finish[1] })}`
-              })()}
+              <Show when={dailyRace()} fallback="Loading...">
+                {(race) => `${createClosestCity(() => race().start)()} ➡️ ${createClosestCity(() => race().finish)()}`}
+              </Show>
             </div>
           </div>
         </Show>

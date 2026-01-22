@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, createEffect } from 'solid-js';
 import { type Player, $gameBounds } from './store';
 import { getTravelSummary } from './utils/summary';
 
@@ -11,9 +11,15 @@ interface WinModalProps {
 const WinModal = (props: WinModalProps) => {
   const [copied, setCopied] = createSignal(false);
   const [stealthMode, setStealthMode] = createSignal(false);
+  const [travelSummary, setTravelSummary] = createSignal('Loading...');
+
+  createEffect(() => {
+    getTravelSummary(props.player, $gameBounds.get(), stealthMode())
+      .then(summary => setTravelSummary(summary));
+  });
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(getTravelSummary(props.player, $gameBounds.get(), stealthMode()));
+    navigator.clipboard.writeText(travelSummary());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -49,7 +55,7 @@ const WinModal = (props: WinModalProps) => {
           'max-height': '200px', 'overflow-y': 'auto', 'border': '1px solid #e2e8f0',
           'color': '#334155'
         }}>
-          {getTravelSummary(props.player, $gameBounds.get(), stealthMode())}
+          {travelSummary()}
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>

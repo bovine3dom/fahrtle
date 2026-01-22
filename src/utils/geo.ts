@@ -1,17 +1,41 @@
-import tinyCities from '../assets/tiny-cities.json';
+import { createResource, createMemo, type Accessor } from 'solid-js';
+import tinyCitiesUrl from '../assets/tiny-cities.json?url';
 import KDBush from 'kdbush';
 import { around } from 'geokdbush';
 
-const cityTree = new KDBush(tinyCities.length);
-for (const { latitude, longitude } of tinyCities) {
-    cityTree.add(longitude, latitude);
-}
-cityTree.finish();
+const fetchCityData = async () => {
+    const response = await fetch(tinyCitiesUrl);
+    const cities = await response.json();
 
-export const findClosestCity = ({ latitude, longitude }: { latitude: number, longitude: number }) => {
-    const idx = around(cityTree, longitude, latitude, 1)[0] as number;
-    return tinyCities[idx].name + ', ' + tinyCities[idx].country_code;
-}
+    const tree = new KDBush(cities.length);
+    for (const { latitude, longitude } of cities) {
+        tree.add(longitude, latitude);
+    }
+    tree.finish();
+
+    return { cities, tree };
+};
+
+const [cityDb] = createResource(fetchCityData);
+
+
+export const createClosestCity = (coords: Accessor<[number, number] | null | undefined>) => {
+    return createMemo(() => {
+        const db = cityDb();
+        const c = coords();
+        if (!db || !c) return undefined;
+
+        const { tree, cities } = db;
+        const [lat, lon] = c;
+
+        const results = around(tree, lon, lat, 1);
+
+        if (results.length === 0) return "Unknown Location";
+
+        const idx = results[0] as number;
+        return `${cities[idx].name}, ${cities[idx].country_code}`;
+    });
+};
 
 export const haversineDist = (coords1: [number, number] | null, coords2: [number, number] | null) => {
     if (!coords1 || !coords2) return null;

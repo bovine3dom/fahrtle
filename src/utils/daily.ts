@@ -1,11 +1,22 @@
-import races from '../assets/races.json';
+import races_url from '../assets/races.json?url';
 
 const INSANE_JS_MONTH_MODIFIER = 1;
-const BASE_DATE = [2026,1 - INSANE_JS_MONTH_MODIFIER,20]; // NB: JS months, but not days, are zero-based (really)
+const BASE_DATE = [2026, 1 - INSANE_JS_MONTH_MODIFIER, 20]; // NB: JS months, but not days, are zero-based (really)
 
 export const TODAYS_DATE = new Date();
 
-export function getDailyRaceIndex(date: Date = TODAYS_DATE) {
+let racesPromise: Promise<any[]> | null = null;
+
+async function getRaces(): Promise<any[]> {
+    if (!racesPromise) {
+        racesPromise = fetch(races_url).then(res => res.json());
+    }
+    return racesPromise;
+}
+
+export async function getDailyRaceIndex(date: Date = TODAYS_DATE): Promise<number> {
+    const races = await getRaces();
+
     // NB: strings are assumed to be zulu time, numbers are assumed to be local time and are then converted to zulu time. obviously.
     const d1 = new Date(BASE_DATE[0], BASE_DATE[1], BASE_DATE[2]);
     const d2 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -16,8 +27,8 @@ export function getDailyRaceIndex(date: Date = TODAYS_DATE) {
     return diffDays % races.length;
 }
 
-export function getDailyRace(date: Date = TODAYS_DATE) {
-    const index = getDailyRaceIndex(date);
+export async function getDailyRace(date: Date = TODAYS_DATE) {
+    const [index, races] = await Promise.all([getDailyRaceIndex(date), getRaces()]);
     const race = races[index];
 
     const { start_lat, start_lon, finish_lat, finish_lon } = race;
