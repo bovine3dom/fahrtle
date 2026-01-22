@@ -308,7 +308,7 @@ export default function MapView() {
     });
 
     const updateBasemap = async (setting: string) => {
-      if (!mapInstance || !mapInstance.isStyleLoaded()) return;
+      if (!mapInstance) return;
 
       const styleSpec = basemapSettingToStyle(setting);
 
@@ -713,21 +713,21 @@ export default function MapView() {
     const playerSettings = useStore($playerSettings);
     createEffect(() => {
       const setting = playerSettings().baseMap;
-      if (mapInstance && mapInstance.isStyleLoaded()) {
+      if (mapInstance) {
         updateBasemap(setting);
       }
     });
 
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
-      if (mapInstance && mapInstance.isStyleLoaded()) {
+      if (mapInstance) {
         updateRailwaysLayer(setting);
       }
     });
 
     createEffect(() => {
       const setting = playerSettings().hillShade;
-      if (mapInstance && mapInstance.isStyleLoaded()) {
+      if (mapInstance) {
         updateHillShadeLayer(setting);
       }
     });
