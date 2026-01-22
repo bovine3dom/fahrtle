@@ -686,7 +686,7 @@ export default function MapView() {
           ORDER by (
             ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
           ) ASC
-          LIMIT 100
+          LIMIT 200
         `;
 
         chQuery(query)
