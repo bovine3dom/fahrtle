@@ -227,6 +227,30 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
           }
         ]
       }
+    case 'Transport dark':
+      return {
+        'version': 8,
+        'sources': {
+          'raster-tiles': {
+            'type': 'raster',
+            'tiles': [
+              `https://tile.thunderforest.com/transport-dark/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
+            ],
+            'tileSize': 256,
+            'attribution':
+              '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+          }
+        },
+        'layers': [
+          {
+            'id': 'simple-tiles',
+            'type': 'raster',
+            'source': 'raster-tiles',
+            'minzoom': 0,
+            'maxzoom': 22
+          }
+        ]
+      }
     default:
       return "https://tiles.openfreemap.org/styles/positron"
   }

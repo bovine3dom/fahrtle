@@ -11,7 +11,7 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   color: { type: 'color', value: undefined, description: 'Player colour' },
   autoZoom: { type: 'boolean', value: true, description: 'Auto zoom' },
   autoFollow: { type: 'boolean', value: true, description: 'Auto follow' },
-  baseMap: { type: 'select', value: 'Positron', description: 'Base map', options: ['Positron', 'Bright', 'Liberty (3D)', 'Transport'] },
+  baseMap: { type: 'select', value: 'Positron', description: 'Base map', options: ['Positron', 'Bright', 'Liberty (3D)', 'Transport', 'Transport dark'] },
   railwaysLayer: { type: 'select', value: 'Infrastructure', description: 'Railways layer', options: ['Disabled', 'Infrastructure', 'Speed', 'Electrification', 'Gauge'] },
   hillShade: { type: 'boolean', value: true, description: 'Hillshade' },
 }
