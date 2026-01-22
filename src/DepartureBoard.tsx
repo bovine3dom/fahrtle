@@ -7,7 +7,7 @@ import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel, getArrivalLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
-import { formatRowTime } from './utils/format';
+import { formatRowTime, sensibleNumber } from './utils/format';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -217,7 +217,7 @@ export default function DepartureBoard() {
 
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
-    const filter = filterType();
+    const filter = filterType(); // todo: filter by speed too
     if (!filter) return rows;
     return rows.filter(r => getRouteEmoji(r.route_type) === filter);
   });
@@ -558,7 +558,7 @@ export default function DepartureBoard() {
                           <div class="route-long">{row.route_long_name}</div>
                           <Show when={$gameBounds.get().difficulty === 'Easy'}>
                             <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
-                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')})
+                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
                             </div>
                           </Show>
                         </div>
