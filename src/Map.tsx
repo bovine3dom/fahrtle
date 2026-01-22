@@ -195,34 +195,46 @@ const getPointer = (targetLat: number, targetLng: number): { x: number, y: numbe
   return { x: intersection.x, y: intersection.y, bearing, distance };
 };
 
-let STYLE: string | maplibregl.StyleSpecification = "https://tiles.openfreemap.org/styles/positron"
+const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecification => {
+  switch (setting) {
+    case 'Positron':
+      return "https://tiles.openfreemap.org/styles/positron"
+    case 'Bright':
+      return "https://tiles.openfreemap.org/styles/bright"
+    case 'Liberty (3D)':
+      return "https://tiles.openfreemap.org/styles/liberty"
+    case 'Transport':
+      return {
+        'version': 8,
+        'sources': {
+          'raster-tiles': {
+            'type': 'raster',
+            'tiles': [
+              `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
+            ],
+            'tileSize': 256,
+            'attribution':
+              '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+          }
+        },
+        'layers': [
+          {
+            'id': 'simple-tiles',
+            'type': 'raster',
+            'source': 'raster-tiles',
+            'minzoom': 0,
+            'maxzoom': 22
+          }
+        ]
+      }
+    default:
+      return "https://tiles.openfreemap.org/styles/positron"
+  }
+}
 
 const params = new URLSearchParams(window.location.search)
 
 if (params.has('transport')) {
-  STYLE = {
-    'version': 8,
-    'sources': {
-      'raster-tiles': {
-        'type': 'raster',
-        'tiles': [
-          `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
-        ],
-        'tileSize': 256,
-        'attribution':
-          '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-      }
-    },
-    'layers': [
-      {
-        'id': 'simple-tiles',
-        'type': 'raster',
-        'source': 'raster-tiles',
-        'minzoom': 0,
-        'maxzoom': 22
-      }
-    ]
-  }
 }
 
 
@@ -252,7 +264,11 @@ export default function MapView() {
       const startPos = $gameBounds.get().start;
       mapInstance = new maplibregl.Map({
         container: mapContainer,
-        style: STYLE,
+        style: {
+          version: 8,
+          sources: {},
+          layers: []
+        },
         center: startPos ? [startPos[1], startPos[0]] : [-3.1883, 55.9533],
         zoom: 14,
         fadeDuration: 0,
@@ -267,9 +283,119 @@ export default function MapView() {
       console.error('[Map] Internal Map Error:', e);
     });
 
-    mapInstance.on('load', () => {
+    const updateBasemap = async (setting: string) => {
+      if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
-      // todo: make configurable
+      const styleSpec = basemapSettingToStyle(setting);
+
+      const existingLayers = mapInstance.getStyle().layers;
+      const existingSources = mapInstance.getStyle().sources;
+
+      for (const layer of existingLayers) {
+        if (layer.id.startsWith('basemap-')) {
+          mapInstance.removeLayer(layer.id);
+        }
+      }
+      for (const sourceId in existingSources) {
+        if (sourceId.startsWith('basemap-')) {
+          mapInstance.removeSource(sourceId);
+        }
+      }
+
+      if (typeof styleSpec === 'string') {
+        try {
+          const response = await fetch(styleSpec);
+          const style = await response.json();
+          for (const [sourceId, source] of Object.entries(style.sources)) {
+            mapInstance.addSource(`basemap-${sourceId}`, source as any);
+          }
+          const beforeLayer = mapInstance.getLayer('mapterhorn-layer') ? 'mapterhorn-layer' : undefined; // needs to go under hillshade (lol)
+          for (const layer of style.layers) {
+            const newLayer = {
+              ...layer,
+              id: `basemap-${layer.id}`,
+              source: layer.source ? `basemap-${layer.source}` : undefined
+            };
+            mapInstance.addLayer(newLayer, beforeLayer);
+          }
+        } catch (err) {
+          console.error('[Map] Failed to fetch basemap style:', err);
+        }
+      } else {
+        const sourceKey = Object.keys(styleSpec.sources)[0];
+        const source = styleSpec.sources[sourceKey];
+        const layer = styleSpec.layers[0];
+
+        mapInstance.addSource(`basemap-${sourceKey}`, source as any);
+        const beforeLayer = mapInstance.getLayer('mapterhorn-layer') ? 'mapterhorn-layer' : undefined;
+        mapInstance.addLayer({
+          ...layer,
+          id: `basemap-${layer.id}`,
+          source: `basemap-${sourceKey}`
+        } as any, beforeLayer);
+      }
+    };
+
+    const updateRailwaysLayer = (setting: string) => {
+      if (!mapInstance) return;
+
+      const pathMap: Record<string, string | null> = {
+        'Infrastructure': '/standard/',
+        'Speed': '/maxspeed/',
+        'Electrification': '/electrification/',
+        'Gauge': '/gauge/',
+        'Disabled': null
+      };
+
+      const path = pathMap[setting];
+      const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
+      const sourceExists = !!mapInstance.getSource('openrailwaymap');
+
+      if (path === null) {
+        if (layerExists) {
+          mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
+        }
+      } else {
+        if (layerExists) {
+          mapInstance.removeLayer('openrailwaymap-layer');
+        }
+        if (sourceExists) {
+          mapInstance.removeSource('openrailwaymap');
+        }
+
+        mapInstance.addSource('openrailwaymap', {
+          type: 'raster',
+          tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`],
+          tileSize: 256,
+          attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
+        });
+
+        const beforeLayer = mapInstance.getLayer('course-markers-h3-filled') ? 'course-markers-h3-filled' : undefined;
+        mapInstance.addLayer({
+          id: 'openrailwaymap-layer',
+          type: 'raster',
+          source: 'openrailwaymap',
+          paint: { 'raster-opacity': 1 }
+        }, beforeLayer);
+      }
+    };
+
+    const updateHillShadeLayer = (setting: boolean) => {
+      if (!mapInstance) return;
+
+      const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
+      const sourceExists = !!mapInstance.getSource('mapterhorn');
+      if (layerExists) {
+        mapInstance.removeLayer('mapterhorn-layer');
+      }
+      if (sourceExists) {
+        mapInstance.removeSource('mapterhorn');
+      }
+      if (!setting) {
+        return;
+      }
+
+      const beforeLayer = mapInstance.getLayer('course-markers-h3-filled') ? 'course-markers-h3-filled' : undefined;
       mapInstance!.addSource('mapterhorn', {
         type: 'raster-dem',
         url: 'https://tiles.mapterhorn.com/tilejson.json',
@@ -286,20 +412,21 @@ export default function MapView() {
           'hillshade-exaggeration': 0.1,
           'hillshade-method': 'igor',
         }
-      });
+      }, beforeLayer);
 
-      mapInstance!.addSource('openrailwaymap', {
-        type: 'raster',
-        tiles: ['https://tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
-      });
-      mapInstance!.addLayer({
-        id: 'openrailwaymap-layer',
-        type: 'raster',
-        source: 'openrailwaymap',
-        paint: { 'raster-opacity': 1 }
-      });
+      // // this is silly but fun, consider adding flag
+      // mapInstance!.setTerrain({
+      //   source: 'mapterhorn',
+      //   exaggeration: 3,
+      // });
+    };
+
+    mapInstance.on('load', () => {
+      updateBasemap($playerSettings.get().baseMap);
+
+      updateHillShadeLayer($playerSettings.get().hillShade);
+
+      updateRailwaysLayer($playerSettings.get().railwaysLayer);
 
       mapInstance!.addSource('course-markers', {
         type: 'geojson',
@@ -312,7 +439,7 @@ export default function MapView() {
       });
 
       mapInstance!.addLayer({
-        id: 'course-markerks-h3-filled', type: 'fill', source: 'course-markers-h3',
+        id: 'course-markers-h3-filled', type: 'fill', source: 'course-markers-h3',
         paint: { 'fill-color': '#10b981', 'fill-opacity': 0.8 }
       });
 
@@ -558,6 +685,28 @@ export default function MapView() {
       setMapReady(true);
       startAnimationLoop();
     });
+
+    const playerSettings = useStore($playerSettings);
+    createEffect(() => {
+      const setting = playerSettings().baseMap;
+      if (mapInstance && mapInstance.isStyleLoaded()) {
+        updateBasemap(setting);
+      }
+    });
+
+    createEffect(() => {
+      const setting = playerSettings().railwaysLayer;
+      if (mapInstance && mapInstance.isStyleLoaded()) {
+        updateRailwaysLayer(setting);
+      }
+    });
+
+    createEffect(() => {
+      const setting = playerSettings().hillShade;
+      if (mapInstance && mapInstance.isStyleLoaded()) {
+        updateHillShadeLayer(setting);
+      }
+    });
   });
 
   const bounds = useStore($gameBounds);
@@ -767,7 +916,6 @@ export default function MapView() {
             myTargetSpeed = currentSpeeds[pid] || 0;
 
             if (frameCount % 60 === 0) {
-              // Update settings cache occasionally
               autoZoomEnabled = $playerSettings.get().autoZoom;
 
               const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
