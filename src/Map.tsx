@@ -557,7 +557,8 @@ export default function MapView() {
           'text-field': ['get', 'emoji'],
           'text-size': 12,
           'text-allow-overlap': true,
-          'text-ignore-placement': false
+          'text-ignore-placement': false,
+          'text-anchor': 'left',
         },
         paint: {
           'text-color': ['get', 'color'],
