@@ -917,7 +917,7 @@ export default function MapView() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#ffed02' }} />
+      <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#eee' }} />
       <button
         class="follow-btn"
         classList={{ active: isFollowing() }}
