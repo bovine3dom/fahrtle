@@ -663,26 +663,27 @@ export default function MapView() {
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const targetMinutes = hour * 60 + minute;
 
-          $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone });
+          $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone, clickTime: Date.now() });
 
           clickTimeout = null;
         }, 300);
       });
 
+      const context = useStore($lastClickContext);
+      const mode = useStore($boardMode);
       createEffect(() => {
-        const context = useStore($lastClickContext)();
-        const mode = useStore($boardMode)();
-        if (!context) return;
+        if (context() === null) return;
+        context()?.clickTime; // force reactivity on repeated clicks in same position
 
-        const timeField = mode === 'departures' ? 'departure_time' : 'next_arrival';
-        const h3Field = mode === 'departures' ? 'h3' : 'next_h3';
+        const timeField = mode() === 'departures' ? 'departure_time' : 'next_arrival';
+        const h3Field = mode() === 'departures' ? 'h3' : 'next_h3';
 
         const query = `
           SELECT *
           FROM transitous_everything_20260117_edgelist_fahrtle
-          WHERE ${h3Field} IN (${context.h3Conditions})
+          WHERE ${h3Field} IN (${context()?.h3Conditions})
           ORDER by (
-            ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context.targetMinutes} + 1440) % 1440
+            ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
           ) ASC
           LIMIT 100
         `;
