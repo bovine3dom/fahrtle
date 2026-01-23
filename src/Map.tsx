@@ -697,9 +697,9 @@ export default function MapView() {
                 row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
                 row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
                 const dist = haversineDist([row.initial_lat, row.initial_lon], [row.final_lat, row.final_lon]);
-                const start = new Date("2020-01-01 " + (row.initial_arrival?.substring(11,16) || "")); // todo: add initial_departure
-                const finish = new Date("2020-01-01 " + (row.final_arrival?.substring(11, 16) || ""));
-                if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for multiday trips but who cares for now
+                const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
+                const finish = new Date(row.final_arrival || "");
+                if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
                 const duration =  (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
                 row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
                 return row;
