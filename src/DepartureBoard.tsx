@@ -8,6 +8,7 @@ import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, g
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime, sensibleNumber } from './utils/format';
+import { memoize } from 'micro-memoize';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -44,6 +45,7 @@ const ActionButton = (props: {
   title?: string;
   onClick: (e: MouseEvent) => void;
   disabled?: boolean;
+  dimmed?: boolean;
   loading?: boolean;
   spinnerStyle?: any;
   buttonStyle?: any;
@@ -51,6 +53,7 @@ const ActionButton = (props: {
 }) => (
   <button
     class={`preview-btn ${props.class || ''}`}
+    classList={{ 'btn-dimmed': props.dimmed }}
     onClick={(e) => {
       e.stopPropagation();
       props.onClick(e);
@@ -79,7 +82,7 @@ export default function DepartureBoard() {
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [speedFilter, setSpeedFilter] = createSignal<number | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
-  const [isTooFar, setIsTooFar] = createSignal(false);
+
   const [flashError, setFlashError] = createSignal(false);
 
   createEffect(() => {
@@ -88,106 +91,48 @@ export default function DepartureBoard() {
     setViewingStop(stopName);
   });
 
-  const checkDistance = (force = false) => {
-    const res = deduplicatedResults();
-    if (res.length === 0) {
-      setIsTooFar(false);
-      return;
-    }
-
-    if ($boardMinimized.get() && !force) return;
-
-    const pid = $myPlayerId.get();
-    if (!pid) return;
-
-    const stop = res[0];
-    const myPos = playerPositions[pid];
-    if (myPos) {
-      const dist = haversineDist(myPos, [stop.stop_lon, stop.stop_lat]);
-      if (dist !== null) {
-        setIsTooFar(dist > 0.2); // 200m
-      }
-    }
-  };
-
-  createEffect(() => {
-    if (deduplicatedResults().length > 0) {
-      checkDistance(true);
-    } else {
-      setIsTooFar(false);
-    }
-  });
-
-  onMount(() => {
-    const interval = setInterval(() => checkDistance(false), 100);
-    onCleanup(() => clearInterval(interval));
-  });
-
-  const blockingReason = createMemo(() => {
-    if (roomState() !== 'RUNNING') {
-      return "⚠️ The game hasn't started yet!";
-    }
-    if (isTooFar()) {
-      return `⚠️ You are too far from the station to board (${deduplicatedResults()[0]?.stop_name})`;
-    }
-    return null;
-  });
-
-  const isPreviewImminent = createMemo(() => {
-    const p = preview();
-    if (!p) return false;
-    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
-    const depSeconds = getRowSeconds(timeVal || '');
+  const currentLocalSeconds = createMemo(() => {
     const now = currentTime();
     const zone = stopZone();
-    const localSeconds = getLocalSeconds(now, zone);
-    const diff = depSeconds - localSeconds;
-    return diff > 0 && diff <= 120;
-  });
+    if (!zone) return 0;
 
-  createEffect(() => {
-    const p = preview();
-    if (!p) return;
-    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
-    const depSeconds = getRowSeconds(timeVal || '');
-    const now = currentTime();
-    const zone = stopZone();
-    const localSeconds = getLocalSeconds(now, zone);
-    if (localSeconds > depSeconds + 10) {
-      $previewRoute.set(null);
+    try {
+      const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
+      const localDate = new Date(localDateStr);
+      return localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+    } catch (e) {
+      return 0;
     }
   });
-
-  createEffect(() => {
-    if (!results() || results()!.length === 0) {
-      $boardMinimized.set(false);
-    }
-  });
-
-  createEffect(() => {
-    if (results() && results()!.length > 0) {
-      $boardMinimized.set(false);
-    }
-  });
-
-  const getLocalSeconds = (time: number, zone: string) => {
-    const localDateStr = new Date(time).toLocaleString('en-US', { timeZone: zone });
-    const localDate = new Date(localDateStr);
-    return localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
-  };
 
   const getRowSeconds = (departureTime: string) => {
     const depDate = new Date(departureTime);
     return depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
   };
 
+  const [myPos, setMyPos] = createSignal<[number, number] | null>(null);
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      const pid = $myPlayerId.get();
+      if (pid && playerPositions[pid]) {
+        setMyPos(playerPositions[pid]);
+      }
+    }, 100);
+    onCleanup(() => clearInterval(interval));
+  });
+
+  const walkTime = memoize((origin: [number, number], destination: [number, number]) => {
+    const dist = haversineDist(origin, destination);
+    if (dist === null) return null;
+    return (dist / 5) * 3600;
+  }, { maxSize: 5000 });
+
   const deduplicatedResults = createMemo(() => {
     const raw = results();
     if (!raw) return [];
 
-    const now = currentTime();
-    const zone = stopZone();
-    const localSeconds = getLocalSeconds(now, zone);
+    const localSeconds = currentLocalSeconds();
     const currentMode = mode();
 
     const filtered = []
@@ -213,6 +158,101 @@ export default function DepartureBoard() {
         if (a[i] !== b[i]) return false;
       }
       return true;
+    }
+  });
+
+  const blockingStatusMap = createMemo(() => {
+    const map = new Map<string, string | null>();
+    const rows = deduplicatedResults();
+
+    const rState = roomState();
+    const pos = myPos();
+    const currentMode = mode();
+    const localSeconds = currentLocalSeconds();
+
+    if (rState !== 'RUNNING') {
+      const reason = "⚠️ The game hasn't started yet!";
+      rows.forEach(r => map.set(`${r.source}-${r.trip_id}`, reason));
+      return { map, globalError: reason };
+    }
+
+    if (!pos) {
+      return { map, globalError: null };
+    }
+
+    let hasUnreachable = false;
+    for (const r of rows) {
+      const stop: [number, number] = [r.stop_lon, r.stop_lat];
+
+      const walkTimeSeconds = walkTime(
+        pos.map((p) => Number(p.toFixed(4))) as [number, number],
+        stop.map((p) => Number(p.toFixed(4))) as [number, number]
+      );
+
+      const timeVal = currentMode === 'departures' ? r.departure_time : r.next_arrival;
+
+      if (!timeVal) {
+        map.set(`${r.source}-${r.trip_id}`, null);
+        continue;
+      }
+
+      const depSeconds = getRowSeconds(timeVal);
+
+      let effectiveDepSeconds = depSeconds;
+      if (depSeconds < localSeconds) {
+        effectiveDepSeconds += 86400;
+      }
+
+      const arrivalAtStop = localSeconds + (walkTimeSeconds || 0);
+      const isReachable = arrivalAtStop <= effectiveDepSeconds;
+
+      if (!isReachable) {
+        map.set(`${r.source}-${r.trip_id}`, "⚠️ Too far to walk here before departure");
+        hasUnreachable = true;
+      } else {
+        map.set(`${r.source}-${r.trip_id}`, null);
+      }
+    }
+
+    const globalError = hasUnreachable
+      ? "⚠️ You are too far to reach some of these departures in time"
+      : null;
+
+    return { map, globalError };
+  });
+
+
+
+  const isPreviewImminent = createMemo(() => {
+    const p = preview();
+    if (!p) return false;
+    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
+    const depSeconds = getRowSeconds(timeVal || '');
+    const localSeconds = currentLocalSeconds();
+    const diff = depSeconds - localSeconds;
+    return diff > 0 && diff <= 120;
+  });
+
+  createEffect(() => {
+    const p = preview();
+    if (!p) return;
+    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
+    const depSeconds = getRowSeconds(timeVal || '');
+    const localSeconds = currentLocalSeconds();
+    if (localSeconds > depSeconds + 10) {
+      $previewRoute.set(null);
+    }
+  });
+
+  createEffect(() => {
+    if (!results() || results()!.length === 0) {
+      $boardMinimized.set(false);
+    }
+  });
+
+  createEffect(() => {
+    if (results() && results()!.length > 0) {
+      $boardMinimized.set(false);
     }
   });
 
@@ -255,9 +295,7 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: DepartureResult) => {
-    console.log("clicked");
-    if (blockingReason()) {
-      console.log("denied");
+    if (blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)) {
       setFlashError(false);
       setTimeout(() => setFlashError(true), 0);
       setTimeout(() => setFlashError(false), 500);
@@ -409,9 +447,9 @@ export default function DepartureBoard() {
                 {(p) => (
                   <ActionButton
                     icon="🛂"
-                    title={blockingReason() || "Board"}
+                    title={blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`) || "Board"}
                     onClick={() => {
-                      if (blockingReason()) {
+                      if (blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`)) {
                         setFlashError(false);
                         setTimeout(() => setFlashError(true), 500);
                         setTimeout(() => setFlashError(false), 1000);
@@ -425,6 +463,7 @@ export default function DepartureBoard() {
                     disabled={loadingTripKey() !== null}
                     loading={loadingTripKey() === `${p().row.source}-${p().row.trip_id}-${p().row.departure_time}`}
                     class="control-btn board-control-btn"
+                    dimmed={!!blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`)}
                   />
                 )}
               </Show>
@@ -449,13 +488,13 @@ export default function DepartureBoard() {
           </div>
 
           <Show when={!isMinimized()}>
-            <Show when={blockingReason()}>
+            <Show when={blockingStatusMap().globalError}>
               <div
                 class="banner banner-error"
                 classList={{ 'flash-animation': flashError() }}
                 style={{ opacity: flashError() ? 1 : 0.9 }}
               >
-                {blockingReason()}
+                {blockingStatusMap().globalError}
               </div>
             </Show>
 
@@ -488,7 +527,7 @@ export default function DepartureBoard() {
                     classList={{ active: speedFilter() === speed }}
                     onClick={() => setSpeedFilter(speedFilter() === speed ? null : speed)}
                     title={speedFilter() === speed ? 'Clear Filter' : `Filter by speeds greater than or equal to ${speed} km/h`}
-                    style={{"font-size": "0.8rem"}}
+                    style={{ "font-size": "0.8rem" }}
                   >
                     {speed} km/h+
                   </button>
@@ -511,10 +550,10 @@ export default function DepartureBoard() {
             <div class="table-body">
               <For each={displayResults()}>
                 {(row) => {
+                  const uniqueKey = `${row.source}-${row.trip_id}`;
+                  const blockReason = createMemo(() => blockingStatusMap().map.get(uniqueKey));
                   const isTomorrow = createMemo(() => {
-                    const now = currentTime();
-                    const zone = stopZone();
-                    const localSeconds = getLocalSeconds(now, zone);
+                    const localSeconds = currentLocalSeconds();
                     const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
                     const depSeconds = getRowSeconds(timeVal || '');
                     return depSeconds < localSeconds;
@@ -523,9 +562,7 @@ export default function DepartureBoard() {
                   const isImminent = createMemo(() => {
                     const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
                     const depSeconds = getRowSeconds(timeVal || '');
-                    const now = currentTime();
-                    const zone = stopZone();
-                    const localSeconds = getLocalSeconds(now, zone);
+                    const localSeconds = currentLocalSeconds();
                     const diff = depSeconds - localSeconds;
                     return diff > 0 && diff <= 120;
                   });
@@ -592,10 +629,11 @@ export default function DepartureBoard() {
                           <div class="col-board">
                             <ActionButton
                               icon="🛂"
-                              title={blockingReason() || "Board"}
+                              title={blockReason() || "Board"}
                               onClick={handleBoardClick}
                               disabled={loadingTripKey() !== null}
                               loading={isLoading()}
+                              dimmed={!!blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)}
                             />
                           </div>
                         </Show>
@@ -631,7 +669,7 @@ export default function DepartureBoard() {
                             {mainDestText()}
                             <Show when={$gameBounds.get().difficulty === 'Easy'}>
                               <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
-                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
+                                {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
                               </div>
                             </Show>
                           </div>
@@ -648,11 +686,12 @@ export default function DepartureBoard() {
                             <Show when={mode() === 'departures'}>
                               <ActionButton
                                 icon="🛂"
-                                title={blockingReason() || "Board"}
+                                title={blockReason() || "Board"}
                                 onClick={handleBoardClick}
                                 disabled={loadingTripKey() !== null}
                                 loading={isLoading()}
                                 spinnerStyle={{ "border-top-color": "#000" }}
+                                dimmed={!!blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)}
                               />
                             </Show>
                             <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
@@ -1174,6 +1213,18 @@ export default function DepartureBoard() {
           font-size: 14px;
           padding: 2px 6px;
           transition: all 0.2s ease;
+        }
+
+        .preview-btn.btn-dimmed {
+          opacity: 0.4;
+          background: rgba(0, 0, 0, 0.2);
+          filter: grayscale(1);
+        }
+
+        .preview-btn.btn-dimmed:hover {
+          transform: none;
+          background: rgba(0, 0, 0, 0.2);
+          cursor: pointer;
         }
 
         .route-pill {
