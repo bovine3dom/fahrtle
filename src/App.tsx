@@ -456,7 +456,7 @@ function App() {
 
                     <Show when={!isDaily()}>
                       <div style={{ 'margin-bottom': '6px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (Lat, lng): </label>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (lat, lng, but, seriously, use the picker): </label>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <input
                             type="text"
@@ -480,7 +480,7 @@ function App() {
                       </div>
 
                       <div style={{ 'margin-bottom': '6px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (Lat, Lng)</label>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (lat, lng)</label>
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <input
                             type="text"
