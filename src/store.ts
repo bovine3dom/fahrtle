@@ -439,8 +439,10 @@ export function leaveRoom() {
   $isDaily.set(false);
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('fahrtle_daily');
+    localStorage.removeItem('fahrtle_room');
   }
   $players.set({});
+  window.location.reload(); // clearing up state is too hard. make the browser do it
 }
 
 const throttledSetColor = throttle(200, (color: string) => {
