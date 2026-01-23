@@ -463,11 +463,7 @@ function App() {
                             value={startStr()}
                             onInput={(e) => setStartStr(e.currentTarget.value)}
                             placeholder="e.g. 55.953, -3.188"
-                            style={{
-                              width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box',
-                              background: 'white',
-                              cursor: 'text'
-                            }}
+                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
                           />
                           <button
                             onClick={() => togglePicker('start')}
