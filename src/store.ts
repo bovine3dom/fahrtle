@@ -473,9 +473,9 @@ export function cancelNavigation() {
   ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
 }
 
-export function stopImmediately() {
+export function stopImmediately(destinationWpIndex?: number) {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
-  ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY' }));
+  ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY', destinationWpIndex }));
 }
 
 function processPlayer(raw: Player): RenderablePlayer {

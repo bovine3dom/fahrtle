@@ -467,6 +467,20 @@ export function handleIncomingMessage(
         stepClock(room);
         const vTime = room.virtualTime;
 
+        if (message.destinationWpIndex !== undefined) {
+            const idx = message.destinationWpIndex;
+            if (idx >= 0 && idx < player.waypoints.length) {
+                player.waypoints = player.waypoints.slice(0, idx + 1);
+                hooks.publish(wsData.roomId, {
+                    type: 'PLAYER_WAYPOINTS_UPDATE',
+                    playerId: wsData.playerId,
+                    waypoints: player.waypoints
+                });
+                triggerUpdate(wsData.roomId);
+                return;
+            }
+        }
+
         let currentPos = { x: player.waypoints[0].x, y: player.waypoints[0].y };
         const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
 
@@ -492,7 +506,7 @@ export function handleIncomingMessage(
             currentPos.y = last.y;
         }
 
-         if (nextWpIndex !== -1) {
+        if (nextWpIndex !== -1) {
             const nextWp = player.waypoints[nextWpIndex];
             const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
             const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);

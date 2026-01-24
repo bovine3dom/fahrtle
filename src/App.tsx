@@ -253,11 +253,29 @@ function App() {
     onCleanup(() => clearInterval(interval));
   });
 
+  const currentWpIndex = createMemo(() => {
+    const p = players()[myId()!];
+    if (!p) return -1;
+    const t = time();
+    return p.waypoints.findIndex((wp) => wp.arrivalTime > t);
+  });
+
   const nextWaypoint = createMemo(() => {
     const p = players()[myId()!];
-    if (!p) return undefined;
-    return p.waypoints.find((wp) => wp.arrivalTime > time());
+    const idx = currentWpIndex();
+    if (!p || idx === -1) return undefined;
+    return p.waypoints[idx];
   });
+
+  const futureWaypoints = createMemo(() => {
+    const p = players()[myId()!];
+    const idx = currentWpIndex();
+    if (!p || idx === -1) return [];
+    return p.waypoints.slice(idx);
+  });
+
+  const [getOffDropdownOpen, setGetOffDropdownOpen] = createSignal(false);
+  const [actionFeedback, setActionFeedback] = createSignal<string | null>(null);
 
   return (
     <>
@@ -364,27 +382,108 @@ function App() {
                     </button>
                   </Show>
                 }>
-                  <button
-                    onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
-                    style={{
-                      flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
-                      border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
-                      'font-size': '0.9em', 'font-weight': 'bold',
-                      'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
-                      'min-width': 0
-                    }}
-                    title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
-                  >
-                    <span style={{ 'flex-shrink': 0 }}>🛑</span>
-                    <span style={{
-                      'white-space': 'nowrap',
-                      'overflow': 'hidden',
-                      'text-overflow': 'ellipsis',
-                      'flex': 1
-                    }}>
-                      {nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`}
-                    </span>
-                  </button>
+                  <div style={{ display: 'flex', flex: 1, gap: '2px', position: 'relative', 'min-width': 0 }}>
+                    <button
+                      onClick={() => {
+                        if (nextWaypoint()?.isWalk) {
+                          stopImmediately();
+                          setActionFeedback("Walking stopped");
+                        } else {
+                          cancelNavigation();
+                          setActionFeedback(`Stopping at ${nextWaypoint()?.stopName}`);
+                        }
+                        setTimeout(() => setActionFeedback(null), 3000);
+                      }}
+                      style={{
+                        flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                        'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
+                        'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
+                        'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
+                        cursor: 'pointer',
+                        border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                        'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
+                        'font-size': '0.9em', 'font-weight': 'bold',
+                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
+                        'min-width': 0
+                      }}
+                      title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                    >
+                      <span style={{ 'flex-shrink': 0 }}>{actionFeedback() ? '' : '🛑'}</span>
+                      <span style={{
+                        'white-space': 'nowrap',
+                        'overflow': 'hidden',
+                        'text-overflow': 'ellipsis',
+                        'flex': 1
+                      }}>
+                        {actionFeedback() || (nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`)}
+                      </span>
+                    </button>
+                    <Show when={futureWaypoints().length > 1}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGetOffDropdownOpen(!getOffDropdownOpen());
+                        }}
+                        style={{
+                          padding: '0 4px',
+                          background: nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b',
+                          color: '#fff',
+                          'border-top-left-radius': '0px',
+                          'border-bottom-left-radius': '0px',
+                          border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {getOffDropdownOpen() ? '▲' : '▼'}
+                      </button>
+                      <Show when={getOffDropdownOpen()}>
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          right: 0,
+                          background: '#fff',
+                          border: '1px solid #ccc',
+                          'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+                          'border-radius': '4px',
+                          'margin-top': '4px',
+                          'min-width': '180px',
+                          'z-index': 100,
+                          'max-height': '200px',
+                          'overflow-y': 'auto'
+                        }}>
+                          <For each={futureWaypoints()}>
+                            {(wp, i) => (
+                              <div
+                                onClick={() => {
+                                  stopImmediately(currentWpIndex() + i());
+                                  setGetOffDropdownOpen(false);
+                                  setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
+                                  setTimeout(() => setActionFeedback(null), 3000);
+                                }}
+                                style={{
+                                  padding: '8px 12px',
+                                  cursor: 'pointer',
+                                  'font-size': '0.85em',
+                                  border: 'none',
+                                  'border-bottom': '1px solid #eee',
+                                  display: 'flex',
+                                  'align-items': 'center',
+                                  gap: '8px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                              >
+                                <span>{wp.emoji || '🏳️'}</span>
+                                <span style={{ flex: 1, 'white-space': 'nowrap', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
+                                  {wp.stopName || 'Unnamed stop'}
+                                </span>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                    </Show>
+                  </div>
                 </Show>
 
                 {roomState() === 'RUNNING' && (() => {
@@ -412,273 +511,275 @@ function App() {
 
             {/* Expanded Content */}
             <Show when={!minimized()}>
-              <div style={{ 'overflow-y': 'auto', 'padding-right': '4px' }}>
-                {/* Header Info */}
-                <div style={{ 'margin-bottom': '8px' }}>
-                  <Clock />
-                  <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px', 'text-align': 'center' }}>
-                    {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
+              <div style={{ display: 'flex', 'flex-direction': 'column', 'max-height': 'calc(100vh - 100px)', 'min-height': 0 }}>
+                <div style={{ 'overflow-y': 'auto', 'padding-right': '4px', 'flex': 1, 'min-height': 0 }}>
+                  {/* Header Info */}
+                  <div style={{ 'margin-bottom': '8px' }}>
+                    <Clock />
+                    <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px', 'text-align': 'center' }}>
+                      {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
+                    </div>
+                    <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
+                      Time dilation: {rate().toFixed(2)}x
+                    </div>
+                    <Show when={elapsedTime()}>
+                      <div style={{ 'font-size': '0.85em', 'color': '#059669', 'margin-top': '2px', 'font-weight': 'bold' }}>
+                        Elapsed: {elapsedTime()}
+                      </div>
+                    </Show>
                   </div>
-                  <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
-                    Time dilation: {rate().toFixed(2)}x
-                  </div>
-                  <Show when={elapsedTime()}>
-                    <div style={{ 'font-size': '0.85em', 'color': '#059669', 'margin-top': '2px', 'font-weight': 'bold' }}>
-                      Elapsed: {elapsedTime()}
+
+                  <Show when={roomState() === 'JOINING'}>
+                    <div style={{
+                      'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
+                      'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
+                    }}>
+                      <Show when={bounds()}>
+                        <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
+                          {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
+                        </div>
+                      </Show>
+
+                      <Show when={!isDaily()}>
+                        <div style={{ 'margin-bottom': '6px' }}>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <input
+                              type="time"
+                              value={startTimeStr()}
+                              onInput={(e) => setStartTimeStr(e.currentTarget.value)}
+                              style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box', 'font-family': 'unset' }}
+                            />
+                          </div>
+                        </div>
+                      </Show>
+
+                      <Show when={!isDaily()}>
+                        <div style={{ 'margin-bottom': '6px' }}>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (lat, lng, but, seriously, use the picker): </label>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <input
+                              type="text"
+                              value={startStr()}
+                              onInput={(e) => setStartStr(e.currentTarget.value)}
+                              placeholder="e.g. 55.953, -3.188"
+                              style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                            />
+                            <button
+                              onClick={() => togglePicker('start')}
+                              title="Pick on Map"
+                              style={{
+                                background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
+                                color: pickerMode() === 'start' ? 'white' : '#475569',
+                                border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
+                              }}
+                            >
+                              🧭
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ 'margin-bottom': '6px' }}>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (lat, lng)</label>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <input
+                              type="text"
+                              value={finishStr()}
+                              onInput={(e) => setFinishStr(e.currentTarget.value)}
+                              placeholder="e.g. 51.507, -0.127"
+                              style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+                            />
+                            <button
+                              onClick={() => togglePicker('finish')}
+                              title="Pick on Map"
+                              style={{
+                                background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
+                                color: pickerMode() === 'finish' ? 'white' : '#475569',
+                                border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
+                              }}
+                            >
+                              🧭
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
+                      <div style={{ 'margin-bottom': '12px' }}>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Difficulty: </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="2"
+                          step="1"
+                          value={['Easy', 'Normal', 'Transport nerd'].indexOf(diff())}
+                          onInput={e => {
+                            const values: Difficulty[] = ['Easy', 'Normal', 'Transport nerd'];
+                            setDiff(values[parseInt(e.currentTarget.value)]);
+                          }}
+                          style={{ width: '100%', cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', 'justify-content': 'space-between', 'font-size': '0.65rem', 'color': '#64748b' }}>
+                          <span style={{ opacity: diff() === 'Easy' ? 1 : 0.5 }}>Easy</span>
+                          <span style={{ opacity: diff() === 'Normal' ? 1 : 0.5 }}>Normal</span>
+                          <span style={{ opacity: diff() === 'Transport nerd' ? 1 : 0.5 }}>Nerd</span>
+                        </div>
+                        <div style={{ 'font-size': '0.7em', 'color': '#777', 'font-style': 'italic', 'margin': '4px 0', 'min-height': '1.2em' }}>
+                          {diff() === 'Easy' && "Adds arrival times, speeds and destinations"}
+                          {diff() === 'Normal' && "Adds cardinal directions"}
+                          {diff() === 'Transport nerd' && "Adds debug info 💻"}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={updateBounds}
+                        disabled={isSaved()}
+                        style={{
+                          width: '100%', padding: '4px',
+                          'background': isSaved() ? '#10b981' : '#0f172a',
+                          'color': 'white',
+                          border: 'none', 'border-radius': '4px',
+                          'cursor': isSaved() ? 'default' : 'pointer',
+                          'font-size': '0.8em',
+                          'font-weight': 'bold',
+                          'transition': 'all 0.2s'
+                        }}
+                      >
+                        {isSaved() ? 'Synced ✓' : 'Set course'}
+                      </button>
                     </div>
                   </Show>
-                </div>
 
-                <Show when={roomState() === 'JOINING'}>
+                  {/* Player List */}
                   <div style={{
-                    'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
-                    'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
+                    'margin-top': '10px',
+                    'padding-top': '8px',
+                    'border-top': '1px solid #ccc'
                   }}>
-                    <Show when={bounds()}>
-                      <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
-                        {createClosestCity(() => bounds().start)()} ➡️ {createClosestCity(() => bounds().finish)()}
-                      </div>
-                    </Show>
-
-                    <Show when={!isDaily()}>
-                      <div style={{ 'margin-bottom': '6px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <input
-                            type="time"
-                            value={startTimeStr()}
-                            onInput={(e) => setStartTimeStr(e.currentTarget.value)}
-                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box', 'font-family': 'unset' }}
-                          />
-                        </div>
-                      </div>
-                    </Show>
-
-                    <Show when={!isDaily()}>
-                      <div style={{ 'margin-bottom': '6px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (lat, lng, but, seriously, use the picker): </label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <input
-                            type="text"
-                            value={startStr()}
-                            onInput={(e) => setStartStr(e.currentTarget.value)}
-                            placeholder="e.g. 55.953, -3.188"
-                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                          />
-                          <button
-                            onClick={() => togglePicker('start')}
-                            title="Pick on Map"
-                            style={{
-                              background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
-                              color: pickerMode() === 'start' ? 'white' : '#475569',
-                              border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
-                            }}
-                          >
-                            🧭
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{ 'margin-bottom': '6px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (lat, lng)</label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <input
-                            type="text"
-                            value={finishStr()}
-                            onInput={(e) => setFinishStr(e.currentTarget.value)}
-                            placeholder="e.g. 51.507, -0.127"
-                            style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-                          />
-                          <button
-                            onClick={() => togglePicker('finish')}
-                            title="Pick on Map"
-                            style={{
-                              background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
-                              color: pickerMode() === 'finish' ? 'white' : '#475569',
-                              border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
-                            }}
-                          >
-                            🧭
-                          </button>
-                        </div>
-                      </div>
-                    </Show>
-                    <div style={{ 'margin-bottom': '12px' }}>
-                      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Difficulty: </label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="2"
-                        step="1"
-                        value={['Easy', 'Normal', 'Transport nerd'].indexOf(diff())}
-                        onInput={e => {
-                          const values: Difficulty[] = ['Easy', 'Normal', 'Transport nerd'];
-                          setDiff(values[parseInt(e.currentTarget.value)]);
-                        }}
-                        style={{ width: '100%', cursor: 'pointer' }}
-                      />
-                      <div style={{ display: 'flex', 'justify-content': 'space-between', 'font-size': '0.65rem', 'color': '#64748b' }}>
-                        <span style={{ opacity: diff() === 'Easy' ? 1 : 0.5 }}>Easy</span>
-                        <span style={{ opacity: diff() === 'Normal' ? 1 : 0.5 }}>Normal</span>
-                        <span style={{ opacity: diff() === 'Transport nerd' ? 1 : 0.5 }}>Nerd</span>
-                      </div>
-                      <div style={{ 'font-size': '0.7em', 'color': '#777', 'font-style': 'italic', 'margin': '4px 0', 'min-height': '1.2em' }}>
-                        {diff() === 'Easy' && "Adds arrival times, speeds and destinations"}
-                        {diff() === 'Normal' && "Adds cardinal directions"}
-                        {diff() === 'Transport nerd' && "Adds debug info 💻"}
-                      </div>
+                    <div style={{ 'font-size': '0.75em', 'text-transform': 'uppercase', 'color': '#666', 'margin-bottom': '6px', 'letter-spacing': '0.5px' }}>
+                      Active Pilots
                     </div>
+                    <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
+                      <For each={sortedPlayerIds()}>
+                        {(id, index) => {
+                          const p = () => players()[id];
+                          const isFinished = createMemo(() => p().finishTime != null);
+                          const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time()));
+                          const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
+                          const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
-                    <button
-                      onClick={updateBounds}
-                      disabled={isSaved()}
-                      style={{
-                        width: '100%', padding: '4px',
-                        'background': isSaved() ? '#10b981' : '#0f172a',
-                        'color': 'white',
-                        border: 'none', 'border-radius': '4px',
-                        'cursor': isSaved() ? 'default' : 'pointer',
-                        'font-size': '0.8em',
-                        'font-weight': 'bold',
-                        'transition': 'all 0.2s'
-                      }}
-                    >
-                      {isSaved() ? 'Synced ✓' : 'Set course'}
-                    </button>
-                  </div>
-                </Show>
-
-                {/* Player List */}
-                <div style={{
-                  'margin-top': '10px',
-                  'padding-top': '8px',
-                  'border-top': '1px solid #ccc'
-                }}>
-                  <div style={{ 'font-size': '0.75em', 'text-transform': 'uppercase', 'color': '#666', 'margin-bottom': '6px', 'letter-spacing': '0.5px' }}>
-                    Active Pilots
-                  </div>
-                  <div style={{ 'max-height': '200px', 'overflow-y': 'auto' }}>
-                    <For each={sortedPlayerIds()}>
-                      {(id, index) => {
-                        const p = () => players()[id];
-                        const isFinished = createMemo(() => p().finishTime != null);
-                        const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time()));
-                        const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
-                        const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
-
-                        // onClick={() => flyToPlayer(p().id)}
-                        return (
-                          <div
-                            onClick={() => {
-                              console.log(getTravelSummary(p(), $gameBounds.get()))
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                            style={{
-                              display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
-                              'font-weight': p().id === myId() ? '800' : '400',
-                              'color': p().id === myId() ? '#0f172a' : '#334155',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              'min-height': '42px',
-                              'border-radius': '4px',
-                              transition: 'background 0.2s',
-                              'background': isFinished() ? 'rgba(255, 237, 74, 0.1)' : 'transparent',
-                              'border': isFinished() ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid transparent'
-                            }}>
-                            <div style={{ position: 'relative', width: '12px', height: '12px', 'flex-shrink': 0 }}>
-                              <div style={{
-                                width: '12px', height: '12px', 'border-radius': '50%',
-                                background: p().color,
-                                'border': '1px solid rgba(0,0,0,0.2)'
-                              }} />
-                              <Show when={p().id === myId()}>
-                                <input
-                                  type="color"
-                                  value={p().color}
-                                  onInput={(e) => setPlayerColor(e.currentTarget.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                                    opacity: 0, cursor: 'pointer', 'z-index': 1
-                                  }}
-                                />
-                              </Show>
-                            </div>
-                            <div style={{ 'flex': 1, 'min-width': 0 }}>
-                              <div style={{
-                                'font-size': '0.9em',
-                                'white-space': 'nowrap',
-                                'overflow': 'hidden',
-                                'text-overflow': 'ellipsis',
+                          // onClick={() => flyToPlayer(p().id)}
+                          return (
+                            <div
+                              onClick={() => {
+                                console.log(getTravelSummary(p(), $gameBounds.get()))
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              style={{
+                                display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
+                                'font-weight': p().id === myId() ? '800' : '400',
+                                'color': p().id === myId() ? '#0f172a' : '#334155',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                'min-height': '42px',
+                                'border-radius': '4px',
+                                transition: 'background 0.2s',
+                                'background': isFinished() ? 'rgba(255, 237, 74, 0.1)' : 'transparent',
+                                'border': isFinished() ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid transparent'
                               }}>
-                                <Show when={isFinished()}>
-                                  <span style={{ "margin-right": "4px" }}>{getMedal(index())}</span>
+                              <div style={{ position: 'relative', width: '12px', height: '12px', 'flex-shrink': 0 }}>
+                                <div style={{
+                                  width: '12px', height: '12px', 'border-radius': '50%',
+                                  background: p().color,
+                                  'border': '1px solid rgba(0,0,0,0.2)'
+                                }} />
+                                <Show when={p().id === myId()}>
+                                  <input
+                                    type="color"
+                                    value={p().color}
+                                    onInput={(e) => setPlayerColor(e.currentTarget.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                      opacity: 0, cursor: 'pointer', 'z-index': 1
+                                    }}
+                                  />
                                 </Show>
-                                {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && '💤'}
                               </div>
-                              <Show when={isFinished()}>
-                                <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
-                                  Finished in {formatDuration(p().finishTime!)}
-                                </div>
-                              </Show>
-                              <Show when={!isFinished()}>
-                                <Show when={nextWp()} fallback={
-                                  <Show when={p().viewingStopName}>
-                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
-                                      🔍 Looking at departures @ {p().viewingStopName}
-                                    </div>
+                              <div style={{ 'flex': 1, 'min-width': 0 }}>
+                                <div style={{
+                                  'font-size': '0.9em',
+                                  'white-space': 'nowrap',
+                                  'overflow': 'hidden',
+                                  'text-overflow': 'ellipsis',
+                                }}>
+                                  <Show when={isFinished()}>
+                                    <span style={{ "margin-right": "4px" }}>{getMedal(index())}</span>
                                   </Show>
-                                }>
-                                  {(wp) => (
-                                    <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
-                                      <Show when={wp().route_short_name}>
-                                        <span
-                                          class="route-pill"
-                                          style={{
-                                            "background-color": wp().route_color ? `#${wp().route_color}` : '#333',
-                                            "color": '#fff'
-                                          }}
-                                        >
-                                          {wp().route_short_name}
-                                        </span>
-                                      </Show>
-                                      {wp().emoji + " " || ''} &rarr; {wp().stopName}
-                                    </div>
-                                  )}
+                                  {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && '💤'}
+                                </div>
+                                <Show when={isFinished()}>
+                                  <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
+                                    Finished in {formatDuration(p().finishTime!)}
+                                  </div>
                                 </Show>
-                              </Show>
-                            </div>
+                                <Show when={!isFinished()}>
+                                  <Show when={nextWp()} fallback={
+                                    <Show when={p().viewingStopName}>
+                                      <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                        🔍 Looking at departures @ {p().viewingStopName}
+                                      </div>
+                                    </Show>
+                                  }>
+                                    {(wp) => (
+                                      <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                        <Show when={wp().route_short_name}>
+                                          <span
+                                            class="route-pill"
+                                            style={{
+                                              "background-color": wp().route_color ? `#${wp().route_color}` : '#333',
+                                              "color": '#fff'
+                                            }}
+                                          >
+                                            {wp().route_short_name}
+                                          </span>
+                                        </Show>
+                                        {wp().emoji + " " || ''} &rarr; {wp().stopName}
+                                      </div>
+                                    )}
+                                  </Show>
+                                </Show>
+                              </div>
 
-                            {/* Speed / Ready Status */}
-                            <Show when={roomState() === 'RUNNING' && !isFinished()}>
-                              <span style={{
-                                'font-size': '0.75em',
-                                'font-family': 'monospace',
-                                'color': '#64748b',
-                                'margin-right': '6px',
-                                'min-width': '60px',
-                                'text-align': 'right'
-                              }}>
-                                {mySpeed()} km/h {myDist()} km
-                              </span>
-                            </Show>
-                            {roomState() !== 'RUNNING' && (
-                              p().isReady ? (
-                                <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
-                              ) : (
-                                <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
-                              )
-                            )}
-                          </div>
-                        );
-                      }}
-                    </For>
+                              {/* Speed / Ready Status */}
+                              <Show when={roomState() === 'RUNNING' && !isFinished()}>
+                                <span style={{
+                                  'font-size': '0.75em',
+                                  'font-family': 'monospace',
+                                  'color': '#64748b',
+                                  'margin-right': '6px',
+                                  'min-width': '60px',
+                                  'text-align': 'right'
+                                }}>
+                                  {mySpeed()} km/h {myDist()} km
+                                </span>
+                              </Show>
+                              {roomState() !== 'RUNNING' && (
+                                p().isReady ? (
+                                  <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
+                                )
+                              )}
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
                   </div>
                 </div>
 
                 {/* Footer Actions */}
-                <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px' }}>
+                <div style={{ 'margin-top': '12px', 'border-top': '1px solid #ccc', 'padding-top': '8px', 'flex-shrink': 0 }}>
                   <Show when={canCancel()} fallback={
                     <Show when={roomState() === 'RUNNING'} >
                       <button disabled style={{
@@ -691,18 +792,100 @@ function App() {
                       </button>
                     </Show>
                   }>
-                    <button
-                      onClick={() => nextWaypoint()?.isWalk ? stopImmediately() : cancelNavigation()}
-                      style={{
-                        width: '100%', padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
-                        border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706', 'border-radius': '4px', cursor: 'pointer',
-                        'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
-                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                      }}
-                      title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
-                    >
-                      <span>🛑</span> {nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`}
-                    </button>
+                    <div style={{ display: 'flex', gap: '2px', position: 'relative', 'margin-bottom': '8px' }}>
+                      <button
+                        onClick={() => {
+                          if (nextWaypoint()?.isWalk) {
+                            stopImmediately();
+                            setActionFeedback("Walking stopped");
+                          } else {
+                            cancelNavigation();
+                            setActionFeedback(`Alighting scheduled for ${nextWaypoint()?.stopName}`);
+                          }
+                          setTimeout(() => setActionFeedback(null), 3000);
+                        }}
+                        style={{
+                          flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                          'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
+                          'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
+                          'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
+                          cursor: 'pointer',
+                          border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                          'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
+                          'font-size': '0.9em', 'font-weight': 'bold',
+                          'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
+                        }}
+                        title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                      >
+                        <span>{actionFeedback() ? '' : '🛑'}</span> {actionFeedback() || (nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`)}
+                      </button>
+                      <Show when={futureWaypoints().length > 1}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGetOffDropdownOpen(!getOffDropdownOpen());
+                          }}
+                          style={{
+                            padding: '0 8px',
+                            background: nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b',
+                            color: '#fff',
+                            'border-top-left-radius': '0px',
+                            'border-bottom-left-radius': '0px',
+                            'border-top-right-radius': '4px',
+                            'border-bottom-right-radius': '4px',
+                            border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                            'border-left': '1px solid rgba(255,255,255,0.3)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {getOffDropdownOpen() ? '▲' : '▼'}
+                        </button>
+                        <Show when={getOffDropdownOpen()}>
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            background: '#fff',
+                            border: '1px solid #ccc',
+                            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+                            'border-radius': '4px',
+                            'margin-top': '4px',
+                            'min-width': '200px',
+                            'z-index': 100,
+                            'max-height': '200px',
+                            'overflow-y': 'auto'
+                          }}>
+                            <For each={futureWaypoints()}>
+                              {(wp, i) => (
+                                <div
+                                  onClick={() => {
+                                    stopImmediately(currentWpIndex() + i());
+                                    setGetOffDropdownOpen(false);
+                                    setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
+                                    setTimeout(() => setActionFeedback(null), 3000);
+                                  }}
+                                  style={{
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    'font-size': '0.9em',
+                                    border: 'none',
+                                    'border-bottom': '1px solid #eee',
+                                    display: 'flex',
+                                    'align-items': 'center',
+                                    gap: '8px'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                  onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                                >
+                                  <span>{wp.emoji || '🏳️'}</span>
+                                  <span style={{ flex: 1 }}>{wp.stopName || 'Unnamed stop'}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </Show>
+                    </div>
                   </Show>
                   {roomState() !== 'RUNNING' && (
                     <button
