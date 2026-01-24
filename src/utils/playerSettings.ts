@@ -14,4 +14,5 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   baseMap: { type: 'select', value: 'Positron', description: 'Base map', options: ['Positron', 'Bright', 'Liberty (3D)', 'Transport', 'Transport dark'] },
   railwaysLayer: { type: 'select', value: 'Infrastructure', description: 'Railways layer', options: ['Disabled', 'Infrastructure', 'Speed', 'Electrification', 'Gauge'] },
   hillShade: { type: 'boolean', value: true, description: 'Hillshade' },
+  debug: { type: 'boolean', value: false, description: 'Show debug buttons next to departures' },
 }

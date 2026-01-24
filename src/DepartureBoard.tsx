@@ -637,7 +637,7 @@ export default function DepartureBoard() {
                             />
                           </div>
                         </Show>
-                        <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
+                        <Show when={($gameBounds.get().difficulty === 'Transport nerd') || $playerSettings.get().debug}>
                           <div class="col-board">
                             <ActionButton
                               icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
@@ -694,7 +694,7 @@ export default function DepartureBoard() {
                                 dimmed={!!blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)}
                               />
                             </Show>
-                            <Show when={$gameBounds.get().difficulty === 'Transport nerd'}>
+                            <Show when={($gameBounds.get().difficulty === 'Transport nerd') || $playerSettings.get().debug}>
                               <ActionButton
                                 icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
                                 title={copied() ? "Copied!" : "Copy raw data to clipboard"}
