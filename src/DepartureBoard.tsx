@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, $mapZoom, $boardMode, $playerSettings } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, createClosestCity } from './utils/geo';
@@ -76,7 +76,7 @@ export default function DepartureBoard() {
 
   const stopZone = useStore($stopTimeZone);
   const isMinimized = useStore($boardMinimized);
-  const mapZoom = useStore($mapZoom);
+  // const mapZoom = useStore($mapZoom);
   const preview = useStore($previewRoute);
 
   const [filterType, setFilterType] = createSignal<string | null>(null);
@@ -498,11 +498,11 @@ export default function DepartureBoard() {
               </div>
             </Show>
 
-            <Show when={mapZoom() < 16}>
+            {/*<Show when={mapZoom() < 16}>
               <div class="banner banner-warning">
                 ⚠️ Some stops are hidden until you zoom in further
               </div>
-            </Show>
+            </Show>*/}
           </Show>
 
           {/* Type Filter Toolbar */}

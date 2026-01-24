@@ -122,11 +122,12 @@ const updateStops = async (map: maplibregl.Map) => {
       stop_lon,
       stop_name,
       route_type
-    FROM transitous_everything_20260117_stop_statistics${zoom >= 16 ? "_unmerged" : ""}
+    FROM transitous_everything_20260117_stop_statistics_unmerged
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-    LIMIT 500
+    LIMIT 1000
   `;
+  //${zoom >= 16 ? "_unmerged" : ""}
 
   try {
     const res = await chQuery(query);
