@@ -400,24 +400,29 @@ export function submitWaypointsBatch(points: {
   if (!player || points.length === 0) return;
 
   const clockTime = $clock.get();
-  let lastTime = clockTime;
+  let lastTimeForTotal = clockTime;
   let totalVirtualTime = 0;
 
   for (const p of points) {
-    totalVirtualTime += Math.max(1000, p.time - lastTime);
-    lastTime = p.time;
+    totalVirtualTime += Math.max(1000, p.time - lastTimeForTotal);
+    lastTimeForTotal = p.time;
   }
 
-  const speedFactor = Math.max(1.0, totalVirtualTime / 30000);
+  const batchSpeedFactor = Math.max(1.0, totalVirtualTime / 30000);
 
+  let lastTimeForSegments = clockTime;
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
+    const segmentVirtualTime = Math.max(1000, p.time - lastTimeForSegments);
+    const speedLimitBetweenStops = segmentVirtualTime / 5000; // min 5 seconds between each stop
+    const waypointSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, speedLimitBetweenStops));
+
     ws.send(JSON.stringify({
       type: 'ADD_WAYPOINT',
       x: p.lng,
       y: p.lat,
       arrivalTime: p.time,
-      speedFactor,
+      speedFactor: waypointSpeedFactor,
       stopName: p.stopName,
       isWalk: i === 0,
       route_color: p.route_color,
@@ -426,6 +431,7 @@ export function submitWaypointsBatch(points: {
       emoji: p.emoji,
       route_departure_time: p.route_departure_time
     }));
+    lastTimeForSegments = p.time;
   }
 }
 
