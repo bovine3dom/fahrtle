@@ -414,7 +414,7 @@ export function submitWaypointsBatch(points: {
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     const segmentVirtualTime = Math.max(1000, p.time - lastTimeForSegments);
-    const speedLimitBetweenStops = segmentVirtualTime / 5000; // min 5 seconds between each stop
+    const speedLimitBetweenStops = segmentVirtualTime / 2000; // min 2 seconds between each stop
     const waypointSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, speedLimitBetweenStops));
 
     ws.send(JSON.stringify({
