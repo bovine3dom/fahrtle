@@ -15,7 +15,7 @@ import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
 
-let mapInstance: maplibregl.Map | undefined;
+let mapInstance: maplibregl.Map;
 
 export function flyToPlayer(playerId: string) {
   const pos = playerPositions[playerId];
@@ -396,18 +396,17 @@ export default function MapView() {
           attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
         });
 
-        const beforeLayer = mapInstance.getLayer('course-markers-h3-filled') ? 'course-markers-h3-filled' : undefined;
         mapInstance.addLayer({
           id: 'openrailwaymap-layer',
           type: 'raster',
           source: 'openrailwaymap',
           paint: { 'raster-opacity': 1 }
-        }, beforeLayer);
+        }, getBeforeId("openrailwaymap-layer", mapInstance));
       }
     };
 
     const updateHillShadeLayer = (setting: boolean) => {
-      if (!mapInstance) return;
+      if (mapInstance === undefined) return;
 
       const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
       const sourceExists = !!mapInstance.getSource('mapterhorn');
@@ -421,13 +420,12 @@ export default function MapView() {
         return;
       }
 
-      const beforeLayer = mapInstance.getLayer('course-markers-h3-filled') ? 'course-markers-h3-filled' : undefined;
-      mapInstance!.addSource('mapterhorn', {
+      mapInstance.addSource('mapterhorn', {
         type: 'raster-dem',
         url: 'https://tiles.mapterhorn.com/tilejson.json',
         maxzoom: 15,
       });
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'mapterhorn-layer',
         type: 'hillshade',
         source: 'mapterhorn',
@@ -441,7 +439,7 @@ export default function MapView() {
       }, beforeLayer);
 
       // // this is silly but fun, consider adding flag
-      // mapInstance!.setTerrain({
+      // mapInstance.setTerrain({
       //   source: 'mapterhorn',
       //   exaggeration: 3,
       // });
@@ -454,22 +452,22 @@ export default function MapView() {
 
       updateRailwaysLayer($playerSettings.get().railwaysLayer);
 
-      mapInstance!.addSource('course-markers', {
+      mapInstance.addSource('course-markers', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      mapInstance!.addSource('course-markers-h3', {
+      mapInstance.addSource('course-markers-h3', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'course-markers-h3-filled', type: 'fill', source: 'course-markers-h3',
         paint: { 'fill-color': '#10b981', 'fill-opacity': 0.8 }
       });
 
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'course-markers-icon',
         type: 'symbol',
         source: 'course-markers',
@@ -484,8 +482,7 @@ export default function MapView() {
           'text-halo-color': '#000000',
           'text-halo-width': 2,
         }
-      });
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'course-markers-label',
         type: 'symbol',
         source: 'course-markers',
@@ -503,13 +500,13 @@ export default function MapView() {
         }
       });
 
-      mapInstance!.addSource('routes', {
+      mapInstance.addSource('routes', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
         attribution: '<a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank">❤️ bovine3dom & fahrtle</a>'
       });
 
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'routes-casing', type: 'line', source: 'routes',
         paint: {
           'line-color': '#ffffff',
@@ -519,7 +516,7 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
         paint: {
           'line-color': ['get', 'color'],
@@ -529,14 +526,14 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      mapInstance!.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      mapInstance!.addLayer({
+      mapInstance.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance.addLayer({
         id: 'h3-cell-line', type: 'line', source: 'h3-cell',
         paint: { 'line-color': '#ff00ff', 'line-width': 3, 'line-opacity': 0.8 }
       });
 
-      mapInstance!.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      mapInstance!.addLayer({
+      mapInstance.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance.addLayer({
         id: 'preview-route-line', type: 'line', source: 'preview-route',
         paint: {
           'line-color': '#444',
@@ -545,12 +542,12 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       });
 
-      mapInstance!.addSource('stops', {
+      mapInstance.addSource('stops', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
         attribution: '&copy; <a href="https://transitous.org/sources" target="_blank">Transitous et al.</a>'
       });
 
-      mapInstance!.addLayer({
+      mapInstance.addLayer({
         id: 'stops-layer',
         type: 'symbol',
         source: 'stops',
@@ -585,18 +582,18 @@ export default function MapView() {
           $mapZoom.set(mapInstance.getZoom());
         }
       });
-      mapInstance!.on('moveend', throttledUpdate);
-      mapInstance!.on('zoomend', throttledUpdate);
+      mapInstance.on('moveend', throttledUpdate);
+      mapInstance.on('zoomend', throttledUpdate);
 
       const disableFollowing = () => $isFollowing.set(false);
-      mapInstance!.on('dragstart', disableFollowing);
-      mapInstance!.on('wheel', disableFollowing);
-      mapInstance!.on('touchstart', disableFollowing);
-      mapInstance!.on('mousedown', (e) => {
+      mapInstance.on('dragstart', disableFollowing);
+      mapInstance.on('wheel', disableFollowing);
+      mapInstance.on('touchstart', disableFollowing);
+      mapInstance.on('mousedown', (e) => {
         if (e.originalEvent.button === 0) disableFollowing();
       });
 
-      mapInstance!.on('dblclick', (e) => {
+      mapInstance.on('dblclick', (e) => {
         if (clickTimeout) {
           clearTimeout(clickTimeout);
           clickTimeout = null;
@@ -606,7 +603,7 @@ export default function MapView() {
       });
 
       // middle click to teleport in dev mode
-      !import.meta.env.PROD && mapInstance!.on('mousedown', (e) => {
+      !import.meta.env.PROD && mapInstance.on('mousedown', (e) => {
         if (e.originalEvent.button === 1) {
           submitWaypointsBatch([
             { lat: e.lngLat.lat, lng: e.lngLat.lng, time: $clock.get() },
@@ -614,7 +611,7 @@ export default function MapView() {
         }
       });
 
-      mapInstance!.on('click', (e) => {
+      mapInstance.on('click', (e) => {
         if (clickTimeout) clearTimeout(clickTimeout);
 
         clickTimeout = setTimeout(() => {
@@ -997,7 +994,7 @@ export default function MapView() {
 
             marker = new maplibregl.Marker({ element: el })
               .setLngLat(pos)
-              .addTo(mapInstance!);
+              .addTo(mapInstance);
             playerMarkers.set(pid, marker);
           } else {
             marker.setLngLat(pos);
