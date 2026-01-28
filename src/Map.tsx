@@ -204,6 +204,30 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
       return "https://tiles.openfreemap.org/styles/positron"
     case 'Bright':
       return "https://tiles.openfreemap.org/styles/bright"
+    case 'OSM Carto':
+      return {
+        'version': 8,
+        'sources': {
+          'raster-tiles': {
+            'type': 'raster',
+            'tiles': [
+              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            ],
+            'tileSize': 128,
+            'attribution':
+              '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+          }
+        },
+        'layers': [
+          {
+            'id': 'simple-tiles',
+            'type': 'raster',
+            'source': 'raster-tiles',
+            'minzoom': 0,
+            'maxzoom': 22
+          }
+        ]
+      }
     case 'Liberty (3D)':
       return "https://tiles.openfreemap.org/styles/liberty"
     case 'Transport':
