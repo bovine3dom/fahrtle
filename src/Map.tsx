@@ -14,6 +14,7 @@ import { interpolateSpectral } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
+import { getBeforeId } from './utils/layer_order';
 
 let mapInstance: maplibregl.Map;
 
@@ -335,14 +336,13 @@ export default function MapView() {
           for (const [sourceId, source] of Object.entries(style.sources)) {
             mapInstance.addSource(`basemap-${sourceId}`, source as any);
           }
-          const beforeLayer = mapInstance.getLayer('mapterhorn-layer') ? 'mapterhorn-layer' : undefined; // needs to go under hillshade (lol)
           for (const layer of style.layers) {
             const newLayer = {
               ...layer,
               id: `basemap-${layer.id}`,
               source: layer.source ? `basemap-${layer.source}` : undefined
             };
-            mapInstance.addLayer(newLayer, beforeLayer);
+            mapInstance.addLayer(newLayer, getBeforeId("basemap-", mapInstance));
           }
         } catch (err) {
           console.error('[Map] Failed to fetch basemap style:', err);
@@ -353,12 +353,11 @@ export default function MapView() {
         const layer = styleSpec.layers[0];
 
         mapInstance.addSource(`basemap-${sourceKey}`, source as any);
-        const beforeLayer = mapInstance.getLayer('mapterhorn-layer') ? 'mapterhorn-layer' : undefined;
         mapInstance.addLayer({
           ...layer,
           id: `basemap-${layer.id}`,
           source: `basemap-${sourceKey}`
-        } as any, beforeLayer);
+        } as any, getBeforeId("basemap-", mapInstance));
       }
     };
 
@@ -436,7 +435,7 @@ export default function MapView() {
           'hillshade-exaggeration': 0.1,
           'hillshade-method': 'igor',
         }
-      }, beforeLayer);
+      }, getBeforeId("mapterhorn-layer", mapInstance));
 
       // // this is silly but fun, consider adding flag
       // mapInstance.setTerrain({
@@ -465,7 +464,7 @@ export default function MapView() {
       mapInstance.addLayer({
         id: 'course-markers-h3-filled', type: 'fill', source: 'course-markers-h3',
         paint: { 'fill-color': '#10b981', 'fill-opacity': 0.8 }
-      });
+      }, getBeforeId("course-markers-h3-filled", mapInstance));
 
       mapInstance.addLayer({
         id: 'course-markers-icon',
@@ -482,6 +481,7 @@ export default function MapView() {
           'text-halo-color': '#000000',
           'text-halo-width': 2,
         }
+      }, getBeforeId("course-markers-icon", mapInstance));
       mapInstance.addLayer({
         id: 'course-markers-label',
         type: 'symbol',
@@ -498,7 +498,7 @@ export default function MapView() {
           'text-halo-color': '#ffffff',
           'text-halo-width': 2,
         }
-      });
+      }, getBeforeId("course-markers-label", mapInstance));
 
       mapInstance.addSource('routes', {
         type: 'geojson',
@@ -514,7 +514,7 @@ export default function MapView() {
           'line-opacity': 1.0
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
+      }, getBeforeId("routes-casing", mapInstance));
 
       mapInstance.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
@@ -524,13 +524,13 @@ export default function MapView() {
           'line-opacity': 1.0
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
+      }, getBeforeId("routes-line", mapInstance));
 
       mapInstance.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance.addLayer({
         id: 'h3-cell-line', type: 'line', source: 'h3-cell',
         paint: { 'line-color': '#ff00ff', 'line-width': 3, 'line-opacity': 0.8 }
-      });
+      }, getBeforeId("h3-cell-line", mapInstance));
 
       mapInstance.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance.addLayer({
@@ -540,7 +540,7 @@ export default function MapView() {
           'line-width': 6,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
-      });
+      }, getBeforeId("preview-route-line", mapInstance));
 
       mapInstance.addSource('stops', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
@@ -564,7 +564,7 @@ export default function MapView() {
           'text-halo-color': '#000',
           'text-halo-width': 0.1,
         }
-      });
+      }, getBeforeId("stops-layer", mapInstance));
 
       const pickerMode = useStore($pickerMode);
       createEffect(() => {
