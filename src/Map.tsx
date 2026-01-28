@@ -586,14 +586,6 @@ export default function MapView() {
         }
       }, getBeforeId("stops-layer", mapInstance));
 
-      const pickerMode = useStore($pickerMode);
-      createEffect(() => {
-        const mode = pickerMode();
-        if (mapInstance && mapInstance.getCanvas()) {
-          mapInstance.getCanvas().style.cursor = mode ? 'crosshair' : 'grab';
-        }
-      });
-
       let clickTimeout: any = null;
 
       const throttledUpdate = throttle(200, () => {
@@ -689,46 +681,6 @@ export default function MapView() {
         }, 300);
       });
 
-      const context = useStore($lastClickContext);
-      const mode = useStore($boardMode);
-      createEffect(() => {
-        if (context() === null) return;
-        context()?.clickTime; // force reactivity on repeated clicks in same position
-
-        const timeField = mode() === 'departures' ? 'departure_time' : 'next_arrival';
-        const h3Field = mode() === 'departures' ? 'h3' : 'next_h3';
-
-        const query = `
-          SELECT *
-          FROM transitous_everything_20260117_edgelist_fahrtle
-          WHERE ${h3Field} IN (${context()?.h3Conditions})
-          ORDER by (
-            ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
-          ) ASC
-          LIMIT 200
-        `;
-
-        chQuery(query)
-          .then(res => {
-            if (res && res.data) {
-              const data = res.data.map((row: DepartureResult) => {
-                row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
-                row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
-                const dist = haversineDist([row.initial_lat, row.initial_lon], [row.final_lat, row.final_lon]);
-                const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
-                const finish = new Date(row.final_arrival || "");
-                if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
-                const duration =  (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
-                row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
-                return row;
-              })
-              $departureBoardResults.set(data);
-              $previewRoute.set(null);
-              $boardMinimized.set(false);
-            }
-          })
-          .catch(err => console.error(`[ClickHouse] Query failed:`, err));
-      });
 
       if (mapInstance) {
         throttledUpdate();
@@ -737,6 +689,54 @@ export default function MapView() {
       startAnimationLoop();
     });
 
+    const context = useStore($lastClickContext);
+    const mode = useStore($boardMode);
+    createEffect(() => {
+      if (context() === null) return;
+      context()?.clickTime; // force reactivity on repeated clicks in same position
+
+      const timeField = mode() === 'departures' ? 'departure_time' : 'next_arrival';
+      const h3Field = mode() === 'departures' ? 'h3' : 'next_h3';
+
+      const query = `
+        SELECT *
+        FROM transitous_everything_20260117_edgelist_fahrtle
+        WHERE ${h3Field} IN (${context()?.h3Conditions})
+        ORDER by (
+          ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
+        ) ASC
+        LIMIT 200
+      `;
+
+      chQuery(query)
+        .then(res => {
+          if (res && res.data) {
+            const data = res.data.map((row: DepartureResult) => {
+              row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
+              row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
+              const dist = haversineDist([row.initial_lat, row.initial_lon], [row.final_lat, row.final_lon]);
+              const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
+              const finish = new Date(row.final_arrival || "");
+              if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
+              const duration =  (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
+              row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
+              return row;
+            })
+            $departureBoardResults.set(data);
+            $previewRoute.set(null);
+            $boardMinimized.set(false);
+          }
+        })
+        .catch(err => console.error(`[ClickHouse] Query failed:`, err));
+    });
+
+    const pickerMode = useStore($pickerMode);
+    createEffect(() => {
+      const mode = pickerMode();
+      if (mapInstance && mapInstance.getCanvas()) {
+        mapInstance.getCanvas().style.cursor = mode ? 'crosshair' : 'grab';
+      }
+    });
     const playerSettings = useStore($playerSettings);
     createEffect(() => {
       const setting = playerSettings().baseMap;
