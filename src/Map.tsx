@@ -283,12 +283,6 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
   }
 }
 
-const params = new URLSearchParams(window.location.search)
-
-if (params.has('transport')) {
-}
-
-
 
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
