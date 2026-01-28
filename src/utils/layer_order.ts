@@ -29,7 +29,5 @@ export function getBeforeId(
 ): string | undefined {
   const targetPriority = ideal_hierarchy.indexOf(newLayerPrefix);
   const currentLayers = mapInstance.getLayersOrder();
-  const bingo = currentLayers.find(layer => getPriorityIndex(layer) > targetPriority) || undefined;
-  console.log(newLayerPrefix, bingo);
-  return bingo;
+  return currentLayers.find(layer => getPriorityIndex(layer) > targetPriority) || undefined;
 }

@@ -311,12 +311,13 @@ export default function MapView() {
     });
 
     const updateBasemap = async (setting: string) => {
-      if (!mapInstance) return;
+      await ensureMapLoaded(mapInstance);
 
       const styleSpec = basemapSettingToStyle(setting);
 
-      const existingLayers = mapInstance.getStyle().layers;
-      const existingSources = mapInstance.getStyle().sources;
+      const existingLayers = mapInstance.getStyle()?.layers;
+      const existingSources = mapInstance.getStyle()?.sources;
+      const beforeId = getBeforeId("basemap-", mapInstance);
 
       for (const layer of existingLayers) {
         if (layer.id.startsWith('basemap-')) {
@@ -342,7 +343,7 @@ export default function MapView() {
               id: `basemap-${layer.id}`,
               source: layer.source ? `basemap-${layer.source}` : undefined
             };
-            mapInstance.addLayer(newLayer, getBeforeId("basemap-", mapInstance));
+            mapInstance.addLayer(newLayer, beforeId);
           }
         } catch (err) {
           console.error('[Map] Failed to fetch basemap style:', err);
@@ -357,12 +358,11 @@ export default function MapView() {
           ...layer,
           id: `basemap-${layer.id}`,
           source: `basemap-${sourceKey}`
-        } as any, getBeforeId("basemap-", mapInstance));
+        } as any, beforeId);
       }
     };
 
-    const updateRailwaysLayer = (setting: string) => {
-      if (!mapInstance) return;
+    const updateRailwaysLayer = async (setting: string) => {
 
       const pathMap: Record<string, string | null> = {
         'Infrastructure': '/standard/',
@@ -378,9 +378,11 @@ export default function MapView() {
 
       if (path === null) {
         if (layerExists) {
+          // don't wait for map load for removal
           mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
         }
       } else {
+        await ensureMapLoaded(mapInstance);
         if (layerExists) {
           mapInstance.removeLayer('openrailwaymap-layer');
         }
@@ -404,8 +406,8 @@ export default function MapView() {
       }
     };
 
-    const updateHillShadeLayer = (setting: boolean) => {
-      if (mapInstance === undefined) return;
+    const updateHillShadeLayer = async (setting: boolean) => {
+      await ensureMapLoaded(mapInstance);
 
       const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
       const sourceExists = !!mapInstance.getSource('mapterhorn');
@@ -1242,3 +1244,10 @@ export default function MapView() {
     </div>
   );
 }
+
+const ensureMapLoaded = (map: maplibregl.Map) => {
+  return new Promise<void>((resolve) => {
+    if (map.isStyleLoaded()) resolve();
+    else map.once('idle', () => resolve());
+  });
+};
