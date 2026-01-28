@@ -454,11 +454,9 @@ export default function DepartureBoard() {
                         setTimeout(() => setFlashError(true), 500);
                         setTimeout(() => setFlashError(false), 1000);
                         $boardMinimized.set(false);
-                        $previewRoute.set(null);
                         return;
                       }
                       handleTripDoubleClick(p().row);
-                      $previewRoute.set(null);
                     }}
                     disabled={loadingTripKey() !== null}
                     loading={loadingTripKey() === `${p().row.source}-${p().row.trip_id}-${p().row.departure_time}`}

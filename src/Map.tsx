@@ -1115,8 +1115,6 @@ export default function MapView() {
     }
   };
 
-  (window as any).mapInstance = mapInstance;
-
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#eee' }} />
