@@ -455,7 +455,9 @@ function App() {
                             {(wp, i) => (
                               <div
                                 onClick={() => {
-                                  stopImmediately(currentWpIndex() + i());
+                                  // list is reversed so need to count index backwards
+                                  const idx = futureWaypoints().length - 1 - i();
+                                  stopImmediately(currentWpIndex() + idx);
                                   setGetOffDropdownOpen(false);
                                   setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
                                   setTimeout(() => setActionFeedback(null), 3000);
@@ -859,7 +861,9 @@ function App() {
                               {(wp, i) => (
                                 <div
                                   onClick={() => {
-                                    stopImmediately(currentWpIndex() + i());
+                                    // list is reversed so need to count index backwards
+                                    const idx = futureWaypoints().length - 1 - i();
+                                    stopImmediately(currentWpIndex() + idx);
                                     setGetOffDropdownOpen(false);
                                     setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
                                     setTimeout(() => setActionFeedback(null), 3000);
