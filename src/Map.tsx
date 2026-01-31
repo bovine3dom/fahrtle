@@ -15,6 +15,7 @@ import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
+import { map_update_lock } from './utils/map_lock';
 
 let mapInstance: maplibregl.Map;
 
@@ -329,148 +330,156 @@ export default function MapView() {
     });
 
     const updateBasemap = async (setting: string) => {
-      await ensureMapLoaded(mapInstance);
+      const unlock = await map_update_lock.lock(); // too many cooks spoil the painter's algorithm
+      try {
+        await ensureMapLoaded(mapInstance);
 
-      const styleSpec = basemapSettingToStyle(setting);
+        const styleSpec = basemapSettingToStyle(setting);
 
-      const existingLayers = mapInstance.getStyle()?.layers;
-      const existingSources = mapInstance.getStyle()?.sources;
-      const beforeId = getBeforeId("basemap-", mapInstance);
+        const existingLayers = mapInstance.getStyle()?.layers;
+        const existingSources = mapInstance.getStyle()?.sources;
+        const beforeId = getBeforeId("basemap-", mapInstance);
 
-      for (const layer of existingLayers) {
-        if (layer.id.startsWith('basemap-')) {
-          mapInstance.removeLayer(layer.id);
-        }
-      }
-      for (const sourceId in existingSources) {
-        if (sourceId.startsWith('basemap-')) {
-          mapInstance.removeSource(sourceId);
-        }
-      }
-
-      if (typeof styleSpec === 'string') {
-        try {
-          const response = await fetch(styleSpec);
-          const style = await response.json();
-          for (const [sourceId, source] of Object.entries(style.sources)) {
-            mapInstance.addSource(`basemap-${sourceId}`, source as any);
+        for (const layer of existingLayers) {
+          if (layer.id.startsWith('basemap-')) {
+            mapInstance.removeLayer(layer.id);
           }
-          for (const layer of style.layers) {
-            const newLayer = {
-              ...layer,
-              id: `basemap-${layer.id}`,
-              source: layer.source ? `basemap-${layer.source}` : undefined
-            };
-            mapInstance.addLayer(newLayer, beforeId);
-          }
-        } catch (err) {
-          console.error('[Map] Failed to fetch basemap style:', err);
         }
-      } else {
-        const sourceKey = Object.keys(styleSpec.sources)[0];
-        const source = styleSpec.sources[sourceKey];
-        const layer = styleSpec.layers[0];
+        for (const sourceId in existingSources) {
+          if (sourceId.startsWith('basemap-')) {
+            mapInstance.removeSource(sourceId);
+          }
+        }
 
-        mapInstance.addSource(`basemap-${sourceKey}`, source as any);
-        mapInstance.addLayer({
-          ...layer,
-          id: `basemap-${layer.id}`,
-          source: `basemap-${sourceKey}`
-        } as any, beforeId);
+        if (typeof styleSpec === 'string') {
+          try {
+            const response = await fetch(styleSpec);
+            const style = await response.json();
+            for (const [sourceId, source] of Object.entries(style.sources)) {
+              mapInstance.addSource(`basemap-${sourceId}`, source as any);
+            }
+            for (const layer of style.layers) {
+              const newLayer = {
+                ...layer,
+                id: `basemap-${layer.id}`,
+                source: layer.source ? `basemap-${layer.source}` : undefined
+              };
+              mapInstance.addLayer(newLayer, beforeId);
+            }
+          } catch (err) {
+            console.error('[Map] Failed to fetch basemap style:', err);
+          }
+        } else {
+          const sourceKey = Object.keys(styleSpec.sources)[0];
+          const source = styleSpec.sources[sourceKey];
+          const layer = styleSpec.layers[0];
+
+          mapInstance.addSource(`basemap-${sourceKey}`, source as any);
+          mapInstance.addLayer({
+            ...layer,
+            id: `basemap-${layer.id}`,
+            source: `basemap-${sourceKey}`
+          } as any, beforeId);
+        }
+      } finally {
+        unlock();
       }
     };
 
     const updateRailwaysLayer = async (setting: string) => {
+      const unlock = await map_update_lock.lock();
+      try {
+        const pathMap: Record<string, string | null> = {
+          'Infrastructure': '/standard/',
+          'Speed': '/maxspeed/',
+          'Electrification': '/electrification/',
+          'Gauge': '/gauge/',
+          'Disabled': null
+        };
 
-      const pathMap: Record<string, string | null> = {
-        'Infrastructure': '/standard/',
-        'Speed': '/maxspeed/',
-        'Electrification': '/electrification/',
-        'Gauge': '/gauge/',
-        'Disabled': null
-      };
+        const path = pathMap[setting];
+        const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
+        const sourceExists = !!mapInstance.getSource('openrailwaymap');
 
-      const path = pathMap[setting];
-      const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
-      const sourceExists = !!mapInstance.getSource('openrailwaymap');
+        if (path === null) {
+          if (layerExists) {
+            // don't wait for map load for removal
+            mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
+          }
+        } else {
+          await ensureMapLoaded(mapInstance);
+          if (layerExists) {
+            mapInstance.removeLayer('openrailwaymap-layer');
+          }
+          if (sourceExists) {
+            mapInstance.removeSource('openrailwaymap');
+          }
 
-      if (path === null) {
-        if (layerExists) {
-          // don't wait for map load for removal
-          mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
+          mapInstance.addSource('openrailwaymap', {
+            type: 'raster',
+            tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`],
+            tileSize: 256,
+            attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
+          });
+
+          mapInstance.addLayer({
+            id: 'openrailwaymap-layer',
+            type: 'raster',
+            source: 'openrailwaymap',
+            paint: { 'raster-opacity': 1 }
+          }, getBeforeId("openrailwaymap-layer", mapInstance));
         }
-      } else {
-        await ensureMapLoaded(mapInstance);
-        if (layerExists) {
-          mapInstance.removeLayer('openrailwaymap-layer');
-        }
-        if (sourceExists) {
-          mapInstance.removeSource('openrailwaymap');
-        }
-
-        mapInstance.addSource('openrailwaymap', {
-          type: 'raster',
-          tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`],
-          tileSize: 256,
-          attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
-        });
-
-        mapInstance.addLayer({
-          id: 'openrailwaymap-layer',
-          type: 'raster',
-          source: 'openrailwaymap',
-          paint: { 'raster-opacity': 1 }
-        }, getBeforeId("openrailwaymap-layer", mapInstance));
+      } finally {
+        unlock();
       }
     };
 
     const updateHillShadeLayer = async (setting: boolean) => {
-      await ensureMapLoaded(mapInstance);
+      const unlock = await map_update_lock.lock();
+      try {
+        await ensureMapLoaded(mapInstance);
 
-      const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
-      const sourceExists = !!mapInstance.getSource('mapterhorn');
-      if (layerExists) {
-        mapInstance.removeLayer('mapterhorn-layer');
-      }
-      if (sourceExists) {
-        mapInstance.removeSource('mapterhorn');
-      }
-      if (!setting) {
-        return;
-      }
-
-      mapInstance.addSource('mapterhorn', {
-        type: 'raster-dem',
-        url: 'https://tiles.mapterhorn.com/tilejson.json',
-        maxzoom: 15,
-      });
-      mapInstance.addLayer({
-        id: 'mapterhorn-layer',
-        type: 'hillshade',
-        source: 'mapterhorn',
-        paint: {
-          'hillshade-shadow-color': '#000',
-          'hillshade-highlight-color': '#fff',
-          'hillshade-accent-color': '#fff',
-          'hillshade-exaggeration': 0.1,
-          'hillshade-method': 'igor',
+        const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
+        const sourceExists = !!mapInstance.getSource('mapterhorn');
+        if (layerExists) {
+          mapInstance.removeLayer('mapterhorn-layer');
         }
-      }, getBeforeId("mapterhorn-layer", mapInstance));
+        if (sourceExists) {
+          mapInstance.removeSource('mapterhorn');
+        }
+        if (!setting) {
+          return;
+        }
 
-      // // this is silly but fun, consider adding flag
-      // mapInstance.setTerrain({
-      //   source: 'mapterhorn',
-      //   exaggeration: 3,
-      // });
+        mapInstance.addSource('mapterhorn', {
+          type: 'raster-dem',
+          url: 'https://tiles.mapterhorn.com/tilejson.json',
+          maxzoom: 15,
+        });
+        mapInstance.addLayer({
+          id: 'mapterhorn-layer',
+          type: 'hillshade',
+          source: 'mapterhorn',
+          paint: {
+            'hillshade-shadow-color': '#000',
+            'hillshade-highlight-color': '#fff',
+            'hillshade-accent-color': '#fff',
+            'hillshade-exaggeration': 0.1,
+            'hillshade-method': 'igor',
+          }
+        }, getBeforeId("mapterhorn-layer", mapInstance));
+
+        // // this is silly but fun, consider adding flag
+        // mapInstance.setTerrain({
+        //   source: 'mapterhorn',
+        //   exaggeration: 3,
+        // });
+      } finally {
+        unlock();
+      }
     };
 
     mapInstance.on('load', () => {
-      updateBasemap($playerSettings.get().baseMap);
-
-      updateHillShadeLayer($playerSettings.get().hillShade);
-
-      updateRailwaysLayer($playerSettings.get().railwaysLayer);
-
       mapInstance.addSource('course-markers', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
@@ -740,24 +749,19 @@ export default function MapView() {
     const playerSettings = useStore($playerSettings);
     createEffect(() => {
       const setting = playerSettings().baseMap;
-      if (mapInstance) {
-        updateBasemap(setting);
-      }
+      updateBasemap(setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
-      if (mapInstance) {
-        updateRailwaysLayer(setting);
-      }
+      updateRailwaysLayer(setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().hillShade;
-      if (mapInstance) {
-        updateHillShadeLayer(setting);
-      }
+      updateHillShadeLayer(setting);
     });
+    (window as any).mapInstance = mapInstance;
   });
 
   const bounds = useStore($gameBounds);
