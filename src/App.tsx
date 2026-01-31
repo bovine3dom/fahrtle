@@ -477,7 +477,7 @@ function App() {
                               >
                                 <span>{wp.emoji || '🏳️'}</span>
                                 <span style={{ flex: 1, 'white-space': 'nowrap', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
-                                  {wp.stopName || 'Unnamed stop'}
+                                  {wp.stopName || 'Unnamed stop'} {wp.timeStr ? `(${wp.timeStr})` : ''}
                                 </span>
                               </div>
                             )}
@@ -745,7 +745,7 @@ function App() {
                                             {wp().route_short_name}
                                           </span>
                                         </Show>
-                                        {wp().emoji + " " || ''} &rarr; {wp().stopName}
+                                        {wp().emoji + " " || ''} &rarr; {wp().stopName} {wp().timeStr ? `(${wp().timeStr})` : ''}
                                       </div>
                                     )}
                                   </Show>
@@ -882,7 +882,7 @@ function App() {
                                   onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                                 >
                                   <span>{wp.emoji || '🏳️'}</span>
-                                  <span style={{ flex: 1 }}>{wp.stopName || 'Unnamed stop'}</span>
+                                  <span style={{ flex: 1 }}>{wp.stopName || 'Unnamed stop'} {wp.timeStr ? `(${wp.timeStr})` : ''}</span>
                                 </div>
                               )}
                             </For>

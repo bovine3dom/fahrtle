@@ -328,6 +328,7 @@ export default function DepartureBoard() {
               lng: r.stop_lon + Math.random() * 0.0001,
               lat: r.stop_lat + Math.random() * 0.0001,
               dbTime: absoluteTime,
+              timeStr: formatRowTime(timeStr),
               stopName: r.stop_name,
               timeZone: thisStopZone
             }
@@ -358,7 +359,8 @@ export default function DepartureBoard() {
             route_short_name: row.route_short_name,
             display_name: row.trip_headsign || row.route_long_name || row.stop_name,
             emoji: getRouteEmoji(row.route_type),
-            route_departure_time: row.departure_time
+            route_departure_time: row.departure_time,
+            timeStr: p.timeStr,
           }));
 
           submitWaypointsBatch(points);

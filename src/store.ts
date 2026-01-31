@@ -42,6 +42,7 @@ export type Waypoint = {
   display_name?: string;
   emoji?: string;
   route_departure_time?: string;
+  timeStr?: string;
 };
 
 export type Player = {
@@ -394,7 +395,8 @@ export function submitWaypointsBatch(points: {
   route_short_name?: string,
   display_name?: string,
   emoji?: string,
-  route_departure_time?: string | null
+  route_departure_time?: string | null,
+  timeStr?: string,
 }[]) {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
@@ -431,7 +433,8 @@ export function submitWaypointsBatch(points: {
       route_short_name: p.route_short_name,
       display_name: p.display_name,
       emoji: p.emoji,
-      route_departure_time: p.route_departure_time
+      route_departure_time: p.route_departure_time,
+      timeStr: p.timeStr
     }));
     lastTimeForSegments = p.time;
   }

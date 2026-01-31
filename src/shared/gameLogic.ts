@@ -15,6 +15,7 @@ export type Waypoint = {
     display_name?: string;
     emoji?: string;
     route_departure_time?: string;
+    timeStr?: string;
 };
 
 export type Player = {
@@ -390,7 +391,7 @@ export function handleIncomingMessage(
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time } = message;
+        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -418,7 +419,8 @@ export function handleIncomingMessage(
             route_short_name,
             display_name,
             emoji: isWalk ? '🐾' : emoji,
-            route_departure_time
+            route_departure_time,
+            timeStr
         };
 
         player.waypoints.push(newWaypoint);
