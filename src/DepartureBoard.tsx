@@ -920,8 +920,6 @@ export default function DepartureBoard() {
         .col-dest { 
           flex: 1; 
           color: #fff; 
-          overflow: hidden; 
-          white-space: nowrap;
           text-overflow: ellipsis;
           padding-right: 20px;
         }
@@ -1396,7 +1394,7 @@ export default function DepartureBoard() {
             .mobile-route-info { display: flex; align-items: center; gap: 4px; }
             .mobile-emoji { font-size: 1.2rem; }
             .mobile-dest-arrow { color: #888; font-weight: 300; }
-            .mobile-dest-name { font-weight: 600; color: #000; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .mobile-dest-name { font-weight: 600; color: #000; flex: 1; }
             .mobile-row-bottom { display: flex; justify-content: space-between; align-items: center; margin-left: 67px; margin-top: 2px; }
             .mobile-secondary-info { font-size: 0.8rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 10px; }
             .mobile-tomorrow { color: var(--db-accent-red); font-weight: bold; font-size: 0.6rem; margin-top: 2px; }
