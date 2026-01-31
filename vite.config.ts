@@ -5,6 +5,7 @@ export default defineConfig({
   base: './',
   plugins: [solid()],
   build: {
+    emptyOutDir: false, // fix broken links at the cost of a few MB of disk space
     rollupOptions: {
       output: {
         // Change from object to function to fix TS error
