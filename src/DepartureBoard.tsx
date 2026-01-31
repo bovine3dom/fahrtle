@@ -223,6 +223,15 @@ export default function DepartureBoard() {
 
 
 
+  const isPreviewTomorrow = createMemo(() => {
+    const p = preview();
+    if (!p) return false;
+    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
+    const depSeconds = getRowSeconds(timeVal || '');
+    const localSeconds = currentLocalSeconds();
+    return depSeconds < localSeconds;
+  });
+
   const isPreviewImminent = createMemo(() => {
     const p = preview();
     if (!p) return false;
@@ -231,17 +240,6 @@ export default function DepartureBoard() {
     const localSeconds = currentLocalSeconds();
     const diff = depSeconds - localSeconds;
     return diff > 0 && diff <= 120;
-  });
-
-  createEffect(() => {
-    const p = preview();
-    if (!p) return;
-    const timeVal = mode() === 'departures' ? p.row.departure_time : p.row.next_arrival;
-    const depSeconds = getRowSeconds(timeVal || '');
-    const localSeconds = currentLocalSeconds();
-    if (localSeconds > depSeconds + 10) {
-      $previewRoute.set(null);
-    }
   });
 
   createEffect(() => {
@@ -290,7 +288,8 @@ export default function DepartureBoard() {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
           const stopNames = res.data.map((r: any) => r.stop_name);
           const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time));
-          $previewRoute.set({ coords: coords as [number, number][], stopNames, stopTimes, row });
+          const routePreview = { coords: coords as [number, number][], stopNames, stopTimes, row };
+          $previewRoute.set(routePreview);
         }
       })
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));
@@ -398,7 +397,10 @@ export default function DepartureBoard() {
       >
         <div
           class="departure-board"
-          classList={{ minimized: isMinimized() }}
+          classList={{
+            minimized: isMinimized(),
+            'preview-tomorrow': isPreviewTomorrow()
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <div class="board-header">
@@ -438,6 +440,9 @@ export default function DepartureBoard() {
                     <div class="preview-time-line">
                       <StatusDot isImminent={isPreviewImminent()} />
                       <span class="preview-time">{formatRowTime((mode() === 'departures' ? p().row.departure_time : p().row.next_arrival) || '')}</span>
+                      <Show when={isPreviewTomorrow()}>
+                        <span class="preview-tomorrow-label">⚠️ tomorrow</span>
+                      </Show>
                       <RoutePill row={p().row} class="preview-pill" />
                       <span class="preview-type">{getRouteEmoji(p().row.route_type)}</span>
                     </div>
@@ -965,6 +970,17 @@ export default function DepartureBoard() {
           color: #ffed02;
         }
 
+        .preview-tomorrow-label {
+          color: #ffed02;
+          font-size: 0.7rem;
+          font-weight: bold;
+          text-transform: uppercase;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 2px 6px;
+          border-radius: 4px;
+          letter-spacing: 0.5px;
+        }
+
         .preview-dest {
           font-weight: 700;
           font-size: 0.9rem;
@@ -1346,6 +1362,10 @@ export default function DepartureBoard() {
           animation: spin 1s ease-in-out infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .departure-board.minimized.preview-tomorrow {
+          border-color: #ffed02;
+        }
 
 
         @media (max-width: 768px) {
