@@ -670,7 +670,7 @@ function App() {
                           return (
                             <div
                               onClick={() => {
-                                console.log(getTravelSummary(p(), $gameBounds.get()))
+                                getTravelSummary(p(), $gameBounds.get()).then(summary => console.log(summary));
                               }}
                               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
                               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}

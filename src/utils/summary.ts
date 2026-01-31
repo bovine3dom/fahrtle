@@ -5,17 +5,12 @@ import { createClosestCity, haversineDist } from './geo';
 import { formatDuration } from './time';
 
 const getTravelSummaryObj = (player: Player) => {
-    const waypoints = player.waypoints.map((wp) => {
-        return {
-            route_departure_time: wp.route_departure_time,
-            route_short_name: wp.route_short_name,
-            display_name: wp.display_name,
-            emoji: wp.emoji,
-        }
-    })
-    // deduplicate waypoints
+    const waypoints = player.waypoints    // deduplicate waypoints
+    // uniqueness and short walks
+    const SHORTEST_WALK = 1000*60*59*1000;
     const uniqueWaypoints = waypoints.filter((wp, index) => {
-        return waypoints.findIndex(w => w.route_departure_time === wp.route_departure_time && w.route_short_name === wp.route_short_name && w.display_name === wp.display_name && w.emoji === wp.emoji) === index;
+        return (waypoints.findIndex(w => w.route_departure_time === wp.route_departure_time && w.route_short_name === wp.route_short_name && w.display_name === wp.display_name && w.emoji === wp.emoji) === index) || (wp.isWalk && ((wp.arrivalTime - wp.startTime) > SHORTEST_WALK))
+        // eugh, start and arrival time don't work like this
     })
     return uniqueWaypoints;
 }
@@ -25,8 +20,10 @@ import { getTimeZone } from '../timezone';
 /* convert object to a human readable string for sharing on socials */
 export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
-    let travel = stealth ? waypoints.map((wp) => { if (wp.emoji == "🐾") return; return `${wp.emoji}`; }).filter(s => s).join('') : waypoints.map((wp) => {
-        if (wp.emoji == "🐾") return;
+    let travel = stealth ? waypoints.map((wp) => wp.emoji).join('') : waypoints.map((wp) => {
+        if (wp.emoji == "🐾") {
+            return `${wp.emoji} ${formatDuration(wp.arrivalTime - wp.startTime)} ${createClosestCity(() => [wp.y, wp.x])()}`;
+        }
         return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
     }).filter(s => s).join('\n');
 
