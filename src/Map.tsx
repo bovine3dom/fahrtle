@@ -16,6 +16,7 @@ import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
 import { map_update_lock } from './utils/map_lock';
+import { give_me_more_trains } from './utils/i_bloody_love_trains';
 
 let mapInstance: maplibregl.Map;
 
@@ -355,6 +356,7 @@ export default function MapView() {
           try {
             const response = await fetch(styleSpec);
             const style = await response.json();
+            give_me_more_trains(style);
             for (const [sourceId, source] of Object.entries(style.sources)) {
               mapInstance.addSource(`basemap-${sourceId}`, source as any);
             }
