@@ -80,7 +80,7 @@ export default function DepartureBoard() {
   const preview = useStore($previewRoute);
 
   const [filterType, setFilterType] = createSignal<string | null>(null);
-  const [speedFilter, setSpeedFilter] = createSignal<number | null>(null);
+  const [distFilter, setDistFilter] = createSignal<number | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   const [flashError, setFlashError] = createSignal(false);
@@ -259,8 +259,8 @@ export default function DepartureBoard() {
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
     const emojiFilter = ((r: DepartureResult) => (filterType() === null) || getRouteEmoji(r.route_type) === filterType());
-    const neowmFilter = ((r: DepartureResult) => (speedFilter() === null) || r.speed >= (speedFilter() as number)); // ts is so dumb sometimes wtf
-    return rows.filter(emojiFilter).filter(neowmFilter);
+    const distFilterLogic = ((r: DepartureResult) => (distFilter() === null) || (r.dist || 0) >= (distFilter() as number));
+    return rows.filter(emojiFilter).filter(distFilterLogic);
   });
 
   const close = () => {
@@ -268,7 +268,7 @@ export default function DepartureBoard() {
     $departureBoardResults.set([]);
     $boardMinimized.set(false);
     setFilterType(null);
-    setSpeedFilter(null);
+    setDistFilter(null);
     $previewRoute.set(null);
   };
 
@@ -522,16 +522,16 @@ export default function DepartureBoard() {
               )}
             </For>
             <Show when={$gameBounds.get().difficulty === 'Easy'}>
-              <For each={[20, 40, 70, 100, 150].filter(n => deduplicatedResults().some(r => r.speed >= n))}>
-                {speed => (
+              <For each={[20, 50, 100, 200, 500].filter(n => deduplicatedResults().some(r => r.dist >= n))}>
+                {dist => (
                   <button
                     class="filter-btn"
-                    classList={{ active: speedFilter() === speed }}
-                    onClick={() => setSpeedFilter(speedFilter() === speed ? null : speed)}
-                    title={speedFilter() === speed ? 'Clear Filter' : `Filter by speeds greater than or equal to ${speed} km/h`}
+                    classList={{ active: distFilter() === dist }}
+                    onClick={() => setDistFilter(distFilter() === dist ? null : dist)}
+                    title={distFilter() === dist ? 'Clear Filter' : `Filter by distances greater than or equal to ${dist} km`}
                     style={{ "font-size": "0.8rem" }}
                   >
-                    {speed} km/h+
+                    {dist} km+
                   </button>
                 )}
               </For>
@@ -614,7 +614,7 @@ export default function DepartureBoard() {
                           <div class="route-long">{row.route_long_name}</div>
                           <Show when={$gameBounds.get().difficulty === 'Easy'}>
                             <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
-                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
+                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.dist ? `(${sensibleNumber(row.dist)} km)` : ''}
                             </div>
                           </Show>
                         </div>
@@ -671,7 +671,7 @@ export default function DepartureBoard() {
                             {mainDestText()}
                             <Show when={$gameBounds.get().difficulty === 'Easy'}>
                               <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
-                                {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.speed ? `(${sensibleNumber(row.speed)} km/h)` : ''}
+                                {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.dist ? `(${sensibleNumber(row.dist)} km)` : ''}
                               </div>
                             </Show>
                           </div>

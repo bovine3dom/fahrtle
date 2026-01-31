@@ -100,6 +100,7 @@ export interface DepartureResult {
   bearing: number; // Added client-side
   bearing_origin: number; // Added client-side
   speed: number; // Added client-side
+  dist: number; // Added client-side
 }
 
 export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);

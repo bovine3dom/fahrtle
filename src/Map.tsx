@@ -750,6 +750,7 @@ export default function MapView() {
               const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
               const finish = new Date(row.final_arrival || "");
               if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
+              row.dist = dist || 0;
               const duration = (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
               row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
               return row;
