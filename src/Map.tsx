@@ -566,12 +566,33 @@ export default function MapView() {
       mapInstance.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       mapInstance.addLayer({
         id: 'preview-route-line', type: 'line', source: 'preview-route',
+        filter: ['==', '$type', 'LineString'],
         paint: {
           'line-color': '#444',
           'line-width': 6,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       }, getBeforeId("preview-route-line", mapInstance));
+
+      mapInstance.addLayer({
+        id: 'preview-route-labels',
+        type: 'symbol',
+        source: 'preview-route',
+        filter: ['==', '$type', 'Point'],
+        layout: {
+          'text-field': ['concat', ['get', 'stop_name'], ' (', ['get', 'arrival_time'], ')'],
+          'text-size': 14,
+          'text-offset': [0, 0.6],
+          'text-anchor': 'top',
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': '#000000',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        }
+      }, getBeforeId("preview-route-labels", mapInstance));
 
       mapInstance.addSource('stops', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
@@ -729,7 +750,7 @@ export default function MapView() {
               const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
               const finish = new Date(row.final_arrival || "");
               if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
-              const duration =  (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
+              const duration = (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
               row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
               return row;
             })
@@ -846,10 +867,24 @@ export default function MapView() {
     const source = mapInstance?.getSource('preview-route') as maplibregl.GeoJSONSource;
     if (!source) return;
     if (preview) {
-      source.setData({
+      const lineFeature = {
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: preview.coords },
         properties: { color: '#000' }
+      };
+
+      const pointFeatures = preview.coords.map((coord, i) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: coord },
+        properties: {
+          stop_name: preview.stopNames[i],
+          arrival_time: preview.stopTimes[i]
+        }
+      }));
+
+      source.setData({
+        type: 'FeatureCollection',
+        features: [lineFeature, ...pointFeatures] as any
       });
 
       if (preview.coords.length > 0) {

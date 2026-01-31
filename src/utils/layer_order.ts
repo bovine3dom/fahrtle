@@ -3,7 +3,7 @@ import { type Map } from 'maplibre-gl';
 // nb: "starts with" rather than exact match, painter's algorithm
 // todo: rename layers to be less insane
 const ideal_hierarchy: string[] = [
-  "basemap-", 
+  "basemap-",
   "mapterhorn-layer",
   "openrailwaymap-layer",
   "course-markers-h3-filled", // finish area hexes
@@ -13,6 +13,7 @@ const ideal_hierarchy: string[] = [
   "routes-line", // player tracks
   "h3-cell-line", // pink hex departure board 'search area' on click
   "preview-route-line", // route preview
+  "preview-route-labels", // route preview stop names/times
   "stops-layer", // stops for departure boards
 ] as const; // const ... as const. great language
 
@@ -24,7 +25,7 @@ function getPriorityIndex(layerId: string): number {
 }
 
 export function getBeforeId(
-  newLayerPrefix: HierarchyPrefix, 
+  newLayerPrefix: HierarchyPrefix,
   mapInstance: Map
 ): string | undefined {
   const targetPriority = ideal_hierarchy.indexOf(newLayerPrefix);

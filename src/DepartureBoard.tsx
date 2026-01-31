@@ -274,7 +274,7 @@ export default function DepartureBoard() {
 
   const handlePreviewClick = (row: DepartureResult, direction: "forwards" | "backwards" = "forwards") => {
     const query = `
-          SELECT stop_lat, stop_lon
+          SELECT stop_lat, stop_lon, stop_name, arrival_time
           FROM transitous_everything_20260117_stop_times_one_day_even_saner
           WHERE "ru.source" = '${row['source']}'
             AND "ru.trip_id" = '${row['trip_id']}'
@@ -288,7 +288,9 @@ export default function DepartureBoard() {
       .then(res => {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
-          $previewRoute.set({ coords: coords as [number, number][], row });
+          const stopNames = res.data.map((r: any) => r.stop_name);
+          const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time));
+          $previewRoute.set({ coords: coords as [number, number][], stopNames, stopTimes, row });
         }
       })
       .catch(err => console.error(`[ClickHouse] Preview query failed:`, err));

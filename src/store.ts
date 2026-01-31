@@ -119,6 +119,8 @@ export const $countdownEnd = atom<number | null>(null);
 export const $clock = atom(0);
 export interface PreviewRoute {
   coords: [number, number][];
+  stopNames: string[];
+  stopTimes: string[];
   row: DepartureResult;
 }
 
