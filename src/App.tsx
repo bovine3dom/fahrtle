@@ -271,7 +271,7 @@ function App() {
     const p = players()[myId()!];
     const idx = currentWpIndex();
     if (!p || idx === -1) return [];
-    return p.waypoints.slice(idx);
+    return p.waypoints.slice(idx).reverse(); // this is maybe confusing?
   });
 
   const [getOffDropdownOpen, setGetOffDropdownOpen] = createSignal(false);
