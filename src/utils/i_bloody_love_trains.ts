@@ -11,8 +11,10 @@ export const give_me_more_trains = (style: StyleSpecification) => {
             if (!layer.paint) {
                 layer.paint = {};
             }
-            layer.paint['line-width'] = train_lw as any; // typescript is so annoying sometimes
-            layer.paint['line-color'] = train_colour;
+            if (style.name !== 'Toner OFM') { // exempt our own style because we like painting trains
+              layer.paint['line-width'] = train_lw as any; // typescript is so annoying sometimes
+              layer.paint['line-color'] = train_colour;
+            }
 
         }
     });
@@ -39,7 +41,7 @@ export const give_me_more_trains = (style: StyleSpecification) => {
         'line-cap': 'round' 
       },
       paint: {
-        'line-color': train_colour,
+        'line-color': style.name == "Toner OFM" ? "#000" : train_colour,
         'line-width': train_lw as any,
       }
     });

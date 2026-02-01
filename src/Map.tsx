@@ -206,6 +206,8 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
       return "https://tiles.openfreemap.org/styles/positron"
     case 'Bright':
       return "https://tiles.openfreemap.org/styles/bright"
+    case 'Toner-like':
+      return "./toner_ofm.json"
     case 'OSM Carto':
       return {
         'version': 8,
