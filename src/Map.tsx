@@ -20,6 +20,13 @@ import { give_me_more_trains } from './utils/i_bloody_love_trains';
 
 let mapInstance: maplibregl.Map;
 
+const lerpBearing = (a: number, b: number, t: number) => {
+  let diff = b - a;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return (a + diff * t + 360) % 360;
+};
+
 export function flyToPlayer(playerId: string) {
   const pos = playerPositions[playerId];
   if (pos && mapInstance) {
@@ -291,6 +298,7 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let frameId: number;
+  let smoothedMyBearing = 0;
   const [mapReady, setMapReady] = createSignal(false);
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
@@ -472,16 +480,37 @@ export default function MapView() {
             'hillshade-method': 'igor',
           }
         }, getBeforeId("mapterhorn-layer", mapInstance));
-
-        // // this is silly but fun, consider adding flag
-        // mapInstance.setTerrain({
-        //   source: 'mapterhorn',
-        //   exaggeration: 3,
-        // });
       } finally {
         unlock();
       }
     };
+
+    const updateTerrain = async (setting: boolean) => {
+      const unlock = await map_update_lock.lock();
+      try {
+        await ensureMapLoaded(mapInstance);
+
+        const sourceExists = !!mapInstance.getSource('mapterhorn');
+        if (!sourceExists) {
+          mapInstance.addSource('mapterhorn', {
+            type: 'raster-dem',
+            url: 'https://tiles.mapterhorn.com/tilejson.json',
+            maxzoom: 15,
+          });
+        }
+        if (!setting) {
+          mapInstance.setTerrain(null);
+        } else {
+          mapInstance.setTerrain({
+            source: 'mapterhorn',
+            exaggeration: 3,
+          });
+        }
+
+      } finally {
+        unlock();
+      }
+    }
 
     mapInstance.on('load', () => {
       mapInstance.addSource('course-markers', {
@@ -787,6 +816,12 @@ export default function MapView() {
       const setting = playerSettings().hillShade;
       updateHillShadeLayer(setting);
     });
+
+    createEffect(() => {
+      const setting = playerSettings().terrain3d;
+      updateTerrain(setting);
+    });
+
     (window as any).mapInstance = mapInstance;
   });
 
@@ -944,6 +979,7 @@ export default function MapView() {
       const now = getServerTime();
       const allPlayers = $players.get();
       const currentSpeeds: Record<string, number> = {};
+      const currentBearings: Record<string, number> = {};
       const currentDists: Record<string, number | null> = {};
       const vehicleFeatures: any[] = [];
 
@@ -955,6 +991,7 @@ export default function MapView() {
       const myId = $myPlayerId.get();
       let myTargetPos: [number, number] | null = null;
       let myTargetSpeed = 0;
+      let myTargetBearing = 0;
 
       for (const pid in allPlayers) {
         const player = allPlayers[pid];
@@ -981,6 +1018,7 @@ export default function MapView() {
               const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
               const speed = durationHours > 0 ? (dist || 0) / durationHours : 0; // never actually zero here but ts whines
               currentSpeeds[pid] = speed;
+              currentBearings[pid] = getBearing(seg.start[1], seg.start[0], seg.end[1], seg.end[0]);
               break;
             }
           }
@@ -1009,6 +1047,10 @@ export default function MapView() {
           if (pid === myId) {
             myTargetPos = targetPos;
             myTargetSpeed = currentSpeeds[pid] || 0;
+            if (currentBearings[pid] !== undefined) {
+              myTargetBearing = currentBearings[pid];
+              smoothedMyBearing = lerpBearing(smoothedMyBearing, myTargetBearing, alpha);
+            }
 
             if (frameCount % 60 === 0) {
               autoZoomEnabled = $playerSettings.get().autoZoom;
@@ -1096,6 +1138,7 @@ export default function MapView() {
       }
 
       if (isFollowing() && mapInstance) {
+        const firstPersonFollow = $playerSettings.get().firstPersonFollow;
         const myPos = myTargetPos;
         const mySpeed = myTargetSpeed;
         const centre = mapInstance.getCenter();
@@ -1103,9 +1146,9 @@ export default function MapView() {
 
         if (myPos) {
           const REFERENCE_SPEED = 50; // km/h
-          const REFERENCE_ZOOM = 15;  // zoom level at reference speed
-          const MIN_ZOOM = 5;
-          const MAX_ZOOM = 16;
+          const REFERENCE_ZOOM = firstPersonFollow ? 16 : 15;  // zoom level at reference speed
+          const MIN_ZOOM = firstPersonFollow ? 13 : 5;
+          const MAX_ZOOM = firstPersonFollow ? 18 : 16;
           const dilation = $globalRate.get() / 20; // normalise to walking dilation
           const safeSpeed = Math.max(1, mySpeed * dilation || 0);
 
@@ -1123,9 +1166,20 @@ export default function MapView() {
           }
 
           if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || nextZoom !== undefined) {
-            const jumpOptions: any = { center: myPos };
-            if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
-            mapInstance.jumpTo(jumpOptions);
+            if (firstPersonFollow) {
+              const pitch = 75; // high pitch for first person
+
+              mapInstance.jumpTo({
+                center: myPos,
+                pitch: pitch,
+                bearing: smoothedMyBearing,
+                zoom: nextZoom ?? mapInstance.getZoom(),
+              });
+            } else {
+              const jumpOptions: any = { center: myPos };
+              if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
+              mapInstance.jumpTo(jumpOptions);
+            }
           }
         }
       }
@@ -1143,6 +1197,9 @@ export default function MapView() {
   const toggleFollow = () => {
     const following = !isFollowing();
     $isFollowing.set(following);
+    if (following && mapInstance) {
+      smoothedMyBearing = mapInstance.getBearing();
+    }
     if (following) {
       const myId = $myPlayerId.get();
       const myPos = myId ? playerPositions[myId] : null;
