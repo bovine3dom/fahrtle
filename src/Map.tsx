@@ -87,7 +87,7 @@ export function fitGameBounds() {
 }
 
 const getCrowKmColor = (crowKm: number): string => {
-  const normalized = Math.min(crowKm / 100, 1);
+  const normalized = Math.sqrt(Math.max(crowKm / 200, 0));
   return interpolateSpectral(normalized);
 };
 
