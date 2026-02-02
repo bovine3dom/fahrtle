@@ -490,9 +490,9 @@ export default function MapView() {
       try {
         await ensureMapLoaded(mapInstance);
 
-        const sourceExists = !!mapInstance.getSource('mapterhorn');
+        const sourceExists = !!mapInstance.getSource('mapterhorn-3d');
         if (!sourceExists) {
-          mapInstance.addSource('mapterhorn', {
+          mapInstance.addSource('mapterhorn-3d', {
             type: 'raster-dem',
             url: 'https://tiles.mapterhorn.com/tilejson.json',
             maxzoom: 15,
@@ -502,7 +502,7 @@ export default function MapView() {
           mapInstance.setTerrain(null);
         } else {
           mapInstance.setTerrain({
-            source: 'mapterhorn',
+            source: 'mapterhorn-3d',
             exaggeration: 3,
           });
         }
@@ -513,6 +513,7 @@ export default function MapView() {
     }
 
     mapInstance.on('load', () => {
+      // mapInstance.setProjection({type: 'globe'}); // kinda trippy
       mapInstance.addSource('course-markers', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
