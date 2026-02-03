@@ -27,7 +27,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
     const waypoints = getTravelSummaryObj(player).filter(wp => wp.route_departure_time);
     let travel = stealth ? waypoints.map((wp) => { if (wp.emoji == "🐾") return; return `${wp.emoji}`; }).filter(s => s).join('') : waypoints.map((wp) => {
         if (wp.emoji == "🐾") return;
-        return `${wp.emoji} ${wp.route_short_name} ${formatRowTime(wp.route_departure_time || '')} ${wp.display_name}`;
+        return `${wp.emoji} ${formatRowTime(wp.route_departure_time || '')} ${wp.route_short_name} ${wp.display_name}`;
     }).filter(s => s).join('\n');
 
     const [finishCity, startCity] = [
