@@ -250,7 +250,18 @@ function App() {
         setTimeLeft(null);
       }
     }, 100);
-    onCleanup(() => clearInterval(interval));
+
+    const handlePopState = () => {
+      if (room()) {
+        leaveRoom();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    onCleanup(() => {
+      clearInterval(interval);
+      window.removeEventListener('popstate', handlePopState);
+    });
   });
 
   const currentWpIndex = createMemo(() => {

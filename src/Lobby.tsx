@@ -41,8 +41,7 @@ export default function Lobby() {
     }
   });
 
-  const handleJoin = async (e?: Event) => {
-    e?.preventDefault();
+  const handleJoin = async (isAuto = false, boundsOverride?: any) => {
     const currentRoom = room();
     const currentUser = user();
     if (currentUser && (isSinglePlayer() || currentRoom)) {
@@ -57,31 +56,34 @@ export default function Lobby() {
 
       const url = new URL(window.location.href);
 
-      const startParam = url.searchParams.get('s');
-      const finishParam = url.searchParams.get('f');
-      const timeParam = url.searchParams.get('t');
-      const difficultyParam = url.searchParams.get('d') as Difficulty;
-      let initialBounds;
+      let initialBounds = boundsOverride;
 
-      if (startParam || finishParam || timeParam || difficultyParam) {
-        const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
-        initialBounds = {
-          start: parse(startParam),
-          finish: parse(finishParam),
-          time: decodeURIComponent(timeParam || ''),
-          difficulty: difficultyParam || difficulty()
-        };
-      }
+      if (!initialBounds) {
+        const startParam = url.searchParams.get('s');
+        const finishParam = url.searchParams.get('f');
+        const timeParam = url.searchParams.get('t');
+        const difficultyParam = url.searchParams.get('d') as Difficulty;
 
-      if (isDaily()) {
-        const race = await getDailyRace();
-        initialBounds = {
-          ...initialBounds,
-          start: race.start,
-          finish: race.finish,
-          time: race.time,
-          difficulty: initialBounds?.difficulty || difficulty()
-        };
+        if (startParam || finishParam || timeParam || difficultyParam) {
+          const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
+          initialBounds = {
+            start: parse(startParam),
+            finish: parse(finishParam),
+            time: decodeURIComponent(timeParam || ''),
+            difficulty: difficultyParam || difficulty()
+          };
+        }
+
+        if (isDaily()) {
+          const race = await getDailyRace();
+          initialBounds = {
+            ...initialBounds,
+            start: race.start,
+            finish: race.finish,
+            time: race.time,
+            difficulty: initialBounds?.difficulty || difficulty()
+          };
+        }
       }
 
       url.searchParams.delete('s');
@@ -94,7 +96,19 @@ export default function Lobby() {
       } else {
         url.searchParams.set('room', currentRoom);
       }
-      window.history.replaceState(null, '', url);
+
+      const state = {
+        room: isSinglePlayer() ? null : currentRoom,
+        isSolo: isSinglePlayer(),
+        isDaily: isDaily(),
+        initialBounds
+      };
+
+      if (isAuto) {
+        window.history.replaceState(state, '', url);
+      } else {
+        window.history.pushState(state, '', url);
+      }
       connectAndJoin(isSinglePlayer() ? null : currentRoom, currentUser, color(), initialBounds);
     }
   };
@@ -102,7 +116,7 @@ export default function Lobby() {
   const handleNewGame = (e: Event) => {
     e.preventDefault();
     sharedFakeServer.clearState();
-    handleJoin();
+    handleJoin(false);
   };
 
   onMount(() => {
@@ -120,9 +134,27 @@ export default function Lobby() {
       setRoom(sharedRoom);
       // auto-join to handle reloads
       if (localStorage.getItem('fahrtle_user') && localStorage.getItem('fahrtle_room') === sharedRoom) {
-        handleJoin();
+        handleJoin(true);
       }
+    } else if (window.history.state?.room || window.history.state?.isSolo) {
+      const state = window.history.state;
+      if (state.isSolo) $isSinglePlayer.set(true);
+      if (state.isDaily) $isDaily.set(true);
+      if (state.room) setRoom(state.room);
+      handleJoin(true, state.initialBounds);
     }
+
+    const handlePopState = (e: PopStateEvent) => {
+      const state = e.state;
+      if (state && (state.room || state.isSolo)) {
+        if (state.isSolo) $isSinglePlayer.set(true);
+        if (state.isDaily) $isDaily.set(true);
+        if (state.room) setRoom(state.room);
+        handleJoin(true, state.initialBounds);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    onCleanup(() => window.removeEventListener('popstate', handlePopState));
   });
 
   createEffect(() => {
@@ -133,9 +165,13 @@ export default function Lobby() {
     } else {
       url.searchParams.delete('room');
     }
-    window.history.replaceState(null, '', url);
+    window.history.replaceState(window.history.state, '', url);
   })
 
+  const handleJoinWrapper = (e: Event) => {
+    e.preventDefault();
+    handleJoin(false);
+  };
 
   return (
     <div style={{
@@ -150,7 +186,7 @@ export default function Lobby() {
       'image-rendering': 'pixelated',
       'background-repeat': 'no-repeat'
     }}>
-      <form onSubmit={handleJoin} style={{
+      <form onSubmit={handleJoinWrapper} style={{
         display: 'flex', 'flex-direction': 'column', gap: '16px',
         background: 'rgba(51, 65, 85, 0.6)',
         width: '250px',
