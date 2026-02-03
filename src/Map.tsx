@@ -9,7 +9,7 @@ import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
-import { getRouteEmoji } from './getRouteEmoji';
+import { getRouteEmoji, getClickHouseRouteTypeBetweens } from './getRouteEmoji';
 import { interpolateSpectral } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
@@ -97,7 +97,7 @@ let isStopsLayerVisible = false;
 
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
-  if (zoom < 14) {
+  if (zoom < 8) {
     if (isStopsLayerVisible) {
       const source = map.getSource('stops') as maplibregl.GeoJSONSource;
       if (source) {
@@ -135,7 +135,9 @@ const updateStops = async (map: maplibregl.Map) => {
     FROM transitous_everything_20260117_stop_statistics_unmerged
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-    LIMIT 1000
+      ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail"]) + ")") : ""}
+      ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
+    LIMIT 2000
   `;
   //${zoom >= 16 ? "_unmerged" : ""}
 
@@ -635,7 +637,6 @@ export default function MapView() {
         id: 'stops-layer',
         type: 'symbol',
         source: 'stops',
-        minzoom: 14,
         layout: {
           'text-field': ['get', 'emoji'],
           'text-size': 12,
