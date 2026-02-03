@@ -63,6 +63,6 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
 
     const dayPrefix = isDaily ? ` daily #${await getDailyRaceIndex()}!` : '';
 
-    travel = `I just played fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
+    travel = `I just played #fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
     return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${url.toString()}`;
 }
