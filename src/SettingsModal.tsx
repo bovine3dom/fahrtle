@@ -1,26 +1,14 @@
-import { createSignal, For, Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { defaultPlayerSettings } from './utils/playerSettings';
 import { $playerSettings, updateSetting } from './store';
+import { useStore } from '@nanostores/solid';
 
 interface SettingsModalProps {
     onClose: () => void;
 }
 
 const SettingsModal = (props: SettingsModalProps) => {
-    const currentSettings = $playerSettings.get();
-    const [localSettings, setLocalSettings] = createSignal({ ...currentSettings });
-
-    const handleSave = () => {
-        const newSettings = localSettings();
-        for (const key in newSettings) {
-            updateSetting(key as any, newSettings[key as keyof typeof newSettings]);
-        }
-        props.onClose();
-    };
-
-    const updateLocal = (key: string, value: any) => {
-        setLocalSettings(prev => ({ ...prev, [key]: value }));
-    };
+    const currentSettings = useStore($playerSettings);
 
     return (
         <div
@@ -57,8 +45,8 @@ const SettingsModal = (props: SettingsModalProps) => {
                                 <Show when={config.type === 'text'}>
                                     <input
                                         type="text"
-                                        value={localSettings()[key as keyof typeof localSettings]}
-                                        onInput={(e) => updateLocal(key, e.currentTarget.value)}
+                                        value={currentSettings()[key as keyof typeof currentSettings]}
+                                        onInput={(e) => updateSetting(key, e.currentTarget.value)}
                                         style={{
                                             padding: '8px', 'border-radius': '6px', border: '1px solid #cbd5e1',
                                             'font-size': '1em'
@@ -70,15 +58,15 @@ const SettingsModal = (props: SettingsModalProps) => {
                                     <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
                                         <input
                                             type="color"
-                                            value={localSettings()[key as keyof typeof localSettings]}
-                                            onInput={(e) => updateLocal(key, e.currentTarget.value)}
+                                            value={currentSettings()[key as keyof typeof currentSettings]}
+                                            onInput={(e) => updateSetting(key, e.currentTarget.value)}
                                             style={{
                                                 padding: '0', 'border-radius': '6px', border: 'none',
                                                 width: '40px', height: '40px', cursor: 'pointer'
                                             }}
                                         />
                                         <span style={{ 'font-family': 'monospace', 'color': '#64748b' }}>
-                                            {localSettings()[key as keyof typeof localSettings]}
+                                            {currentSettings()[key as keyof typeof currentSettings]}
                                         </span>
                                     </div>
                                 </Show>
@@ -87,20 +75,20 @@ const SettingsModal = (props: SettingsModalProps) => {
                                     <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
                                         <input
                                             type="checkbox"
-                                            checked={localSettings()[key as keyof typeof localSettings] as boolean}
-                                            onChange={(e) => updateLocal(key, e.currentTarget.checked)}
+                                            checked={currentSettings()[key as keyof typeof currentSettings] as boolean}
+                                            onChange={(e) => updateSetting(key, e.currentTarget.checked)}
                                             style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
                                         />
                                         <span style={{ 'font-size': '0.9em', 'color': '#475569' }}>
-                                            {localSettings()[key as keyof typeof localSettings] ? 'Enabled' : 'Disabled'}
+                                            {currentSettings()[key as keyof typeof currentSettings] ? 'Enabled' : 'Disabled'}
                                         </span>
                                     </div>
                                 </Show>
 
                                 <Show when={config.type === 'select'}>
                                     <select
-                                        value={localSettings()[key as keyof typeof localSettings] as string}
-                                        onChange={(e) => updateLocal(key, e.currentTarget.value)}
+                                        value={currentSettings()[key as keyof typeof currentSettings] as string}
+                                        onChange={(e) => updateSetting(key, e.currentTarget.value)}
                                         style={{
                                             padding: '8px', 'border-radius': '6px', border: '1px solid #cbd5e1',
                                             'font-size': '1em', 'background': 'white'
@@ -120,17 +108,6 @@ const SettingsModal = (props: SettingsModalProps) => {
                     <button
                         onClick={props.onClose}
                         style={{
-                            flex: 1, padding: '10px', background: '#f1f5f9',
-                            color: '#475569', border: '1px solid #cbd5e1',
-                            'border-radius': '8px', cursor: 'pointer',
-                            'font-weight': 'bold', 'font-size': '0.9em'
-                        }}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        style={{
                             flex: 1, padding: '10px',
                             background: '#3b82f6',
                             color: 'white', border: 'none',
@@ -138,7 +115,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                             'font-weight': 'bold', 'font-size': '0.9em'
                         }}
                     >
-                        Save changes
+                        Done
                     </button>
                 </div>
             </div>
