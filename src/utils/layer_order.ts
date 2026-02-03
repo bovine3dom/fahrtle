@@ -13,8 +13,8 @@ const ideal_hierarchy: string[] = [
   "routes-line", // player tracks
   "h3-cell-line", // pink hex departure board 'search area' on click
   "preview-route-line", // route preview
-  "preview-route-labels", // route preview stop names/times
   "stops-layer", // stops for departure boards
+  "preview-route-labels", // route preview stop names/times
 ] as const; // const ... as const. great language
 
 type HierarchyPrefix = (typeof ideal_hierarchy)[number];
