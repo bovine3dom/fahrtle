@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, setPlayerColor, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -709,7 +709,7 @@ function App() {
                                   <input
                                     type="color"
                                     value={p().color}
-                                    onInput={(e) => setPlayerColor(e.currentTarget.value)}
+                                    onInput={(e) => updateSetting('color', e.currentTarget.value)}
                                     onClick={(e) => e.stopPropagation()}
                                     style={{
                                       position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
