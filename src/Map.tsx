@@ -135,7 +135,7 @@ const updateStops = async (map: maplibregl.Map) => {
     FROM transitous_everything_20260117_stop_statistics_unmerged
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-      ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail"]) + ")") : ""}
+      ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
       ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
     LIMIT 2000
   `;
