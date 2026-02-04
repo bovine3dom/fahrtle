@@ -290,6 +290,14 @@ function App() {
   const [actionFeedback, setActionFeedback] = createSignal<string | null>(null);
   const [showTutorial, setShowTutorial] = createSignal(false);
 
+  createEffect(() => {
+    if (room() && !localStorage.getItem('fahrtle_tutorial_shown')) {
+      setShowTutorial(true);
+      localStorage.setItem('fahrtle_tutorial_shown', 'true');
+    }
+  });
+
+
   return (
     <>
       {!room() ? (
