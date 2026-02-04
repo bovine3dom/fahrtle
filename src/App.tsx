@@ -451,13 +451,13 @@ function App() {
                         <div style={{
                           position: 'absolute',
                           top: '100%',
-                          right: 0,
+                          left: 0,
                           background: '#fff',
                           border: '1px solid #ccc',
                           'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
                           'border-radius': '4px',
                           'margin-top': '4px',
-                          'min-width': '180px',
+                          'min-width': '200px',
                           'z-index': 100,
                           'max-height': '200px',
                           'overflow-y': 'auto'
@@ -857,7 +857,7 @@ function App() {
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            right: 0,
+                            left: 0,
                             background: '#fff',
                             border: '1px solid #ccc',
                             'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
