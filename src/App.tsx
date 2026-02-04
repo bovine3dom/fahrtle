@@ -17,6 +17,7 @@ import confetti from 'canvas-confetti';
 import { getTravelSummary } from './utils/summary';
 import WinModal from './WinModal';
 import SettingsModal from './SettingsModal';
+import TutorialModal from './TutorialModal';
 
 function App() {
   const room = useStore($currentRoom);
@@ -287,6 +288,7 @@ function App() {
 
   const [getOffDropdownOpen, setGetOffDropdownOpen] = createSignal(false);
   const [actionFeedback, setActionFeedback] = createSignal<string | null>(null);
+  const [showTutorial, setShowTutorial] = createSignal(false);
 
   return (
     <>
@@ -325,11 +327,25 @@ function App() {
 
               <div style={{ display: 'flex', 'align-items': 'center' }}>
                 <button
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => setShowTutorial(true)}
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
                     padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
                     opacity: 0.8, transition: 'opacity 0.2s'
+                  }}
+                  title="Tutorial"
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                >
+                  ❓
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    opacity: 0.8, transition: 'opacity 0.2s',
+                    'margin-left': '2px'
                   }}
                   title="Settings"
                   onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
@@ -979,7 +995,7 @@ function App() {
                   </button>
 
                   <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
-                    {roomState() === 'RUNNING' ? <a href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8' }}>Click map for departures, double click to board or walk<br />Click here for more information</a> : 'Waiting for game to start...'}
+                    {roomState() === 'RUNNING' ? 'Click map for departures, double click to board or walk' : 'Waiting for game to start...'}
                   </div>
                 </div>
               </div>
@@ -1012,6 +1028,10 @@ function App() {
 
           <Show when={showSettings()}>
             <SettingsModal onClose={() => setShowSettings(false)} />
+          </Show>
+
+          <Show when={showTutorial()}>
+            <TutorialModal onClose={() => setShowTutorial(false)} />
           </Show>
         </div>
       )}
