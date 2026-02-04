@@ -325,7 +325,7 @@ export default function Lobby() {
             </div>
             <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
               <Show when={dailyRace()} fallback="Loading...">
-                {(race) => `${createClosestCity(() => race().start)()} ➡️ ${createClosestCity(() => race().finish)()}`}
+                {(race) => <>{createClosestCity(() => race().start)()} ➡️ {createClosestCity(() => race().finish)()}</>}
               </Show>
             </div>
           </div>

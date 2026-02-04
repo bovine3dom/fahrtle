@@ -1,7 +1,7 @@
 import type { Player, Difficulty, Waypoint } from '../store';
 import { getDailyRaceIndex } from './daily';
 import { formatRowTime, sensibleNumber } from './format';
-import { createClosestCity, haversineDist } from './geo';
+import { createClosestCity, haversineDist, cityDbPromise } from './geo';
 import { formatDuration } from './time';
 
 type SummaryEntry = {
@@ -101,6 +101,7 @@ import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
 export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
+    await cityDbPromise;
     const summaryEntries = getTravelSummaryObj(player);
     let travel = stealth ? summaryEntries.map((wp) => { return `${wp.emoji}`; }).join('') : summaryEntries.map((wp) => {
         if (wp.type === 'walk') {

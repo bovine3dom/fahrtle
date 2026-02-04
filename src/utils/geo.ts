@@ -16,14 +16,16 @@ const fetchCityData = async () => {
     return { cities, tree };
 };
 
-const [cityDb] = createResource(fetchCityData);
+export const cityDbPromise = fetchCityData();
+const [cityDb] = createResource(() => cityDbPromise);
 
 
 export const createClosestCity = (coords: Accessor<[number, number] | null | undefined>) => {
     return createMemo(() => {
         const db = cityDb();
         const c = coords();
-        if (!db || !c) return undefined;
+        if (!db) return "...";
+        if (!c) return "";
 
         const { tree, cities } = db;
         const [lat, lon] = c;
