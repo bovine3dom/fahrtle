@@ -10,7 +10,7 @@ import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
 import { getRouteEmoji, getClickHouseRouteTypeBetweens } from './getRouteEmoji';
-import { interpolateSpectral } from 'd3';
+import { interpolateSpectral, hsl } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
@@ -144,6 +144,12 @@ const updateStops = async (map: maplibregl.Map) => {
   try {
     const res = await chQuery(query);
     if (res && res.data) {
+      function getHalo(hex: string) {
+        const colour = hsl(hex);
+        colour.l = colour.l > 0.5 ? 0.3 : 0.95;
+        colour.s *= 0.5;
+        return colour.toString();
+      }
       const features = res.data.map((stop: any) => ({
         type: 'Feature',
         geometry: {
@@ -155,7 +161,8 @@ const updateStops = async (map: maplibregl.Map) => {
           name: stop.stop_name,
           route_type: stop.route_type,
           crow_km: stop.crow_km,
-          color: getCrowKmColor(stop.crow_km || 0)
+          color: getCrowKmColor(stop.crow_km || 0),
+          halo_color: getHalo(getCrowKmColor(stop.crow_km || 0))
         }
       }));
 
@@ -646,8 +653,8 @@ export default function MapView() {
         },
         paint: {
           'text-color': ['get', 'color'],
-          'text-halo-color': '#000',
-          'text-halo-width': 0.1,
+          'text-halo-color': ['get', 'halo_color'],
+          'text-halo-width': 0.8,
         }
       }, getBeforeId("stops-layer", mapInstance));
 
