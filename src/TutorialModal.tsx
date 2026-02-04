@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, For } from 'solid-js';
 
 interface TutorialModalProps {
     onClose: () => void;
@@ -98,18 +98,30 @@ const TutorialModal = (props: TutorialModalProps) => {
                     'aspect-ratio': '16/10',
                     background: '#f1f5f9',
                     'border-radius': '8px',
-                    display: 'flex',
-                    'align-items': 'center',
-                    'justify-content': 'center',
+                    position: 'relative',
                     overflow: 'hidden',
                     border: '1px solid #e2e8f0'
                 }}>
-                    <img
-                        src={pages[currentPage()].image}
-                        alt={pages[currentPage()].title}
-                        style={{ 'max-width': '100%', 'object-fit': 'cover' }}
-                    />
+                    <For each={pages}>
+                        {(page, i) => (
+                            <img
+                                src={page.image}
+                                alt={page.title}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    'object-fit': 'cover',
+                                    opacity: i() === currentPage() ? 1 : 0, // causes images to preload to avoid janky replacement
+                                    'pointer-events': i() === currentPage() ? 'auto' : 'none'
+                                }}
+                            />
+                        )}
+                    </For>
                 </div>
+
 
                 <div style={{
                     'color': '#334155',
