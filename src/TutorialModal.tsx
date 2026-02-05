@@ -125,7 +125,7 @@ const TutorialModal = (props: TutorialModalProps) => {
 
                 <div style={{
                     'color': '#334155',
-                    'font-size': '0.95em',
+                    'font-size': 'clamp(0.8rem, 2vw, 1rem)',
                     'line-height': '1.5',
                     'min-height': '60px',
                     'white-space': 'pre-line'
