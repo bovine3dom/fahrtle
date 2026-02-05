@@ -19,7 +19,7 @@ const ideal_hierarchy: string[] = [
   "preview-route-labels", // route preview stop names/times
 ] as const; // const ... as const. great language
 
-type HierarchyPrefix = (typeof ideal_hierarchy)[number];
+// type HierarchyPrefix = (typeof ideal_hierarchy)[number]; // unused for now
 
 // -1 if fails => everything draws on top -> unwise?
 function getPriorityIndex(layerId: string): number {
