@@ -360,8 +360,6 @@ export default function MapView() {
 
         const existingLayers = mapInstance.getStyle()?.layers;
         const existingSources = mapInstance.getStyle()?.sources;
-        const beforeId = getBeforeId("basemap-", mapInstance);
-
         for (const layer of existingLayers) {
           if (layer.id.startsWith('basemap-')) {
             mapInstance.removeLayer(layer.id);
@@ -387,7 +385,7 @@ export default function MapView() {
                 id: `basemap-${layer.id}`,
                 source: layer.source ? `basemap-${layer.source}` : undefined
               };
-              mapInstance.addLayer(newLayer, beforeId);
+              mapInstance.addLayer(newLayer, getBeforeId(`basemap-${layer.id}`, mapInstance));
             }
           } catch (err) {
             console.error('[Map] Failed to fetch basemap style:', err);
@@ -402,7 +400,7 @@ export default function MapView() {
             ...layer,
             id: `basemap-${layer.id}`,
             source: `basemap-${sourceKey}`
-          } as any, beforeId);
+          } as any, getBeforeId(`basemap-${layer.id}`, mapInstance));
         }
       } finally {
         unlock();

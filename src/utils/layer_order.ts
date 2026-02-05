@@ -14,6 +14,8 @@ const ideal_hierarchy: string[] = [
   "h3-cell-line", // pink hex departure board 'search area' on click
   "preview-route-line", // route preview
   "stops-layer", // stops for departure boards
+  "basemap-label",
+  "basemap-place",
   "preview-route-labels", // route preview stop names/times
 ] as const; // const ... as const. great language
 
@@ -21,14 +23,24 @@ type HierarchyPrefix = (typeof ideal_hierarchy)[number];
 
 // -1 if fails => everything draws on top -> unwise?
 function getPriorityIndex(layerId: string): number {
-  return ideal_hierarchy.findIndex(prefix => layerId.startsWith(prefix));
+  let bestIndex = -1;
+  let longestMatchLen = 0;
+
+  ideal_hierarchy.forEach((prefix, index) => {
+    if (layerId.startsWith(prefix) && prefix.length > longestMatchLen) {
+      longestMatchLen = prefix.length;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
 }
 
 export function getBeforeId(
-  newLayerPrefix: HierarchyPrefix,
+  newLayerId: string, 
   mapInstance: Map
 ): string | undefined {
-  const targetPriority = ideal_hierarchy.indexOf(newLayerPrefix);
+  const targetPriority = getPriorityIndex(newLayerId);
   const currentLayers = mapInstance.getLayersOrder();
   return currentLayers.find(layer => getPriorityIndex(layer) > targetPriority) || undefined;
 }
