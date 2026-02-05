@@ -11,7 +11,7 @@ const TutorialModal = (props: TutorialModalProps) => {
         {
             title: "Welcome to fahrtle!",
             description: "The goal of the game is to get from the start to the finish as quickly as possible. You can walk by double clicking on the map or take public transport.",
-            image: "tutorial/victory.png"
+            image: "tutorial/victory.webp"
         },
         {
             title: "Finding public transport",
@@ -19,17 +19,17 @@ const TutorialModal = (props: TutorialModalProps) => {
 
             Many stops that we would consider to be a single stop, such as a railway station, are spread across multiple stops in the data. If you can't find a departure you're looking for, be sure to hunt around.
             `,
-            image: "tutorial/stops.png"
+            image: "tutorial/stops.webp"
         },
         {
             title: "Departures",
             description: "Clicking on the map will bring up all the departures in the highlighted area. Click the 🛂 icon circled in red to board a service, or the 🔍 icon circled in green to view the route including arrival times. The arrow to the left of the transport type shows you the bearing to the next stop.",
-            image: "tutorial/departures.png"
+            image: "tutorial/departures.webp"
         },
         {
             title: "Getting off at your destination",
             description: "Once you have selected a departure, click the down arrow circled in green to pick a stop to get off at. Note that the stops are in reverse order from latest to soonest.",
-            image: "tutorial/alight.png"
+            image: "tutorial/alight.webp"
         },
         {
             title: "Snoozing",
@@ -37,7 +37,7 @@ const TutorialModal = (props: TutorialModalProps) => {
 
             In multiplayer, time passes based on the slowest player, so it's polite to snooze wherever you can and look up departures ahead of time so people aren't waiting around for you.
             `,
-            image: "tutorial/snooze.png"
+            image: "tutorial/snooze.webp"
         },
         {
             title: "Tips & tricks",
@@ -47,7 +47,7 @@ const TutorialModal = (props: TutorialModalProps) => {
 
             Good luck, and please leave any feedback at `}<a href="https://github.com/bovine3dom/fahrtle/issues " target="_blank">https://github.com/bovine3dom/fahrtle/issues</a>!
             </>),
-            image: "tutorial/settings.png"
+            image: "tutorial/settings.webp"
         }
     ];
 

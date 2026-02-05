@@ -7,7 +7,7 @@ import { createClosestCity } from './utils/geo';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import { TODAYS_DATE } from './utils/daily';
-import bgImage from './assets/h3_hero.png';
+import bgImage from './assets/h3_hero.webp';
 import favicon from '../public/favicon.svg';
 
 export default function Lobby() {
