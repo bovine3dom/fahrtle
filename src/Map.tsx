@@ -136,9 +136,11 @@ const updateStops = async (map: maplibregl.Map) => {
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
       ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
-      ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
-    LIMIT 2000
+    ORDER BY crow_km desc
+    LIMIT 250
   `;
+      // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
+      // ${zoom <= 9 ? ("LIMIT 100") : zoom <= 13.5 ? ("AND crow_km >= 100") : ""}
   //${zoom >= 16 ? "_unmerged" : ""}
 
   try {
