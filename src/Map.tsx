@@ -9,7 +9,7 @@ import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
-import { getRouteEmoji, getClickHouseRouteTypeBetweens } from './getRouteEmoji';
+import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral, hsl } from 'd3';
 import { haversineDist, lerp, getBearing } from './utils/geo';
 import { sensibleNumber } from './utils/format';
@@ -97,7 +97,7 @@ let isStopsLayerVisible = false;
 
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
-  if (zoom < 8) {
+  if (zoom < 2) {
     if (isStopsLayerVisible) {
       const source = map.getSource('stops') as maplibregl.GeoJSONSource;
       if (source) {
@@ -126,19 +126,20 @@ const updateStops = async (map: maplibregl.Map) => {
 
   const bounds = map.getBounds();
   const query = `
-    SELECT DISTINCT
+    SELECT
       crow_km,
       stop_lat,
       stop_lon,
       stop_name,
       route_type
-    FROM transitous_everything_20260117_stop_statistics_unmerged
+    FROM transitous_everything_20260117_stop_statistics_unmerged3
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-      ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
+      AND crow_km > 0
     ORDER BY crow_km desc
     LIMIT 250
   `;
+      // ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
       // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
       // ${zoom <= 9 ? ("LIMIT 100") : zoom <= 13.5 ? ("AND crow_km >= 100") : ""}
   //${zoom >= 16 ? "_unmerged" : ""}
