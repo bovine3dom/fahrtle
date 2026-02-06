@@ -745,7 +745,6 @@ export default function MapView() {
           const localDate = new Date(localDateStr);
           const hour = localDate.getHours();
           const minute = localDate.getMinutes();
-          $stopTimeZone.set(stopZone);
 
           const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
           const targetMinutes = hour * 60 + minute;
