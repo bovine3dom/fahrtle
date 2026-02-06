@@ -1149,7 +1149,10 @@ export default function DepartureBoard() {
         }
 
         .table-container {
+          display: flex;
+          flex-direction: column;
           flex: 1;
+          min-height: 0;
           background: var(--db-bg);
           transition: all 0.4s ease;
         }
@@ -1178,7 +1181,7 @@ export default function DepartureBoard() {
         }
 
         .table-body {
-          max-height: 60vh;
+          flex: 1;
           overflow-y: auto;
         }
 
@@ -1421,8 +1424,8 @@ export default function DepartureBoard() {
             .mobile-secondary-info { font-size: 0.8rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 10px; }
             .mobile-tomorrow { color: var(--db-accent-red); font-weight: bold; font-size: 0.6rem; margin-top: 2px; }
             .mobile-actions { display: flex; gap: 8px; }
-            .table-container { background: #fff !important; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-            .table-body { flex: 1; overflow-y: auto !important; -webkit-overflow-scrolling: touch; min-height: 0; max-height: none !important; }
+            .table-container { background: #fff !important; overflow: hidden; }
+            .table-body { -webkit-overflow-scrolling: touch; min-height: 0; }
             .table-body::-webkit-scrollbar-thumb { background: var(--db-accent-red); border-radius: 10px; }
             .route-pill { font-size: 0.6rem; padding: 2px 8px; border-radius: 4px; min-width: 25px; box-shadow: none; }
             .departure-board.minimized {
