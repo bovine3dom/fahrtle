@@ -523,6 +523,7 @@ export default function MapView() {
     }
 
     mapInstance.on('load', () => {
+      mapInstance.boxZoom.disable(); // give shift back
       // mapInstance.setProjection({type: 'globe'}); // kinda trippy
       mapInstance.addSource('course-markers', {
         type: 'geojson',
@@ -707,7 +708,8 @@ export default function MapView() {
             return;
           }
           const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
-          const neighborhood = gridDisk(h3Index, 2);
+          const radius = e.originalEvent.shiftKey ? 0 : 2;
+          const neighborhood = gridDisk(h3Index, radius);
 
           const features = neighborhood.map(index => {
             const boundary = cellToBoundary(index);
