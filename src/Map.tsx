@@ -138,9 +138,9 @@ const updateStops = async (map: maplibregl.Map) => {
     ORDER BY crow_km desc
     LIMIT ${$playerSettings.get().maxStops}
   `;
-      // ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
-      // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
-      // ${zoom <= 9 ? ("LIMIT 100") : zoom <= 13.5 ? ("AND crow_km >= 100") : ""}
+  // ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
+  // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
+  // ${zoom <= 9 ? ("LIMIT 100") : zoom <= 13.5 ? ("AND crow_km >= 100") : ""}
   //${zoom >= 16 ? "_unmerged" : ""}
 
   try {
@@ -663,7 +663,7 @@ export default function MapView() {
 
       let clickTimeout: any = null;
 
-      const throttledUpdate = throttle(200, () => {
+      const throttledUpdate = throttle(1000, () => {
         if (mapInstance) {
           updateStops(mapInstance);
           $mapZoom.set(mapInstance.getZoom());
