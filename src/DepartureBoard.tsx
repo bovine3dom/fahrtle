@@ -274,8 +274,8 @@ export default function DepartureBoard() {
     const query = `
           SELECT stop_lat, stop_lon, stop_name, arrival_time
           FROM transitous_everything_20260117_stop_times_one_day_even_saner
-          WHERE "ru.source" = '${row['source']}'
-            AND "ru.trip_id" = '${row['trip_id']}'
+          WHERE source = '${row['source']}'
+            AND trip_id = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
             AND departure_time ${direction === 'forwards' ? '>=' : '<='} '${direction === 'forwards' ? row.departure_time : row.next_arrival}'
           ORDER BY departure_time ${direction === 'forwards' ? 'ASC' : 'DESC'}
@@ -307,8 +307,8 @@ export default function DepartureBoard() {
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
       FROM transitous_everything_20260117_stop_times_one_day_even_saner
-      WHERE "ru.source" = '${row['source']}'
-        AND "ru.trip_id" = '${row['trip_id']}'
+      WHERE source = '${row['source']}'
+        AND trip_id = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'
         AND departure_time >= '${row.departure_time}'
       ORDER BY departure_time ASC
