@@ -33,7 +33,7 @@ fahrtle is a real-time multiplayer racing game built on global public transport 
 
 ### Prerequisites
 
-You will need [Bun](https://bun.sh/) installed on your system. I suggest you use [entr](https://github.com/eradman/entr) too.
+You will need [Bun](https://bun.sh/) installed on your system.
 
 ### Installation
 
@@ -47,18 +47,19 @@ You will need [Bun](https://bun.sh/) installed on your system. I suggest you use
 
 To start the development environment:
 
-**Frontend (Vite):**
+**Frontend (vite):**
 ```bash
 bun run dev
 ```
 
-**Backend (Server):**
+Then open `http://localhost:5173` in your browser. Vite will hot-reload changes _most_ of the time but you'll probably need to do a hard-reload from time to time with ctrl+shift+r in your browser.
+
+**Backend (only needed if testing multiplayer):**
+
+I suggest you use [entr](https://github.com/eradman/entr) to restart the server, but it's optional.
 ```bash
 ls srv/* | entr -r bun run srv/server.ts
 ```
-
-Then open `http://localhost:5173` in your browser. Vite will hot-reload changes _most_ of the time but you'll probably need to do a hard-reload from time to time with ctrl+shift+r in your browser.
-
 
 ## Data sources
 
