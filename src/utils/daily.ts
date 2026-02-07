@@ -1,7 +1,7 @@
-import races_url from '../assets/races_weighted.json?url';
+import races_url from '../assets/races_weighted_pop.json?url';
 
 const INSANE_JS_MONTH_MODIFIER = 1;
-const BASE_DATE = [2026, 2 - INSANE_JS_MONTH_MODIFIER, 2]; // NB: JS months, but not days, are zero-based (really)
+const BASE_DATE = [2026, 2 - INSANE_JS_MONTH_MODIFIER, 7]; // NB: JS months, but not days, are zero-based (really)
 
 export const TODAYS_DATE = new Date();
 

@@ -59,6 +59,13 @@ ls srv/* | entr -r bun run srv/server.ts
 
 Then open `http://localhost:5173` in your browser. Vite will hot-reload changes _most_ of the time but you'll probably need to do a hard-reload from time to time with ctrl+shift+r in your browser.
 
+
+## Data sources
+
+Sources are mostly listed on the map - transport data comes from Transitous, the basemap is OpenFreeMap / OSM with some OSM US fonts, the zoomed-out rail layer is from naturalearthdata.com.
+
+Race starts/stops were picked at random with weights partially from Kontur's population layer.
+
 ## bovine3dom's todo-list
 
 yeah this shouldn't be here. fight me
