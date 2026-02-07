@@ -407,6 +407,7 @@ export function submitWaypointsBatch(points: {
   const clockTime = $clock.get();
   let lastTimeForTotal = clockTime;
   let totalVirtualTime = 0;
+  console.log(points);
 
   for (const p of points) {
     totalVirtualTime += Math.max(1000, p.time - lastTimeForTotal);
@@ -426,7 +427,7 @@ export function submitWaypointsBatch(points: {
       type: 'ADD_WAYPOINT',
       x: p.lng,
       y: p.lat,
-      arrivalTime: p.time,
+      arrivalTime: p.time - (1000 * 60), // take a minute off arrival time to allow players to always reboard
       speedFactor: waypointSpeedFactor,
       stopName: p.stopName,
       isWalk: i === 0,
