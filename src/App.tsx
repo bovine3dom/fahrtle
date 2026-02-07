@@ -40,6 +40,7 @@ function App() {
   const [startTimeStr, setStartTimeStr] = createSignal("");
   const [finishStr, setFinishStr] = createSignal("");
   const [diff, setDiff] = createSignal<Difficulty>("Easy");
+  const [compDriver, setCompDriver] = createSignal(false);
   const [showWinModal, setShowWinModal] = createSignal(false);
   const [showSettings, setShowSettings] = createSignal(false);
 
@@ -117,6 +118,7 @@ function App() {
     else if (!b.time && !startTimeStr()) setStartTimeStr("");
 
     setDiff(b.difficulty);
+    setCompDriver(!!b.computerDriver);
   });
 
 
@@ -157,7 +159,7 @@ function App() {
     }
 
     if (b.difficulty !== diff()) return false;
-
+    if (!!b.computerDriver !== compDriver()) return false;
     return checkField(startStr(), b.start) && checkField(finishStr(), b.finish);
   });
 
@@ -172,7 +174,7 @@ function App() {
       if (p) ts = p;
     }
 
-    setGameBounds(s, f, ts, diff());
+    setGameBounds(s, f, ts, diff(), compDriver());
   };
 
   const togglePicker = (mode: 'start' | 'finish') => {
@@ -663,6 +665,21 @@ function App() {
                           {diff() === 'Easy' && "Adds arrival times, speeds and destinations"}
                           {diff() === 'Normal' && "Adds cardinal directions"}
                           {diff() === 'Transport nerd' && "Adds debug info 💻"}
+                        </div>
+                      </div>
+
+                      <div style={{ 'margin-bottom': '12px' }}>
+                        <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            checked={compDriver()}
+                            onChange={(e) => setCompDriver(e.currentTarget.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <label style={{ 'font-size': '0.8rem', 'color': '#64748b', 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setCompDriver(!compDriver())}>
+                             Add robot driver 🤖
+                          </label>
                         </div>
                       </div>
 

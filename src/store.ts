@@ -131,7 +131,7 @@ export const $boardMinimized = atom(false);
 export const $isFollowing = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
 export const $playerDistances = map<Record<string, number | null>>({});
-export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty: Difficulty }>({ start: null, finish: null, time: undefined, difficulty: 'Normal' });
+export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty: Difficulty, computerDriver?: boolean }>({ start: null, finish: null, time: undefined, difficulty: 'Normal', computerDriver: false });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
@@ -202,7 +202,7 @@ interface GenericWebSocket {
 
 let ws: GenericWebSocket | null = null;
 
-export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty }) {
+export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty, computerDriver?: boolean }) {
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
@@ -242,14 +242,16 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
         startPos: initialBounds.start,
         finishPos: initialBounds.finish,
         startTime: startTime,
-        difficulty: initialBounds.difficulty || 'Normal'
+        difficulty: initialBounds.difficulty || 'Normal',
+        computerDriver: initialBounds.computerDriver || false
       }));
 
       $gameBounds.set({
         start: initialBounds.start,
         finish: initialBounds.finish,
         time: startTime,
-        difficulty: initialBounds.difficulty || 'Normal'
+        difficulty: initialBounds.difficulty || 'Normal',
+        computerDriver: initialBounds.computerDriver || false
       });
     }
 
@@ -293,7 +295,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $players.set(renderables);
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal' });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
@@ -301,7 +303,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
     if (msg.type === 'ROOM_STATE_UPDATE') {
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal' });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
@@ -514,15 +516,17 @@ export function clearPreviewRoute() {
   $previewRoute.set(null);
 }
 
-export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty) {
+export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean) {
   const currentDifficulty = difficulty || $gameBounds.get().difficulty;
+  const currentComputerDriver = computerDriver !== undefined ? computerDriver : $gameBounds.get().computerDriver; // allow false (lol)
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'SET_GAME_BOUNDS',
       startPos: start,
       finishPos: finish,
       startTime: startTime,
-      difficulty: currentDifficulty
+      difficulty: currentDifficulty,
+      computerDriver: currentComputerDriver
     }));
   }
 }

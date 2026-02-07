@@ -51,6 +51,7 @@ export type Room = {
     timerId?: ReturnType<typeof setTimeout>;
 
     difficulty: Difficulty;
+    computerDriver?: boolean;
 };
 
 export const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
@@ -142,6 +143,140 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
     room.timerId = setTimeout(() => {
         updateCallback(room.id);
     }, delay);
+}
+
+export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
+    if (!room.startPos || !room.finishPos) return;
+
+    try {
+        const body = JSON.stringify({
+            coordinates: [
+                [room.startPos[1], room.startPos[0]],
+                [room.finishPos[1], room.finishPos[0]]
+            ]
+        });
+
+        const response = await fetch("https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+                'Content-Type': 'application/json'
+            },
+            body
+        });
+
+        if (!response.ok) throw new Error(`ORS API error: ${response.status}`);
+
+        const data = await response.json();
+        const feature = data.features[0];
+        if (!feature) return;
+
+        const coords = feature.geometry.coordinates;
+        if (feature.properties.segments.length > 1) console.warn("More than one segment in ORS response, only using first one");
+        const steps = feature.properties.segments[0].steps; // only one segment for now
+
+        const waypoints: Waypoint[] = [];
+        const startTime = room.gameStartTime || room.virtualTime;
+
+        let currentVirtualTime = startTime;
+        let driveTimeSinceLastRest = 0;
+        let driveTimeSinceLastSleep = 0;
+
+        const REST_STOP_INTERVAL = 2 * 60 * 60 * 1000;
+        const REST_STOP_DURATION = 15 * 60 * 1000;
+        const SLEEP_INTERVAL = 16 * 60 * 60 * 1000;
+        const SLEEP_DURATION = 8 * 60 * 60 * 1000;
+
+        for (const step of steps) {
+            const [startIndex, endIndex] = step.way_points;
+            const stepDurationMs = step.duration * 1000;
+            const stepDistance = step.distance;
+            
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (i === 0 && waypoints.length === 0) {
+                    waypoints.push({
+                        x: coords[i][0],
+                        y: coords[i][1],
+                        startTime: startTime,
+                        arrivalTime: startTime,
+                        speedFactor: 1.0,
+                        stopName: 'Starting',
+                        emoji: '🚗'
+                    });
+                    continue;
+                }
+
+                if (i === startIndex && waypoints.length > 0) continue;
+
+                const currentCoords = { x: coords[i][0], y: coords[i][1] };
+                const prevCoords = { x: coords[i - 1][0], y: coords[i - 1][1] };
+                const segmentDist = haversineDist(prevCoords, currentCoords) * 1000; // ORS uses meters -_-
+                const segmentDuration = stepDistance > 0 
+                    ? (segmentDist / (stepDistance / 1000)) * (stepDurationMs / 1000) 
+                    : 0;
+
+                currentVirtualTime += segmentDuration;
+                driveTimeSinceLastRest += segmentDuration;
+                driveTimeSinceLastSleep += segmentDuration;
+
+                waypoints.push({
+                    x: currentCoords.x,
+                    y: currentCoords.y,
+                    startTime: waypoints[waypoints.length - 1].arrivalTime,
+                    arrivalTime: currentVirtualTime,
+                    speedFactor: 1.0,
+                    stopName: i === coords.length - 1 ? 'Destination' : step.instruction,
+                    emoji: '🚗'
+                });
+
+                if (driveTimeSinceLastSleep >= SLEEP_INTERVAL) {
+                    const sleepEnd = currentVirtualTime + SLEEP_DURATION;
+                    waypoints.push({
+                        x: currentCoords.x, y: currentCoords.y,
+                        startTime: currentVirtualTime,
+                        arrivalTime: sleepEnd,
+                        speedFactor: 1.0,
+                        stopName: 'sleeping',
+                        emoji: '😴'
+                    });
+                    currentVirtualTime = sleepEnd;
+                    driveTimeSinceLastSleep = 0;
+                    driveTimeSinceLastRest = 0;
+                } else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
+                    const restEnd = currentVirtualTime + REST_STOP_DURATION;
+                    waypoints.push({
+                        x: currentCoords.x, y: currentCoords.y,
+                        startTime: currentVirtualTime,
+                        arrivalTime: restEnd,
+                        speedFactor: 1.0,
+                        stopName: 'taking a break',
+                        emoji: '☕'
+                    });
+                    currentVirtualTime = restEnd;
+                    driveTimeSinceLastRest = 0;
+                }
+            }
+        }
+
+        room.players['the-stig-🏎️'] = {
+            id: 'the-stig-🏎️',
+            color: '#000000',
+            isReady: true,
+            waypoints: waypoints,
+            desiredRate: 1e9, // always lower priority than humans
+            finishTime: null,
+            disconnectedAt: null,
+            viewingStopName: null
+        };
+
+        hooks.publish(room.id, {
+            type: 'PLAYER_JOINED',
+            player: room.players['the-stig-🏎️']
+        });
+
+    } catch (e) {
+        console.error("Failed to fetch computer driver route", e);
+    }
 }
 
 export function handleIncomingMessage(
@@ -256,6 +391,7 @@ export function handleIncomingMessage(
             startPos: room.startPos,
             finishPos: room.finishPos,
             difficulty: room.difficulty,
+            computerDriver: room.computerDriver,
             realTime: now,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0,
             players: room.players
@@ -330,6 +466,7 @@ export function handleIncomingMessage(
         room.startPos = message.startPos;
         room.finishPos = message.finishPos;
         room.difficulty = message.difficulty || 'Normal';
+        room.computerDriver = !!message.computerDriver;
 
         if (message.startTime) {
             room.virtualTime = message.startTime;
@@ -342,7 +479,12 @@ export function handleIncomingMessage(
             const timeChanged = message.startTime !== undefined;
 
             if (posChanged || timeChanged) {
-                for (const pid in room.players) {
+                const pids = Object.keys(room.players);
+                for (const pid of pids) {
+                    if (pid === 'the-stig-🏎️') {
+                        delete room.players[pid];
+                        continue;
+                    }
                     const p = room.players[pid];
                     const spawn = getSpawnPoint(newLat, newLng);
                     p.waypoints = [{
@@ -558,8 +700,10 @@ export function handleIncomingMessage(
 }
 
 export function checkCountdownLogic(room: Room, hooks: GameHooks) {
-    const pCount = Object.keys(room.players).length;
-    const readyCount = Object.values(room.players).filter(p => p.isReady).length;
+    const pCount = Object.keys(room.players).filter(pid => pid !== 'the-stig-🏎️').length;
+    const readyCount = Object.entries(room.players)
+        .filter(([pid, p]) => pid !== 'the-stig-🏎️' && p.isReady)
+        .length;
     const allReady = pCount > 0 && readyCount === pCount;
 
     if (room.state === 'JOINING' && allReady) {
@@ -588,6 +732,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
 
     for (const pid in room.players) {
         const p = room.players[pid];
+        if (pid === 'the-stig-🏎️') continue;
         if (p.disconnectedAt && Date.now() - p.disconnectedAt > MAX_IDLE_TIME) {
             if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
                 delete room.players[pid];
@@ -606,6 +751,10 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
         room.gameStartTime = room.virtualTime;
         room.countdownEnd = null;
         hooks.broadcastRoomState(room);
+
+        if (room.computerDriver && !room.players['the-stig-🏎️']) {
+            fetchComputerDriverRoute(room, hooks);
+        }
     }
 
     if (room.state !== 'RUNNING') {
@@ -654,6 +803,19 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
             realTime: Date.now(),
             rate: room.playbackRate
         });
+    }
+
+    const cd = room.players['the-stig-🏎️'];
+    if (cd && !cd.finishTime && cd.waypoints.length > 0) {
+        const lastWp = cd.waypoints[cd.waypoints.length - 1];
+        if (room.virtualTime >= lastWp.arrivalTime) {
+            cd.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
+            hooks.publish(room.id, {
+                type: 'PLAYER_FINISH_UPDATE',
+                playerId: 'the-stig-🏎️',
+                finishTime: cd.finishTime
+            });
+        }
     }
 
     scheduleNextTick(room, updateCallback);

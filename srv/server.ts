@@ -77,6 +77,7 @@ function broadcastRoomState(room: Room) {
     difficulty: room.difficulty,
     serverTime: room.virtualTime,
     realTime: Date.now(),
+    computerDriver: room.computerDriver,
     rate: room.state === 'RUNNING' ? room.playbackRate : 0
   }));
 }
