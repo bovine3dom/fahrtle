@@ -7,13 +7,13 @@ const ideal_hierarchy: string[] = [
   "mapterhorn-layer",
   "openrailwaymap-layer",
   "course-markers-h3-filled", // finish area hexes
-  "course-markers-icon", // start and finish icons
-  "course-markers-label", // start and finish text labels
-  "routes-casing", // wtf is this? tood: investigate
-  "routes-line", // player tracks
   "h3-cell-line", // pink hex departure board 'search area' on click
   "preview-route-line", // route preview
   "stops-layer", // stops for departure boards
+  "routes-casing", // white outline around player tracks
+  "routes-line", // player tracks
+  "course-markers-icon", // start and finish icons
+  "course-markers-label", // start and finish text labels
   "basemap-label",
   "basemap-place",
   "preview-route-labels", // route preview stop names/times
