@@ -135,7 +135,6 @@ const updateStops = async (map: maplibregl.Map) => {
     FROM transitous_everything_20260117_stop_statistics_unmerged3
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-      AND crow_km > 0
     ORDER BY crow_km desc
     LIMIT 250
   `;
@@ -652,6 +651,8 @@ export default function MapView() {
           'text-allow-overlap': true,
           'text-ignore-placement': false,
           'text-anchor': 'left',
+          'symbol-z-order': 'source',
+          'symbol-sort-key': ['get', 'crow_km'],
         },
         paint: {
           'text-color': ['get', 'color'],
