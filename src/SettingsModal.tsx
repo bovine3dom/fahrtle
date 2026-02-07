@@ -99,6 +99,22 @@ const SettingsModal = (props: SettingsModalProps) => {
                                         </For>
                                     </select>
                                 </Show>
+
+                                <Show when={config.type === 'number'}>
+                                    <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
+                                        <input
+                                            type="range"
+                                            value={currentSettings()[key as keyof typeof currentSettings] as number}
+                                            min={config.min}
+                                            max={config.max}
+                                            step={config.step || 10}
+                                            onInput={(e) => updateSetting(key, e.currentTarget.value)}
+                                        />
+                                        <span>
+                                            {currentSettings()[key as keyof typeof currentSettings]}
+                                        </span>
+                                    </div>
+                                </Show>
                             </div>
                         )}
                     </For>

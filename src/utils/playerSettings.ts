@@ -1,9 +1,12 @@
 type PlayerSetting = {
-  type: 'text' | 'color' | 'boolean' | 'select';
-  value: string | boolean | undefined;
+  type: 'text' | 'color' | 'boolean' | 'select' | 'number';
+  value: string | boolean | number | undefined;
   description: string;
   hidden?: boolean;
   options?: string[];
+  min?: number;
+  max?: number;
+  step?: number;
 };
 
 export const defaultPlayerSettings: Record<string, PlayerSetting> = {
@@ -17,4 +20,5 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   terrain3d: { type: 'boolean', value: false, description: '3D terrain' },
   debug: { type: 'boolean', value: false, description: 'Show debug buttons next to departures' },
   firstPersonFollow: { type: 'boolean', value: false, description: 'Follow camera first person' },
+  maxStops: { type: 'number', value: 250, description: 'Maximum stops to show', min: 0, max: 1000 },
 }

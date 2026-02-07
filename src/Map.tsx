@@ -136,7 +136,7 @@ const updateStops = async (map: maplibregl.Map) => {
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
     ORDER BY crow_km desc
-    LIMIT 250
+    LIMIT ${$playerSettings.get().maxStops}
   `;
       // ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
       // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
