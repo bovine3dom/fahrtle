@@ -591,6 +591,7 @@ export default function MapView() {
 
       mapInstance.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
+        filter: ['==', '$type', 'LineString'],
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 3,
@@ -635,6 +636,26 @@ export default function MapView() {
           'text-halo-width': 2,
         }
       }, getBeforeId("preview-route-labels", mapInstance));
+
+      mapInstance.addLayer({
+        id: 'routes-labels',
+        type: 'symbol',
+        source: 'routes',
+        filter: ['==', '$type', 'Point'],
+        layout: {
+          'text-field': ['concat', ['get', 'stop_name'], ' (', ['get', 'arrival_time'], ')'],
+          'text-size': 14,
+          'text-offset': [0, 0.6],
+          'text-anchor': 'top',
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': ['get', 'color'],
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        }
+      }, getBeforeId("routes-labels", mapInstance));
 
       mapInstance.addSource('stops', {
         type: 'geojson', data: { type: 'FeatureCollection', features: [] },
@@ -949,6 +970,7 @@ export default function MapView() {
   });
 
   const players = useStore($players);
+  const playerSettings = useStore($playerSettings);
   createEffect(() => {
     const isReady = mapReady();
     const allPlayers = players();
@@ -965,8 +987,24 @@ export default function MapView() {
           geometry: { type: 'LineString', coordinates: coords },
           properties: { color: player.color, sort_key: Number(player.id != "the-stig-🏎️") }
         });
+
+        if ((player.id != "the-stig-🏎️") && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
+          const pointFeatures = player.waypoints
+            .filter(wp => wp.stopName)
+            .map(wp => ({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [wp.x, wp.y] },
+              properties: {
+                stop_name: wp.stopName,
+                arrival_time: wp.timeStr || "",
+                color: player.color // this seems awkward, why do we need to specify it per point
+              }
+            }));
+          routeFeatures.push(...pointFeatures);
+        }
       }
     }
+
 
     const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
     if (rSource) {

@@ -12,6 +12,7 @@ const ideal_hierarchy: string[] = [
   "stops-layer", // stops for departure boards
   "routes-casing", // white outline around player tracks
   "routes-line", // player tracks
+  "routes-labels",
   "course-markers-icon", // start and finish icons
   "course-markers-label", // start and finish text labels
   "basemap-label",

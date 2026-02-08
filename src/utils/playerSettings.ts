@@ -21,4 +21,5 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   debug: { type: 'boolean', value: false, description: 'Show debug buttons next to departures' },
   firstPersonFollow: { type: 'boolean', value: false, description: 'Follow camera first person' },
   maxStops: { type: 'number', value: 250, description: 'Maximum stops to show', min: 0, max: 1000 },
+  showWaypoints: { type: 'boolean', value: true, description: 'Always show waypoints on map' },
 }
