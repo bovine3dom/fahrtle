@@ -594,9 +594,9 @@ export default function MapView() {
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 3,
-          'line-opacity': 1.0
+          'line-opacity': 1.0,
         },
-        layout: { 'line-cap': 'round', 'line-join': 'round' }
+        layout: { 'line-cap': 'round', 'line-join': 'round', 'line-sort-key': ['get', 'sort_key'] }
       }, getBeforeId("routes-line", mapInstance));
 
       mapInstance.addSource('h3-cell', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -963,7 +963,7 @@ export default function MapView() {
         routeFeatures.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: player.color }
+          properties: { color: player.color, sort_key: Number(player.id != "the-stig-🏎️") }
         });
       }
     }
