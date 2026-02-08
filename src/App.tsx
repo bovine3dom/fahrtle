@@ -697,7 +697,7 @@ function App() {
                           'transition': 'all 0.2s'
                         }}
                       >
-                        {isSaved() ? 'Synced ✓' : 'Set course'}
+                        {isSaved() ? 'Synced ✓' : 'Confirm settings'}
                       </button>
                     </div>
                   </Show>
