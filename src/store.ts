@@ -409,7 +409,6 @@ export function submitWaypointsBatch(points: {
   const clockTime = $clock.get();
   let lastTimeForTotal = clockTime;
   let totalVirtualTime = 0;
-  console.log(points);
 
   for (const p of points) {
     totalVirtualTime += Math.max(1000, p.time - lastTimeForTotal);
