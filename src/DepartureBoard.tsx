@@ -9,6 +9,7 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime, sensibleNumber } from './utils/format';
 import { memoize } from 'micro-memoize';
+import { augmentWithRailRoute } from './utils/railRoute';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -362,11 +363,29 @@ export default function DepartureBoard() {
             timeStr: p.timeStr,
           }));
 
-          submitWaypointsBatch(points);
-          $playerSettings.get().autoFollow && $isFollowing.set(true);
-          close();
+          const emoji = getRouteEmoji(row.route_type);
+          if (emoji === '🚆') {
+            augmentWithRailRoute(points).then(finalPoints => {
+              submitWaypointsBatch(finalPoints);
+              $playerSettings.get().autoFollow && $isFollowing.set(true);
+              close();
+              setLoadingTripKey(null);
+            }).catch(err => {
+              console.error("[RailRoute] Full fallback due to error:", err);
+              submitWaypointsBatch(points);
+              $playerSettings.get().autoFollow && $isFollowing.set(true);
+              close();
+              setLoadingTripKey(null);
+            });
+          } else {
+            submitWaypointsBatch(points);
+            $playerSettings.get().autoFollow && $isFollowing.set(true);
+            close();
+            setLoadingTripKey(null);
+          }
+        } else {
+          setLoadingTripKey(null);
         }
-        setLoadingTripKey(null);
       })
       .catch(err => {
         console.error(`[ClickHouse] Trip batch query failed:`, err);

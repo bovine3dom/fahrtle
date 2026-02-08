@@ -134,12 +134,27 @@ export class FakeServer {
     }
 
     private saveToLocalStorage() {
-        const data: Record<string, any> = {};
-        for (const [id, room] of this.rooms) {
-            const { timerId, ...serializableRoom } = room;
-            data[id] = serializableRoom;
+        try {
+            const data: Record<string, any> = {};
+            for (const [id, room] of this.rooms) {
+                const { timerId, ...roomData } = room;
+
+                const prunedPlayers: Record<string, any> = {};
+                for (const pid in room.players) {
+                    const p = room.players[pid];
+                    const waypoints = p.waypoints.filter(wp => !wp.isInterstop);
+                    prunedPlayers[pid] = {
+                        ...p,
+                        waypoints
+                    };
+                }
+
+                data[id] = { ...roomData, players: prunedPlayers };
+            }
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            console.warn("Failed to save state to localStorage:", e);
         }
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
     }
 
     private loadFromLocalStorage() {

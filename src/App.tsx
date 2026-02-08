@@ -278,14 +278,21 @@ function App() {
     const p = players()[myId()!];
     const idx = currentWpIndex();
     if (!p || idx === -1) return undefined;
-    return p.waypoints[idx];
+    const nextReal = p.waypoints.slice(idx).find(wp => !wp.isInterstop);
+    return nextReal || p.waypoints[idx];
+  });
+
+  const allStations = createMemo(() => {
+    const p = players()[myId()!];
+    if (!p) return [];
+    return p.waypoints
+      .map((wp, i) => ({ ...wp, originalIndex: i }))
+      .filter(wp => !wp.isInterstop);
   });
 
   const futureWaypoints = createMemo(() => {
-    const p = players()[myId()!];
-    const idx = currentWpIndex();
-    if (!p || idx === -1) return [];
-    return p.waypoints.slice(idx).reverse(); // this is maybe confusing?
+    const t = time();
+    return allStations().filter(wp => wp.arrivalTime > t).reverse();
   });
 
   const [getOffDropdownOpen, setGetOffDropdownOpen] = createSignal(false);
@@ -493,12 +500,10 @@ function App() {
                             'overflow-y': 'auto'
                           }}>
                           <For each={futureWaypoints()}>
-                            {(wp, i) => (
+                            {(wp) => (
                               <div
                                 onClick={() => {
-                                  // list is reversed so need to count index backwards
-                                  const idx = futureWaypoints().length - 1 - i();
-                                  stopImmediately(currentWpIndex() + idx);
+                                  stopImmediately(wp.originalIndex)
                                   setGetOffDropdownOpen(false);
                                   setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
                                   setTimeout(() => setActionFeedback(null), 3000);
@@ -682,7 +687,7 @@ function App() {
                             style={{ cursor: 'pointer' }}
                           />
                           <label style={{ 'font-size': '0.8rem', 'color': '#64748b', 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setCompDriver(!compDriver())}>
-                             Add robot driver 🤖
+                            Add robot driver 🤖
                           </label>
                         </div>
                       </div>
@@ -720,7 +725,7 @@ function App() {
                         {(id, index) => {
                           const p = () => players()[id];
                           const isFinished = createMemo(() => p().finishTime != null);
-                          const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time()));
+                          const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time() && !wp.isInterstop));
                           const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
                           const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
@@ -924,12 +929,10 @@ function App() {
                             'overflow-y': 'auto'
                           }}>
                             <For each={futureWaypoints()}>
-                              {(wp, i) => (
+                              {(wp) => (
                                 <div
                                   onClick={() => {
-                                    // list is reversed so need to count index backwards
-                                    const idx = futureWaypoints().length - 1 - i();
-                                    stopImmediately(currentWpIndex() + idx);
+                                    stopImmediately(wp.originalIndex)
                                     setGetOffDropdownOpen(false);
                                     setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
                                     setTimeout(() => setActionFeedback(null), 3000);

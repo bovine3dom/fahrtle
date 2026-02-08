@@ -43,6 +43,7 @@ export type Waypoint = {
   emoji?: string;
   route_departure_time?: string;
   timeStr?: string;
+  isInterstop?: boolean;
 };
 
 export type Player = {
@@ -400,6 +401,7 @@ export function submitWaypointsBatch(points: {
   emoji?: string,
   route_departure_time?: string | null,
   timeStr?: string,
+  isInterstop?: boolean,
 }[]) {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
@@ -411,8 +413,10 @@ export function submitWaypointsBatch(points: {
   let totalVirtualTime = 0;
   let lastRealTime = clockTime;
   for (const p of points) {
-    totalVirtualTime += Math.max(1000, p.time - lastRealTime);
-    lastRealTime = p.time;
+    if (!p.isInterstop) {
+      totalVirtualTime += Math.max(1000, p.time - lastRealTime);
+      lastRealTime = p.time;
+    }
   }
   if (lastRealTime < points[points.length - 1].time) {
     totalVirtualTime += (points[points.length - 1].time - lastRealTime);
@@ -426,12 +430,12 @@ export function submitWaypointsBatch(points: {
 
   while (segmentStartIdx < points.length) {
     let nextRealIdx = segmentStartIdx;
-    while (nextRealIdx < points.length - 1) {
+    while (nextRealIdx < points.length - 1 && points[nextRealIdx].isInterstop) {
       nextRealIdx++;
     }
 
     const p = points[nextRealIdx];
-    const legVirtualTime = Math.max(1000, p.time - segmentStartTime);
+    const legVirtualTime = p.isInterstop ? (p.time - segmentStartTime) : Math.max(1000, p.time - segmentStartTime);
     const legSpeedLimit = legVirtualTime / 2000; // min 2 seconds for this leg
     const legSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, legSpeedLimit));
 
@@ -446,10 +450,11 @@ export function submitWaypointsBatch(points: {
   const waypointsToSubmit = points.map((p, i) => ({
     x: p.lng,
     y: p.lat,
-    arrivalTime: p.time - (1000 * 60), // leeway for reboarding
+    arrivalTime: p.time - (p.isInterstop ? 0 : (1000 * 60)), // leeway for reboarding
     speedFactor: waypointSpeeds[i],
     stopName: p.stopName,
     isWalk: i === 0,
+    isInterstop: p.isInterstop,
     route_color: p.route_color,
     route_short_name: p.route_short_name,
     display_name: p.display_name,

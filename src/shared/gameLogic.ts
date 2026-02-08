@@ -16,6 +16,7 @@ export type Waypoint = {
     emoji?: string;
     route_departure_time?: string;
     timeStr?: string;
+    isInterstop?: boolean;
 };
 
 export type Player = {
@@ -191,7 +192,7 @@ export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             const [startIndex, endIndex] = step.way_points;
             const stepDurationMs = step.duration * 1000;
             const stepDistance = step.distance;
-            
+
             for (let i = startIndex; i <= endIndex; i++) {
                 if (i === 0 && waypoints.length === 0) {
                     waypoints.push({
@@ -211,8 +212,8 @@ export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
                 const currentCoords = { x: coords[i][0], y: coords[i][1] };
                 const prevCoords = { x: coords[i - 1][0], y: coords[i - 1][1] };
                 const segmentDist = haversineDist(prevCoords, currentCoords) * 1000; // ORS uses meters -_-
-                const segmentDuration = stepDistance > 0 
-                    ? (segmentDist / (stepDistance / 1000)) * (stepDurationMs / 1000) 
+                const segmentDuration = stepDistance > 0
+                    ? (segmentDist / (stepDistance / 1000)) * (stepDurationMs / 1000)
                     : 0;
 
                 currentVirtualTime += segmentDuration;
@@ -559,6 +560,7 @@ export function handleIncomingMessage(
                 speedFactor: wp.speedFactor,
                 stopName: wp.stopName,
                 isWalk: wp.isWalk || false,
+                isInterstop: wp.isInterstop || false,
                 route_color: wp.route_color,
                 route_short_name: wp.route_short_name,
                 display_name: wp.display_name,
@@ -588,7 +590,7 @@ export function handleIncomingMessage(
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr } = message;
+        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -612,6 +614,7 @@ export function handleIncomingMessage(
             speedFactor: speedFactor,
             stopName: stopName || undefined,
             isWalk: isWalk || false,
+            isInterstop: isInterstop || false,
             route_color,
             route_short_name,
             display_name,
