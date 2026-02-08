@@ -407,40 +407,61 @@ export function submitWaypointsBatch(points: {
   if (!player || points.length === 0) return;
 
   const clockTime = $clock.get();
-  let lastTimeForTotal = clockTime;
-  let totalVirtualTime = 0;
 
+  let totalVirtualTime = 0;
+  let lastRealTime = clockTime;
   for (const p of points) {
-    totalVirtualTime += Math.max(1000, p.time - lastTimeForTotal);
-    lastTimeForTotal = p.time;
+    totalVirtualTime += Math.max(1000, p.time - lastRealTime);
+    lastRealTime = p.time;
+  }
+  if (lastRealTime < points[points.length - 1].time) {
+    totalVirtualTime += (points[points.length - 1].time - lastRealTime);
   }
 
   const batchSpeedFactor = Math.max(1.0, totalVirtualTime / 30000);
 
-  let lastTimeForSegments = clockTime;
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const segmentVirtualTime = Math.max(1000, p.time - lastTimeForSegments);
-    const speedLimitBetweenStops = segmentVirtualTime / 2000; // min 2 seconds between each stop
-    const waypointSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, speedLimitBetweenStops));
+  const waypointSpeeds = new Array(points.length);
+  let segmentStartIdx = 0;
+  let segmentStartTime = clockTime;
 
-    ws.send(JSON.stringify({
-      type: 'ADD_WAYPOINT',
-      x: p.lng,
-      y: p.lat,
-      arrivalTime: p.time - (1000 * 60), // take a minute off arrival time to allow players to always reboard
-      speedFactor: waypointSpeedFactor,
-      stopName: p.stopName,
-      isWalk: i === 0,
-      route_color: p.route_color,
-      route_short_name: p.route_short_name,
-      display_name: p.display_name,
-      emoji: p.emoji,
-      route_departure_time: p.route_departure_time,
-      timeStr: p.timeStr
-    }));
-    lastTimeForSegments = p.time;
+  while (segmentStartIdx < points.length) {
+    let nextRealIdx = segmentStartIdx;
+    while (nextRealIdx < points.length - 1) {
+      nextRealIdx++;
+    }
+
+    const p = points[nextRealIdx];
+    const legVirtualTime = Math.max(1000, p.time - segmentStartTime);
+    const legSpeedLimit = legVirtualTime / 2000; // min 2 seconds for this leg
+    const legSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, legSpeedLimit));
+
+    for (let k = segmentStartIdx; k <= nextRealIdx; k++) {
+      waypointSpeeds[k] = legSpeedFactor;
+    }
+
+    segmentStartTime = p.time;
+    segmentStartIdx = nextRealIdx + 1;
   }
+
+  const waypointsToSubmit = points.map((p, i) => ({
+    x: p.lng,
+    y: p.lat,
+    arrivalTime: p.time - (1000 * 60), // leeway for reboarding
+    speedFactor: waypointSpeeds[i],
+    stopName: p.stopName,
+    isWalk: i === 0,
+    route_color: p.route_color,
+    route_short_name: p.route_short_name,
+    display_name: p.display_name,
+    emoji: p.emoji,
+    route_departure_time: p.route_departure_time,
+    timeStr: p.timeStr
+  }));
+
+  ws.send(JSON.stringify({
+    type: 'ADD_WAYPOINTS_BATCH',
+    waypoints: waypointsToSubmit
+  }));
 }
 
 export function leaveRoom() {

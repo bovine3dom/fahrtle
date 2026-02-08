@@ -522,6 +522,61 @@ export function handleIncomingMessage(
         }
     }
 
+    // --- ADD WAYPOINTS BATCH ---
+    if (message.type === 'ADD_WAYPOINTS_BATCH') {
+        if (!wsData.roomId || !wsData.playerId) return;
+
+        const room = rooms.get(wsData.roomId);
+        if (!room || room.state !== 'RUNNING') return;
+        const player = room.players[wsData.playerId];
+        if (!player) return;
+
+        stepClock(room);
+        player.viewingStopName = null;
+
+        const { waypoints } = message;
+        if (!Array.isArray(waypoints) || waypoints.length === 0) return;
+
+        for (const wp of waypoints) {
+            const lastPoint = player.waypoints[player.waypoints.length - 1];
+            let start = lastPoint.arrivalTime;
+            if (start < room.virtualTime) {
+                start = room.virtualTime;
+            }
+
+            let finalArrival = wp.arrivalTime;
+            if (finalArrival === undefined) {
+                const distance = haversineDist(lastPoint, { x: wp.x, y: wp.y });
+                const duration = distance / BASE_SPEED;
+                finalArrival = start + duration;
+            }
+
+            player.waypoints.push({
+                x: wp.x,
+                y: wp.y,
+                startTime: start,
+                arrivalTime: finalArrival,
+                speedFactor: wp.speedFactor,
+                stopName: wp.stopName,
+                isWalk: wp.isWalk || false,
+                route_color: wp.route_color,
+                route_short_name: wp.route_short_name,
+                display_name: wp.display_name,
+                emoji: wp.isWalk ? '🐾' : wp.emoji,
+                route_departure_time: wp.route_departure_time,
+                timeStr: wp.timeStr
+            });
+        }
+
+        hooks.publish(wsData.roomId, {
+            type: 'PLAYER_WAYPOINTS_UPDATE',
+            playerId: wsData.playerId,
+            waypoints: player.waypoints
+        });
+
+        triggerUpdate(wsData.roomId);
+    }
+
     // --- ADD WAYPOINT ---
     if (message.type === 'ADD_WAYPOINT') {
         if (!wsData.roomId || !wsData.playerId) return;
