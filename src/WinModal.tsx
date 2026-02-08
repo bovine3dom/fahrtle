@@ -1,5 +1,5 @@
 import { createSignal, createEffect } from 'solid-js';
-import { type Player, $gameBounds } from './store';
+import { type Player, $gameBounds, $players, $gameStartTime } from './store';
 import { getTravelSummary } from './utils/summary';
 
 interface WinModalProps {
@@ -13,8 +13,17 @@ const WinModal = (props: WinModalProps) => {
   const [stealthMode, setStealthMode] = createSignal(false);
   const [travelSummary, setTravelSummary] = createSignal('Loading...');
 
+  const stig = () => Object.values($players.get()).find(p => p.id === 'the-stig-🏎️');
+  const stigDuration = () => {
+    const s = stig();
+    if (!s || s.waypoints.length === 0) return null;
+    if (s.finishTime) return s.finishTime;
+    const gameStart = $gameStartTime.get() || s.waypoints[0].startTime;
+    return s.waypoints[s.waypoints.length - 1].arrivalTime - gameStart;
+  };
+
   createEffect(() => {
-    getTravelSummary(props.player, $gameBounds.get(), stealthMode())
+    getTravelSummary(props.player, $gameBounds.get(), stealthMode(), stigDuration() || undefined)
       .then(summary => setTravelSummary(summary));
   });
 

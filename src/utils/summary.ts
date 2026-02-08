@@ -100,7 +100,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
 import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false) => {
+export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false, targetTime?: number) => {
     await cityDbPromise;
     const summaryEntries = getTravelSummaryObj(player);
     let travel = stealth ? summaryEntries.map((wp) => { return `${wp.emoji}`; }).join('') : summaryEntries.map((wp) => {
@@ -147,5 +147,13 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
     const dayPrefix = isDaily ? ` daily #${await getDailyRaceIndex()}!` : '';
 
     travel = `I just played #fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
-    return `${player.finishTime ? `${travel}\n🎉 Finished in ${formatDuration(player.finishTime)}!` : travel}\nCan you beat me? ${url.toString()}`;
+    if (player.finishTime) {
+        if (targetTime) {
+            const diff = player.finishTime - targetTime;
+            const sign = diff <= 0 ? ['🏁', 'faster'] : ['🐢', 'slower'];
+            travel += `\n${sign[0]} ${formatDuration(Math.abs(diff))} ${sign[1]} than driving`;
+        }
+        travel += `\n🎉 Finished in ${formatDuration(player.finishTime)}!`;
+    }
+    return `${travel}\nCan you beat me? ${url.toString()}`;
 }
