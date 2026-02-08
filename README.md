@@ -52,7 +52,7 @@ To start the development environment:
 bun run dev
 ```
 
-Then open `http://localhost:5173` in your browser. Vite will hot-reload changes _most_ of the time but you'll probably need to do a hard-reload from time to time with ctrl+shift+r in your browser.
+It will probably complain the first time you run it but you can safely ignore it. Then open `http://localhost:5173` in your browser. Vite will hot-reload changes _most_ of the time but you'll probably need to do a hard-reload from time to time with ctrl+shift+r in your browser.
 
 **Backend (only needed if testing multiplayer):**
 
