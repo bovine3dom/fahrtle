@@ -18,6 +18,7 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   railwaysLayer: { type: 'select', value: 'Disabled', description: 'Railways layer', options: ['Disabled', 'Infrastructure', 'Speed', 'Electrification', 'Gauge'] },
   hillShade: { type: 'boolean', value: true, description: 'Hillshade' },
   terrain3d: { type: 'boolean', value: false, description: '3D terrain' },
+  bathymetry: { type: 'boolean', value: true, description: 'Water depths' },
   debug: { type: 'boolean', value: false, description: 'Show debug buttons next to departures' },
   firstPersonFollow: { type: 'boolean', value: false, description: 'Follow camera first person' },
   maxStops: { type: 'number', value: 250, description: 'Maximum stops to show', min: 0, max: 1000 },

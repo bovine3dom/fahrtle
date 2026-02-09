@@ -4,6 +4,7 @@ import { type Map } from 'maplibre-gl';
 // todo: rename layers to be less insane
 const ideal_hierarchy: string[] = [
   "basemap-",
+  "water-bathymetry",
   "mapterhorn-layer",
   "openrailwaymap-layer",
   "course-markers-h3-filled", // finish area hexes

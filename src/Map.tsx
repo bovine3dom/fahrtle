@@ -455,6 +455,80 @@ export default function MapView() {
       }
     };
 
+    const updateBathymetryLayer = async (setting: string) => {
+      const unlock = await map_update_lock.lock();
+      try {
+        const layerExists = !!mapInstance.getLayer('water-bathymetry');
+        const sourceExists = !!mapInstance.getSource('gebco');
+        if (layerExists) {
+          mapInstance.removeLayer('water-bathymetry');
+        }
+        if (sourceExists) {
+          mapInstance.removeSource('gebco');
+        }
+        if (!setting) {
+          return;
+        }
+        mapInstance.addSource('gebco', {
+          type: 'vector',
+          tiles: [`https://compute.olie.science/versatiles/tiles/bathymetry-vectors/{z}/{x}/{y}`],
+          minzoom: 0,
+          maxzoom: 10,
+          attribution: '<a href="https://download.versatiles.org/" target="_blank">VersaTiles, GEBCO & OpenDEM</a>'
+        });
+
+        const baseColorValue = (mapInstance.getStyle().layers.find(layer => layer.id === 'basemap-water')?.paint as any)?.['fill-color'] || "#b3dbe6"; // approx osm carto
+        const colorString: string = Array.isArray(baseColorValue) ? "#b3dbe6" : baseColorValue as any; // fallback to carto if there's a complex expression
+        const isRaster = baseColorValue === '#b3dbe6'; // this is stupid
+
+        const baseHsl = hsl(colorString);
+        const isDark = baseHsl.l < 0.5;
+
+        // todo: check versatiles uses these and only these (the base gebco layer does iirc)
+        const stops = [
+          -9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, 
+          -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, 
+          -750, -500, -250, -200, -100, -50, -25, 0
+        ];
+
+        const extremeLightness = isDark ? 0.95 : 0.05;
+
+        const fillColorExpression = [
+          "step",
+          ["get", "mindepth"],
+          isDark ? "#ffffff" : "#000000"
+        ];
+
+        stops.forEach((depth, index) => {
+          const t = index / (stops.length - 1);
+          let stepHsl = hsl(baseHsl.toString());
+
+          // much more extreme logic for dark mode
+          if (isDark) {
+            stepHsl.l = extremeLightness - (extremeLightness - baseHsl.l) * t;
+          } else {
+            stepHsl.l = 0.95 - (0.95 - baseHsl.l) * t;
+          }
+
+          fillColorExpression.push(depth as any, stepHsl.formatHex()); // depth has to be a number but typescript disagrees (!)
+        });
+
+        mapInstance.addLayer({
+          id: 'water-bathymetry',
+          type: 'fill',
+          source: 'gebco',
+          'source-layer': 'bathymetry',
+          paint: {
+            "fill-color": fillColorExpression as any,
+            "fill-opacity": isRaster ? 0.5 : 1,
+          },
+        }, getBeforeId("water-bathymetry", mapInstance));
+
+      } finally {
+        unlock();
+      }
+    };
+
     const updateHillShadeLayer = async (setting: boolean) => {
       const unlock = await map_update_lock.lock();
       try {
@@ -838,11 +912,17 @@ export default function MapView() {
     createEffect(() => {
       const setting = playerSettings().baseMap;
       updateBasemap(setting);
+      updateBathymetryLayer(setting); // change colour if we need to
     });
 
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
       updateRailwaysLayer(setting);
+    });
+
+    createEffect(() => {
+      const setting = playerSettings().bathymetry;
+      updateBathymetryLayer(setting);
     });
 
     createEffect(() => {
