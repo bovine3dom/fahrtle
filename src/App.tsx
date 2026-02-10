@@ -474,20 +474,26 @@ function App() {
                         {getOffDropdownOpen() ? '▲' : '▼'}
                       </button>
                       <Show when={getOffDropdownOpen()}>
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          background: '#fff',
-                          border: '1px solid #ccc',
-                          'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-                          'border-radius': '4px',
-                          'margin-top': '4px',
-                          'min-width': '200px',
-                          'z-index': 100,
-                          'max-height': '200px',
-                          'overflow-y': 'auto'
-                        }}>
+                        <div 
+                          ref={(el) => {
+                            requestAnimationFrame(() => {
+                              el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
+                            });
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            background: '#fff',
+                            border: '1px solid #ccc',
+                            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+                            'border-radius': '4px',
+                            'margin-top': '4px',
+                            'min-width': '200px',
+                            'z-index': 100,
+                            'max-height': '200px',
+                            'overflow-y': 'auto'
+                          }}>
                           <For each={futureWaypoints()}>
                             {(wp, i) => (
                               <div
@@ -895,7 +901,13 @@ function App() {
                           {getOffDropdownOpen() ? '▲' : '▼'}
                         </button>
                         <Show when={getOffDropdownOpen()}>
-                          <div style={{
+                          <div
+                          ref={(el) => {
+                            requestAnimationFrame(() => {
+                              el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
+                            });
+                          }}
+                          style={{
                             position: 'absolute',
                             top: '100%',
                             left: 0,
