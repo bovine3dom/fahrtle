@@ -312,9 +312,7 @@ function App() {
             position: 'absolute', top: '10px', left: '10px', 'z-index': 10,
             background: 'rgba(255,255,255,0.9)', padding: '12px', 'border-radius': '8px',
             'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-            'width': minimized() ? '280px' : 'auto',
-            'min-width': '200px',
-            'max-width': 'calc(100vw - 20px)',
+            'width': minimized() ? '280px' : '320px',
             'max-height': 'calc(100% - 100px)',
             'display': 'flex',
             'flex-direction': 'column',
@@ -785,13 +783,17 @@ function App() {
                                 <Show when={!isFinished()}>
                                   <Show when={nextWp()} fallback={
                                     <Show when={p().viewingStopName}>
-                                      <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                      <div style={{
+                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
+                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px' }}>
                                         🔍 Looking at departures @ {p().viewingStopName}
                                       </div>
                                     </Show>
                                   }>
                                     {(wp) => (
-                                      <div style={{ 'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'display': 'flex', 'align-items': 'center', 'gap': '4px' }}>
+                                      <div style={{ 
+                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
+                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px' }}>
                                         <Show when={wp().route_short_name}>
                                           <span
                                             class="route-pill"
