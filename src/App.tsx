@@ -520,7 +520,7 @@ function App() {
                               >
                                 <span>{wp.emoji || '🏳️'}</span>
                                 <span style={{ flex: 1, 'white-space': 'nowrap', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
-                                  {wp.stopName || 'Unnamed stop'} {wp.timeStr ? `(${wp.timeStr})` : ''}
+                                  {wp.timeStr || ''} {wp.stopName || 'Unnamed stop'}
                                 </span>
                               </div>
                             )}
@@ -946,7 +946,7 @@ function App() {
                                   onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                                 >
                                   <span>{wp.emoji || '🏳️'}</span>
-                                  <span style={{ flex: 1 }}>{wp.stopName || 'Unnamed stop'} {wp.timeStr ? `(${wp.timeStr})` : ''}</span>
+                                  <span style={{ flex: 1 }}>{wp.timeStr || ''} {wp.stopName || 'Unnamed stop'}</span>
                                 </div>
                               )}
                             </For>
