@@ -13,11 +13,11 @@ const ideal_hierarchy: string[] = [
   "stops-layer", // stops for departure boards
   "routes-casing", // white outline around player tracks
   "routes-line", // player tracks
-  "routes-labels",
   "course-markers-icon", // start and finish icons
   "course-markers-label", // start and finish text labels
   "basemap-label",
   "basemap-place",
+  "routes-labels",
   "preview-route-labels", // route preview stop names/times
 ] as const; // const ... as const. great language
 
