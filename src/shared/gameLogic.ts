@@ -1,4 +1,5 @@
 // src/shared/gameLogic.ts
+import simplify from 'simplify-js';
 
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
@@ -173,13 +174,48 @@ export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
         if (!feature) return;
 
         const coords = feature.geometry.coordinates;
-        if (feature.properties.segments.length > 1) console.warn("More than one segment in ORS response, only using first one");
-        const steps = feature.properties.segments[0].steps; // only one segment for now
-
-        const waypoints: Waypoint[] = [];
+        const steps = feature.properties.segments[0].steps;
         const startTime = room.gameStartTime || room.virtualTime;
 
-        let currentVirtualTime = startTime;
+        let allTimedPoints: any[] = [];
+        let runningTime = startTime;
+
+        // calculate times and distances before simplification
+        for (const step of steps) {
+            const [startIdx, endIdx] = step.way_points;
+            const stepDurationMs = step.duration * 1000;
+            const stepPoints = coords.slice(startIdx, endIdx + 1);
+            
+            let stepDistances = [0];
+            let totalStepDist = 0;
+            for (let j = 1; j < stepPoints.length; j++) {
+                const d = haversineDist({x: stepPoints[j-1][0], y: stepPoints[j-1][1]}, {x: stepPoints[j][0], y: stepPoints[j][1]});
+                totalStepDist += d;
+                stepDistances.push(totalStepDist);
+            }
+
+            for (let j = 0; j < stepPoints.length; j++) {
+                if (j === 0 && allTimedPoints.length > 0) continue;
+
+                const ratio = totalStepDist === 0 ? 0 : stepDistances[j] / totalStepDist;
+                const arrivalTime = runningTime + (ratio * stepDurationMs);
+                
+                allTimedPoints.push({
+                    x: stepPoints[j][0],
+                    y: stepPoints[j][1],
+                    arrivalTime: arrivalTime,
+                    instruction: step.instruction
+                });
+            }
+            runningTime += stepDurationMs;
+        }
+
+        // dump ~90% of the waypoints
+        const simplifiedDrivingPoints = simplify(allTimedPoints, 0.0005, true) as {
+            x: number, y: number, arrivalTime: number, instruction: string  // simplify passes through extra props but ts whines
+        }[];
+
+        const finalWaypoints: Waypoint[] = [];
         let driveTimeSinceLastRest = 0;
         let driveTimeSinceLastSleep = 0;
 
@@ -188,74 +224,58 @@ export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
         const SLEEP_INTERVAL = 16 * 60 * 60 * 1000;
         const SLEEP_DURATION = 8 * 60 * 60 * 1000;
 
-        for (const step of steps) {
-            const [startIndex, endIndex] = step.way_points;
-            const stepDurationMs = step.duration * 1000;
-            const stepDistance = step.distance;
+        let totalDelay = 0;
 
-            for (let i = startIndex; i <= endIndex; i++) {
-                if (i === 0 && waypoints.length === 0) {
-                    waypoints.push({
-                        x: coords[i][0],
-                        y: coords[i][1],
-                        startTime: startTime,
-                        arrivalTime: startTime,
-                        speedFactor: 1.0,
-                        stopName: 'Starting',
-                        emoji: '🚗'
-                    });
-                    continue;
-                }
+        for (let i = 0; i < simplifiedDrivingPoints.length; i++) {
+            const curr = simplifiedDrivingPoints[i];
+            const prev = i > 0 ? simplifiedDrivingPoints[i-1] : null;
 
-                if (i === startIndex && waypoints.length > 0) continue;
+            const segmentDriveTime = prev ? (curr.arrivalTime - prev.arrivalTime) : 0;
+            
+            driveTimeSinceLastRest += segmentDriveTime;
+            driveTimeSinceLastSleep += segmentDriveTime;
 
-                const currentCoords = { x: coords[i][0], y: coords[i][1] };
-                const prevCoords = { x: coords[i - 1][0], y: coords[i - 1][1] };
-                const segmentDist = haversineDist(prevCoords, currentCoords) * 1000; // ORS uses meters -_-
-                const segmentDuration = stepDistance > 0
-                    ? (segmentDist / (stepDistance / 1000)) * (stepDurationMs / 1000)
-                    : 0;
+            const isStart = i === 0;
+            const isEnd = i === simplifiedDrivingPoints.length - 1;
 
-                currentVirtualTime += segmentDuration;
-                driveTimeSinceLastRest += segmentDuration;
-                driveTimeSinceLastSleep += segmentDuration;
+            finalWaypoints.push({
+                x: curr.x,
+                y: curr.y,
+                startTime: isStart ? startTime : finalWaypoints[finalWaypoints.length - 1].arrivalTime,
+                arrivalTime: curr.arrivalTime + totalDelay,
+                speedFactor: 1.0,
+                stopName: isStart ? 'Starting' : (isEnd ? 'Destination' : curr.instruction),
+                emoji: '🚗'
+            });
 
-                waypoints.push({
-                    x: currentCoords.x,
-                    y: currentCoords.y,
-                    startTime: waypoints[waypoints.length - 1].arrivalTime,
-                    arrivalTime: currentVirtualTime,
+            if (driveTimeSinceLastSleep >= SLEEP_INTERVAL) {
+                const sleepStart = curr.arrivalTime + totalDelay;
+                const sleepEnd = sleepStart + SLEEP_DURATION;
+                finalWaypoints.push({
+                    x: curr.x, y: curr.y,
+                    startTime: sleepStart,
+                    arrivalTime: sleepEnd,
                     speedFactor: 1.0,
-                    stopName: i === coords.length - 1 ? 'Destination' : step.instruction,
-                    emoji: '🚗'
+                    stopName: 'sleeping',
+                    emoji: '😴'
                 });
-
-                if (driveTimeSinceLastSleep >= SLEEP_INTERVAL) {
-                    const sleepEnd = currentVirtualTime + SLEEP_DURATION;
-                    waypoints.push({
-                        x: currentCoords.x, y: currentCoords.y,
-                        startTime: currentVirtualTime,
-                        arrivalTime: sleepEnd,
-                        speedFactor: 1.0,
-                        stopName: 'sleeping',
-                        emoji: '😴'
-                    });
-                    currentVirtualTime = sleepEnd;
-                    driveTimeSinceLastSleep = 0;
-                    driveTimeSinceLastRest = 0;
-                } else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
-                    const restEnd = currentVirtualTime + REST_STOP_DURATION;
-                    waypoints.push({
-                        x: currentCoords.x, y: currentCoords.y,
-                        startTime: currentVirtualTime,
-                        arrivalTime: restEnd,
-                        speedFactor: 1.0,
-                        stopName: 'taking a break',
-                        emoji: '☕'
-                    });
-                    currentVirtualTime = restEnd;
-                    driveTimeSinceLastRest = 0;
-                }
+                totalDelay += SLEEP_DURATION;
+                driveTimeSinceLastSleep = 0;
+                driveTimeSinceLastRest = 0;
+            } 
+            else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
+                const restStart = curr.arrivalTime + totalDelay;
+                const restEnd = restStart + REST_STOP_DURATION;
+                finalWaypoints.push({
+                    x: curr.x, y: curr.y,
+                    startTime: restStart,
+                    arrivalTime: restEnd,
+                    speedFactor: 1.0,
+                    stopName: 'taking a break',
+                    emoji: '☕'
+                });
+                totalDelay += REST_STOP_DURATION;
+                driveTimeSinceLastRest = 0;
             }
         }
 
@@ -263,7 +283,7 @@ export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             id: 'the-stig-🏎️',
             color: '#000000',
             isReady: true,
-            waypoints: waypoints,
+            waypoints: finalWaypoints,
             desiredRate: 1e9, // always lower priority than humans
             finishTime: null,
             disconnectedAt: null,
