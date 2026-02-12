@@ -13,9 +13,6 @@ export default defineConfig({
           if (id.includes('maplibre-gl')) {
             return 'maplibre';
           }
-          if (id.includes('@turf')) {
-            return 'turf';
-          }
         },
       },
     },
