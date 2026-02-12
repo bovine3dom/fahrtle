@@ -16,7 +16,8 @@ const routeTypeConfigs: Record<string, RouteTypeConfig> = {
     monorail: { emoji: '🚝', ranges: [12, 405] }
 };
 
-type RouteType = keyof typeof routeTypeConfigs;
+// surely this will come in handy one day
+// type RouteType = keyof typeof routeTypeConfigs;
 
 export const getRouteEmoji = (type: number) => {
     for (const config of Object.values(routeTypeConfigs)) {
