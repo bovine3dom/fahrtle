@@ -197,6 +197,14 @@ function App() {
     return false;
   });
 
+  createEffect(() => {
+    if (!canCancel()) {
+      const me = players()[myId()!];
+      const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
+      isSnoozing && toggleSnooze()
+    }
+  })
+
   const [timeLeft, setTimeLeft] = createSignal<number | null>(null);
   const [leaveConfirm, setLeaveConfirm] = createSignal(false);
 
@@ -479,7 +487,7 @@ function App() {
                         {getOffDropdownOpen() ? '▲' : '▼'}
                       </button>
                       <Show when={getOffDropdownOpen()}>
-                        <div 
+                        <div
                           ref={(el) => {
                             requestAnimationFrame(() => {
                               el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
@@ -789,16 +797,18 @@ function App() {
                                   <Show when={nextWp()} fallback={
                                     <Show when={p().viewingStopName}>
                                       <div style={{
-                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
-                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px' }}>
+                                        'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
+                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
+                                      }}>
                                         🔍 Looking at departures @ {p().viewingStopName}
                                       </div>
                                     </Show>
                                   }>
                                     {(wp) => (
-                                      <div style={{ 
-                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
-                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px' }}>
+                                      <div style={{
+                                        'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
+                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
+                                      }}>
                                         <Show when={wp().route_short_name}>
                                           <span
                                             class="route-pill"
@@ -909,25 +919,25 @@ function App() {
                         </button>
                         <Show when={getOffDropdownOpen()}>
                           <div
-                          ref={(el) => {
-                            requestAnimationFrame(() => {
-                              el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
-                            });
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            background: '#fff',
-                            border: '1px solid #ccc',
-                            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-                            'border-radius': '4px',
-                            'margin-top': '4px',
-                            'min-width': '200px',
-                            'z-index': 100,
-                            'max-height': '200px',
-                            'overflow-y': 'auto'
-                          }}>
+                            ref={(el) => {
+                              requestAnimationFrame(() => {
+                                el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
+                              });
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              background: '#fff',
+                              border: '1px solid #ccc',
+                              'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+                              'border-radius': '4px',
+                              'margin-top': '4px',
+                              'min-width': '200px',
+                              'z-index': 100,
+                              'max-height': '200px',
+                              'overflow-y': 'auto'
+                            }}>
                             <For each={futureWaypoints()}>
                               {(wp) => (
                                 <div
