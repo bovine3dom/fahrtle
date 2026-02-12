@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend": "bun run srv/server.ts",
+    "knip": "bunx --bun knip"
   },
   "dependencies": {
     "@googlemaps/polyline-codec": "^1.0.28",
