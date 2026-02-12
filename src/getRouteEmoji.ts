@@ -1,7 +1,7 @@
 type RouteTypeRange = number | [number, number];
 type RouteTypeConfig = { emoji: string; ranges: RouteTypeRange[] };
 
-export const routeTypeConfigs: Record<string, RouteTypeConfig> = {
+const routeTypeConfigs: Record<string, RouteTypeConfig> = {
     rail: { emoji: '🚆', ranges: [2, [100, 117]] },
     coach: { emoji: '🚍', ranges: [[200, 209]] },
     subway: { emoji: '🚇', ranges: [1, [400, 404]] },
@@ -16,7 +16,7 @@ export const routeTypeConfigs: Record<string, RouteTypeConfig> = {
     monorail: { emoji: '🚝', ranges: [12, 405] }
 };
 
-export type RouteType = keyof typeof routeTypeConfigs;
+type RouteType = keyof typeof routeTypeConfigs;
 
 export const getRouteEmoji = (type: number) => {
     for (const config of Object.values(routeTypeConfigs)) {
@@ -32,28 +32,30 @@ export const getRouteEmoji = (type: number) => {
 };
 
 // e.g. getClickHouseRouteTypeBetweens(['tram', 'bus']) => "route_type IN (0, 5, 3) OR (route_type BETWEEN 900 AND 906) OR (route_type BETWEEN 700 AND 716)"
-export const getClickHouseRouteTypeBetweens = (types: RouteType[]) => {
-    const parts: string[] = [];
-    const singles: number[] = [];
+// ... unused but it was annoying to write so let's see if we need it again
+//
+// const getClickHouseRouteTypeBetweens = (types: RouteType[]) => {
+//     const parts: string[] = [];
+//     const singles: number[] = [];
 
-    for (const type of types) {
-        const config = routeTypeConfigs[type];
-        if (!config) continue;
+//     for (const type of types) {
+//         const config = routeTypeConfigs[type];
+//         if (!config) continue;
 
-        for (const range of config.ranges) {
-            if (typeof range === 'number') {
-                singles.push(range);
-            } else {
-                parts.push(`(route_type BETWEEN ${range[0]} AND ${range[1]})`);
-            }
-        }
-    }
+//         for (const range of config.ranges) {
+//             if (typeof range === 'number') {
+//                 singles.push(range);
+//             } else {
+//                 parts.push(`(route_type BETWEEN ${range[0]} AND ${range[1]})`);
+//             }
+//         }
+//     }
 
-    if (singles.length > 0) {
-        parts.unshift(`route_type IN (${singles.join(', ')})`);
-    }
+//     if (singles.length > 0) {
+//         parts.unshift(`route_type IN (${singles.join(', ')})`);
+//     }
 
-    if (parts.length === 0) return '1=1';
+//     if (parts.length === 0) return '1=1';
 
-    return parts.join(' OR ');
-};
+//     return parts.join(' OR ');
+// };

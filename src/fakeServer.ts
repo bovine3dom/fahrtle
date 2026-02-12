@@ -31,7 +31,7 @@ class FakeWebSocket {
     }
 }
 
-export class FakeServer {
+class FakeServer {
     private rooms = new Map<string, Room>();
     private sockets = new Set<FakeWebSocket>();
     private STORAGE_KEY = 'fahrtle_solo_state';

@@ -64,7 +64,7 @@ export type AnimationSegment = {
   endTime: number;
 };
 
-export type RenderablePlayer = Player & {
+type RenderablePlayer = Player & {
   segments: AnimationSegment[];
 };
 
@@ -107,7 +107,7 @@ export interface DepartureResult {
 export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);
 export const $isDaily = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_daily') === 'true' : false);
 
-export const $connected = atom(false);
+const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
 export const $players = map<Record<string, RenderablePlayer>>({});
@@ -120,7 +120,7 @@ export const $playerTimeZone = atom<string>('Europe/Paris');
 export const $roomState = atom<'JOINING' | 'COUNTDOWN' | 'RUNNING'>('JOINING');
 export const $countdownEnd = atom<number | null>(null);
 export const $clock = atom(0);
-export interface PreviewRoute {
+interface PreviewRoute {
   coords: [number, number][];
   stopNames: string[];
   stopTimes: string[];
@@ -490,7 +490,7 @@ const throttledSetColor = throttle(200, (color: string) => {
   ws.send(JSON.stringify({ type: 'UPDATE_PLAYER_COLOR', color }));
 });
 
-export function setPlayerColor(color: string) {
+function setPlayerColor(color: string) {
   localStorage.setItem('fahrtle_color', color);
   throttledSetColor(color);
 }
@@ -535,10 +535,6 @@ function processPlayer(raw: Player): RenderablePlayer {
   }
 
   return { ...raw, segments };
-}
-
-export function clearPreviewRoute() {
-  $previewRoute.set(null);
 }
 
 export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean) {

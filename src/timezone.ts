@@ -26,18 +26,6 @@ export function formatInTimeZone(timestamp: number, timeZone: string, showSecond
 }
 
 /**
- * Gets the numeric offset (in milliseconds) for a timezone relative to Europe/Paris
- * at a specific point in simulation time.
- * 
- * Logic: (LocalTime - ParisTime)
- */
-export function getTimeZoneOffset(timestamp: number, targetZone: string): number {
-    const parisTime = new Date(new Date(timestamp).toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
-    const localTime = new Date(new Date(timestamp).toLocaleString('en-US', { timeZone: targetZone }));
-    return localTime.getTime() - parisTime.getTime();
-}
-
-/**
  * Returns a stereotypical color for a given city/timezone.
  */
 export function getTimeZoneColor(timeZone: string): string {
@@ -194,7 +182,7 @@ export function getTimeZoneLanguage(timeZone: string): string {
     return 'en';
 }
 
-export const departuresLabels: Record<string, string> = {
+const departuresLabels: Record<string, string> = {
     // Western/Central Europe
     'en': 'Departures',      // English
     'fr': 'Départs',         // French
@@ -236,7 +224,7 @@ export const departuresLabels: Record<string, string> = {
     'ms': 'Pelepasan',       // Malay
 };
 
-export const arrivalsLabels: Record<string, string> = {
+const arrivalsLabels: Record<string, string> = {
     'en': 'Arrivals',
     'fr': 'Arrivées',
     'de': 'Ankunft',

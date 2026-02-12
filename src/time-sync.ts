@@ -8,14 +8,14 @@ type ClockState = {
 };
 
 // Initialized with 1:1 time mapped to now
-export const $clockState = atom<ClockState>({
+const $clockState = atom<ClockState>({
   anchorServer: Date.now(),
   anchorLocal: Date.now(),
   rate: 1.0
 });
 
 // Second server clock (always 1:1 rate)
-export const $realClockState = atom<ClockState>({
+const $realClockState = atom<ClockState>({
   anchorServer: Date.now(),
   anchorLocal: Date.now(),
   rate: 1.0

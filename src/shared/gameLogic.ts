@@ -3,7 +3,7 @@ import simplify from 'simplify-js';
 
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
-export type Waypoint = {
+type Waypoint = {
     x: number;
     y: number;
     startTime: number;   // Virtual Timestamp
@@ -56,10 +56,10 @@ export type Room = {
     computerDriver?: boolean;
 };
 
-export const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
+const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
 
-export function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
+function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
     const toRad = (x: number) => x * Math.PI / 180;
     const R = 6371; // km
     const dLat = toRad(coords2.y - coords1.y);
@@ -71,11 +71,11 @@ export function haversineDist(coords1: { x: number, y: number }, coords2: { x: n
     return R * c;
 }
 
-export function lerp(v0: number, v1: number, t: number) {
+function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
 }
 
-export function getSpawnPoint(centerLat: number, centerLng: number) {
+function getSpawnPoint(centerLat: number, centerLng: number) {
     const spreadMeters = 50;
     const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
     const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(centerLat * Math.PI / 180)));
@@ -86,7 +86,7 @@ export function getSpawnPoint(centerLat: number, centerLng: number) {
     };
 }
 
-export function stepClock(room: Room) {
+function stepClock(room: Room) {
     const now = Date.now();
     const elapsedReal = now - room.lastRealTime;
     if (room.state === 'RUNNING') {
@@ -147,7 +147,7 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
     }, delay);
 }
 
-export async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
+async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
     if (!room.startPos || !room.finishPos) return;
 
     try {
@@ -777,7 +777,7 @@ export function handleIncomingMessage(
     }
 }
 
-export function checkCountdownLogic(room: Room, hooks: GameHooks) {
+function checkCountdownLogic(room: Room, hooks: GameHooks) {
     const pCount = Object.keys(room.players).filter(pid => pid !== 'the-stig-🏎️').length;
     const readyCount = Object.entries(room.players)
         .filter(([pid, p]) => pid !== 'the-stig-🏎️' && p.isReady)

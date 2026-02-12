@@ -1,4 +1,4 @@
-export type Position = [number, number];
+type Position = [number, number];
 
 /**
  * Global object storing current interpolated player positions.
