@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, cancelNavigation, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -286,8 +286,8 @@ function App() {
     const p = players()[myId()!];
     const idx = currentWpIndex();
     if (!p || idx === -1) return undefined;
-    const nextReal = p.waypoints.slice(idx).find(wp => !wp.isInterstop);
-    return nextReal || p.waypoints[idx];
+    const nextReal = p.waypoints.map((wp, i) => ({ ...wp, originalIndex: i })).slice(idx).find(wp => !wp.isInterstop);
+    return nextReal; // || p.waypoints[idx];
   });
 
   const allStations = createMemo(() => {
@@ -439,7 +439,7 @@ function App() {
                           stopImmediately();
                           setActionFeedback("Walking stopped");
                         } else {
-                          cancelNavigation();
+                          stopImmediately(nextWaypoint()?.originalIndex);
                           setActionFeedback(`Stopping at ${nextWaypoint()?.stopName}`);
                         }
                         setTimeout(() => setActionFeedback(null), 3000);
@@ -876,7 +876,7 @@ function App() {
                             stopImmediately();
                             setActionFeedback("Walking stopped");
                           } else {
-                            cancelNavigation();
+                            stopImmediately(nextWaypoint()?.originalIndex);
                             setActionFeedback(`Alighting scheduled for ${nextWaypoint()?.stopName}`);
                           }
                           setTimeout(() => setActionFeedback(null), 3000);

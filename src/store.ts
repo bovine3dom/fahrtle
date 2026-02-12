@@ -504,15 +504,6 @@ export function toggleSnooze() {
   ws.send(JSON.stringify({ type: 'TOGGLE_SNOOZE' }));
 }
 
-export function cancelNavigation() {
-  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) {
-    console.error('WebSocket not open, cannot cancel navigation');
-    return;
-  }
-
-  ws.send(JSON.stringify({ type: 'CANCEL_NAVIGATION' }));
-}
-
 export function stopImmediately(destinationWpIndex?: number) {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY', destinationWpIndex }));

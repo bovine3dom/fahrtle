@@ -654,31 +654,6 @@ export function handleIncomingMessage(
         triggerUpdate(wsData.roomId);
     }
 
-    // --- CANCEL NAVIGATION ---
-    if (message.type === 'CANCEL_NAVIGATION') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (!player) return;
-
-        stepClock(room);
-        const vTime = room.virtualTime;
-
-        const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
-
-        if (nextWpIndex !== -1 && nextWpIndex < player.waypoints.length - 1) {
-            player.waypoints = player.waypoints.slice(0, nextWpIndex + 1);
-
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_WAYPOINTS_UPDATE',
-                playerId: wsData.playerId,
-                waypoints: player.waypoints
-            });
-            triggerUpdate(wsData.roomId);
-        }
-    }
-
     if (message.type === 'STOP_IMMEDIATELY') {
         if (!wsData.roomId || !wsData.playerId) return;
         const room = rooms.get(wsData.roomId);
