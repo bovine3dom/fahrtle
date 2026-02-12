@@ -60,6 +60,9 @@ I suggest you use [entr](https://github.com/eradman/entr) to restart the server,
 ```bash
 ls srv/* | entr -r bun run srv/server.ts
 ```
+**spring cleaning**
+
+every now and then run `bun knip`, clean up unused exports then `tsc -b` and remove the dead code
 
 ## Data sources
 
