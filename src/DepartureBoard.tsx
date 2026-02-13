@@ -2,7 +2,8 @@ import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
-import { haversineDist, bearingToCardinal, createClosestCity } from './utils/geo';
+import { haversineDist, bearingToCardinal, type Coords } from './utils/geo';
+import { createClosestCity } from './utils/tiny-cities';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel, getArrivalLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
@@ -111,19 +112,20 @@ export default function DepartureBoard() {
     return depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
   };
 
-  const [myPos, setMyPos] = createSignal<[number, number] | null>(null);
+  const [myPos, setMyPos] = createSignal<Coords | null>(null);
 
   onMount(() => {
     const interval = setInterval(() => {
       const pid = $myPlayerId.get();
       if (pid && playerPositions[pid]) {
-        setMyPos(playerPositions[pid]);
+        const p = playerPositions[pid];
+        setMyPos({ lon: p[0], lat: p[1] });
       }
     }, 100);
     onCleanup(() => clearInterval(interval));
   });
 
-  const walkTime = memoize((origin: [number, number], destination: [number, number]) => {
+  const walkTime = memoize((origin: Coords, destination: Coords) => {
     const dist = haversineDist(origin, destination);
     if (dist === null) return null;
     return (dist / 5) * 3600;
@@ -186,8 +188,8 @@ export default function DepartureBoard() {
       const stop: [number, number] = [r.stop_lon, r.stop_lat];
 
       const walkTimeSeconds = walkTime(
-        pos.map((p) => Number(p.toFixed(4))) as [number, number],
-        stop.map((p) => Number(p.toFixed(4))) as [number, number]
+        { lon: Number(pos.lon.toFixed(4)), lat: Number(pos.lat.toFixed(4)) },
+        { lon: Number(stop[0].toFixed(4)), lat: Number(stop[1].toFixed(4)) }
       );
 
       const timeVal = currentMode === 'departures' ? r.departure_time : r.next_arrival;
@@ -597,9 +599,9 @@ export default function DepartureBoard() {
 
                   const mainDestText = createMemo(() => {
                     // todo: think about arrivals
-                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + createClosestCity(() => [row.next_lat, row.next_lon])());
+                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + createClosestCity(() => ({ lat: row.next_lat, lon: row.next_lon }))());
                   });
-                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + createClosestCity(() => [$boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon])());
+                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + createClosestCity(() => ({ lat: $boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, lon: $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon }))());
 
                   const handleBoardClick = () => handleTripDoubleClick(row);
                   const handlePreview = () => handlePreviewClick(row, $boardMode.get() === 'departures' ? 'forwards' : 'backwards');

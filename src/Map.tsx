@@ -11,7 +11,7 @@ import { chQuery } from './clickhouse';
 import { getTimeZone } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral, hsl } from 'd3';
-import { haversineDist, lerp, getBearing } from './utils/geo';
+import { haversineDist, lerp, getBearing, type Coords } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
@@ -91,7 +91,7 @@ const getCrowKmColor = (crowKm: number): string => {
   return interpolateSpectral(normalized);
 };
 
-let lastUpdatePos: [number, number] | null = null;
+let lastUpdatePos: Coords | null = null;
 let lastUpdateTime = 0;
 let isStopsLayerVisible = false;
 
@@ -114,14 +114,14 @@ const updateStops = async (map: maplibregl.Map) => {
   const now = Date.now();
 
   if ($isFollowing.get() && lastUpdatePos) {
-    const dist = haversineDist([center.lng, center.lat], lastUpdatePos);
+    const dist = haversineDist({ lon: center.lng, lat: center.lat }, lastUpdatePos);
     // don't update if we haven't moved at least 100m and it's been less than 5 seconds
     if (dist !== null && dist < 0.1 && (now - lastUpdateTime) < 5000) {
       return;
     }
   }
 
-  lastUpdatePos = [center.lng, center.lat];
+  lastUpdatePos = { lon: center.lng, lat: center.lat };
   lastUpdateTime = now;
 
   const bounds = map.getBounds();
@@ -213,7 +213,7 @@ const getPointer = (targetLat: number, targetLng: number): { x: number, y: numbe
 
   const pointerLngLat = mapInstance.unproject([intersection.x, intersection.y]);
   const bearing = getBearing(pointerLngLat.lat, pointerLngLat.lng, targetLat, targetLng);
-  const distance = haversineDist([centerMap.lat, centerMap.lng], [targetLat, targetLng]) || 0;
+  const distance = haversineDist({ lat: centerMap.lat, lon: centerMap.lng }, { lat: targetLat, lon: targetLng }) || 0;
 
   return { x: intersection.x, y: intersection.y, bearing, distance };
 };
@@ -486,8 +486,8 @@ export default function MapView() {
 
         // todo: check versatiles uses these and only these (the base gebco layer does iirc)
         const stops = [
-          -9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, 
-          -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, 
+          -9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000,
+          -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000,
           -750, -500, -250, -200, -100, -50, -25, 0
         ];
 
@@ -794,6 +794,7 @@ export default function MapView() {
       });
 
       mapInstance.on('click', (e) => {
+        console.log([e.lngLat.lat, e.lngLat.lng]);
         if (clickTimeout) clearTimeout(clickTimeout);
 
         clickTimeout = setTimeout(() => {
@@ -884,7 +885,7 @@ export default function MapView() {
             const data = res.data.map((row: DepartureResult) => {
               row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
               row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
-              const dist = haversineDist([row.initial_lat, row.initial_lon], [row.final_lat, row.final_lon]);
+              const dist = haversineDist({ lat: row.initial_lat, lon: row.initial_lon }, { lat: row.final_lat, lon: row.final_lon });
               const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
               const finish = new Date(row.final_arrival || "");
               if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
@@ -1144,7 +1145,7 @@ export default function MapView() {
                 lerp(seg.start[1], seg.end[1], t)
               ];
 
-              const dist = haversineDist(seg.start, seg.end);
+              const dist = haversineDist({ lon: seg.start[0], lat: seg.start[1] }, { lon: seg.end[0], lat: seg.end[1] });
               const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
               const speed = durationHours > 0 ? (dist || 0) / durationHours : 0; // never actually zero here but ts whines
               currentSpeeds[pid] = speed;
@@ -1154,7 +1155,7 @@ export default function MapView() {
           }
 
           const b = $gameBounds.get().finish;
-          const distToFinish = haversineDist(targetPos, b?.length === 2 ? [b[1], b[0]] : null); // lat lng vs lng lat bane of my life
+          const distToFinish = haversineDist(targetPos ? { lon: targetPos[0], lat: targetPos[1] } : null, b?.length === 2 ? { lat: b[0], lon: b[1] } : null);
           currentDists[pid] = distToFinish;
         }
 

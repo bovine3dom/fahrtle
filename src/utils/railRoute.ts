@@ -54,7 +54,10 @@ export async function augmentWithRailRoute(points: any[]) {
             const pointDistances: number[] = [0];
             let totalLegDist = 0;
             for (let j = 1; j < simplifiedPoints.length; j++) {
-                const d = haversineDist(simplifiedPoints[j - 1], simplifiedPoints[j]) || 0;
+                const d = haversineDist(
+                    { lon: simplifiedPoints[j - 1][0], lat: simplifiedPoints[j - 1][1] },
+                    { lon: simplifiedPoints[j][0], lat: simplifiedPoints[j][1] }
+                ) || 0;
                 totalLegDist += d;
                 pointDistances.push(totalLegDist);
             }

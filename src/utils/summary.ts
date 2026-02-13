@@ -1,7 +1,8 @@
 import type { Player, Difficulty, Waypoint } from '../store';
 import { getDailyRaceIndex } from './daily';
 import { formatRowTime, sensibleNumber } from './format';
-import { createClosestCity, haversineDist, cityDbPromise } from './geo';
+import { haversineDist } from './geo';
+import { createClosestCity, cityDbPromise } from './tiny-cities';
 import { formatDuration } from './time';
 
 type SummaryEntry = {
@@ -73,7 +74,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             }
             currentWalkEnd = wp.arrivalTime;
             if (prevWp) {
-                currentWalkDist += haversineDist([prevWp.y, prevWp.x], [wp.y, wp.x]) || 0;
+                currentWalkDist += haversineDist({ lat: prevWp.y, lon: prevWp.x }, { lat: wp.y, lon: wp.x }) || 0;
             }
         } else {
             pushWalk(prevWp || wp);
@@ -105,17 +106,17 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
     const summaryEntries = getTravelSummaryObj(player);
     let travel = stealth ? summaryEntries.map((wp) => { return `${wp.emoji}`; }).join('') : summaryEntries.map((wp) => {
         if (wp.type === 'walk') {
-            return `${wp.emoji} Walked ${sensibleNumber(wp.distance || 0)} km (${formatDuration(wp.duration || 0)}) to ${createClosestCity(() => [wp.y || 0, wp.x || 0])()}`;
+            return `${wp.emoji} Walked ${sensibleNumber(wp.distance || 0)} km (${formatDuration(wp.duration || 0)}) to ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else if (wp.type === 'wait') {
-            return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => [wp.y || 0, wp.x || 0])()}`;
+            return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else {
             return `${wp.emoji} ${formatRowTime(wp.route_departure_time || '')} ${wp.route_short_name} ${wp.display_name}`;
         }
     }).join('\n');
 
     const [finishCity, startCity] = [
-        gameBounds.finish ? createClosestCity(() => gameBounds.finish) : (() => ""),
-        gameBounds.start ? createClosestCity(() => gameBounds.start) : (() => "")
+        gameBounds.finish ? createClosestCity(() => ({ lat: gameBounds.finish![0], lon: gameBounds.finish![1] })) : (() => ""),
+        gameBounds.start ? createClosestCity(() => ({ lat: gameBounds.start![0], lon: gameBounds.start![1] })) : (() => "")
     ];
     const isDaily = typeof localStorage !== 'undefined' && localStorage.getItem('fahrtle_daily') === 'true';
 
@@ -146,7 +147,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
 
     const dayPrefix = isDaily ? ` daily #${await getDailyRaceIndex()}!` : '';
 
-    travel = `I just played #fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start, gameBounds.finish) || 0)} km)\n${travel}`;
+    travel = `I just played #fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start ? { lat: gameBounds.start[0], lon: gameBounds.start[1] } : null, gameBounds.finish ? { lat: gameBounds.finish[0], lon: gameBounds.finish[1] } : null) || 0)} km)\n${travel}`;
     if (player.finishTime) {
         if (targetTime) {
             const diff = player.finishTime - targetTime;

@@ -3,7 +3,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
 import { getDailyRace } from './utils/daily';
-import { createClosestCity } from './utils/geo';
+import { createClosestCity } from './utils/tiny-cities';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import { TODAYS_DATE } from './utils/daily';
@@ -325,7 +325,7 @@ export default function Lobby() {
             </div>
             <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
               <Show when={dailyRace()} fallback="Loading...">
-                {(race) => <>{createClosestCity(() => race().start)()} ➡️ {createClosestCity(() => race().finish)()}</>}
+                {(race) => <>{createClosestCity(() => ({ lat: race().start[0], lon: race().start[1] }))()} ➡️ {createClosestCity(() => ({ lat: race().finish[0], lon: race().finish[1] }))()}</>}
               </Show>
             </div>
           </div>

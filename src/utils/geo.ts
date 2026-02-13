@@ -1,52 +1,17 @@
-import { createResource, createMemo, type Accessor } from 'solid-js';
-import tinyCitiesUrl from '../assets/tiny-cities.json?url';
-import KDBush from 'kdbush';
-import { around } from 'geokdbush';
+export interface Coords {
+    lat: number;
+    lon: number;
+}
 
-const fetchCityData = async () => {
-    const response = await fetch(tinyCitiesUrl);
-    const cities = await response.json();
-
-    const tree = new KDBush(cities.length);
-    for (const { latitude, longitude } of cities) {
-        tree.add(longitude, latitude);
-    }
-    tree.finish();
-
-    return { cities, tree };
-};
-
-export const cityDbPromise = fetchCityData();
-const [cityDb] = createResource(() => cityDbPromise);
-
-
-export const createClosestCity = (coords: Accessor<[number, number] | null | undefined>) => {
-    return createMemo(() => {
-        const db = cityDb();
-        const c = coords();
-        if (!db) return "...";
-        if (!c) return "";
-
-        const { tree, cities } = db;
-        const [lat, lon] = c;
-
-        const results = around(tree, lon, lat, 1);
-
-        if (results.length === 0) return "Unknown Location";
-
-        const idx = results[0] as number;
-        return `${cities[idx].name}, ${cities[idx].country_code}`;
-    });
-};
-
-export const haversineDist = (coords1: [number, number] | null, coords2: [number, number] | null) => {
+// haversine distance in km
+export const haversineDist = (coords1: Coords | null, coords2: Coords | null) => {
     if (!coords1 || !coords2) return null;
     const toRad = (x: number) => x * Math.PI / 180;
     const R = 6371; // km
-    const dLat = toRad(coords2[1] - coords1[1]);
-    const dLon = toRad(coords2[0] - coords1[0]);
+    const dLat = toRad(coords2.lat - coords1.lat);
+    const dLon = toRad(coords2.lon - coords1.lon);
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(coords1[1])) * Math.cos(toRad(coords2[1])) *
+        Math.cos(toRad(coords1.lat)) * Math.cos(toRad(coords2.lat)) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
@@ -73,3 +38,4 @@ export function bearingToCardinal(bearing: number) {
     if (bearing >= 135 && bearing < 225) return 'Southbound';
     return 'Westbound';
 }
+

@@ -1,5 +1,6 @@
 // src/shared/gameLogic.ts
 import simplify from 'simplify-js';
+import { haversineDist } from '../utils/geo';
 
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
@@ -58,18 +59,6 @@ export type Room = {
 
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
-
-function haversineDist(coords1: { x: number, y: number }, coords2: { x: number, y: number }) {
-    const toRad = (x: number) => x * Math.PI / 180;
-    const R = 6371; // km
-    const dLat = toRad(coords2.y - coords1.y);
-    const dLon = toRad(coords2.x - coords1.x);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(toRad(coords1.y)) * Math.cos(toRad(coords2.y)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
 
 function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
@@ -185,11 +174,11 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             const [startIdx, endIdx] = step.way_points;
             const stepDurationMs = step.duration * 1000;
             const stepPoints = coords.slice(startIdx, endIdx + 1);
-            
+
             let stepDistances = [0];
             let totalStepDist = 0;
             for (let j = 1; j < stepPoints.length; j++) {
-                const d = haversineDist({x: stepPoints[j-1][0], y: stepPoints[j-1][1]}, {x: stepPoints[j][0], y: stepPoints[j][1]});
+                const d = haversineDist({ lon: stepPoints[j - 1][0], lat: stepPoints[j - 1][1] }, { lon: stepPoints[j][0], lat: stepPoints[j][1] }) || 0;
                 totalStepDist += d;
                 stepDistances.push(totalStepDist);
             }
@@ -199,7 +188,7 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
 
                 const ratio = totalStepDist === 0 ? 0 : stepDistances[j] / totalStepDist;
                 const arrivalTime = runningTime + (ratio * stepDurationMs);
-                
+
                 allTimedPoints.push({
                     x: stepPoints[j][0],
                     y: stepPoints[j][1],
@@ -228,10 +217,10 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
 
         for (let i = 0; i < simplifiedDrivingPoints.length; i++) {
             const curr = simplifiedDrivingPoints[i];
-            const prev = i > 0 ? simplifiedDrivingPoints[i-1] : null;
+            const prev = i > 0 ? simplifiedDrivingPoints[i - 1] : null;
 
             const segmentDriveTime = prev ? (curr.arrivalTime - prev.arrivalTime) : 0;
-            
+
             driveTimeSinceLastRest += segmentDriveTime;
             driveTimeSinceLastSleep += segmentDriveTime;
 
@@ -262,7 +251,7 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
                 totalDelay += SLEEP_DURATION;
                 driveTimeSinceLastSleep = 0;
                 driveTimeSinceLastRest = 0;
-            } 
+            }
             else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
                 const restStart = curr.arrivalTime + totalDelay;
                 const restEnd = restStart + REST_STOP_DURATION;
@@ -567,7 +556,7 @@ export function handleIncomingMessage(
 
             let finalArrival = wp.arrivalTime;
             if (finalArrival === undefined) {
-                const distance = haversineDist(lastPoint, { x: wp.x, y: wp.y });
+                const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
                 const duration = distance / BASE_SPEED;
                 finalArrival = start + duration;
             }
@@ -620,7 +609,7 @@ export function handleIncomingMessage(
 
         let finalArrival = arrivalTime;
         if (finalArrival === undefined) {
-            const distance = haversineDist(lastPoint, { x, y });
+            const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: y, lon: x }) || 0;
             const duration = distance / BASE_SPEED;
             finalArrival = start + duration;
         }
