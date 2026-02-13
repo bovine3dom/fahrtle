@@ -794,7 +794,7 @@ export default function MapView() {
       });
 
       mapInstance.on('click', (e) => {
-        console.log([e.lngLat.lat, e.lngLat.lng]);
+        !import.meta.env.PROD && console.log(`{ lat = "${e.lngLat.lat}", lon = "${e.lngLat.lng}" }`);
         if (clickTimeout) clearTimeout(clickTimeout);
 
         clickTimeout = setTimeout(() => {
