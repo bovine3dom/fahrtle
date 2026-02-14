@@ -202,7 +202,7 @@
       "filter": ["==", "$type", "LineString"],
       "layout": {
         "text-field": "{name}",
-        "text-font": ["Metropolis Italic"],
+        "text-font": ["Metropolis Regular Italic"],
         "symbol-placement": "line",
         "text-size": 12
       },
