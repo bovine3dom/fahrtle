@@ -376,6 +376,8 @@ export default function MapView() {
             const response = await fetch(styleSpec);
             const style = await response.json();
             give_me_more_trains(style);
+            style.glyphs && mapInstance.setGlyphs(style.glyphs);
+            style.sprite && mapInstance.setSprite(style.sprite);
             for (const [sourceId, source] of Object.entries(style.sources)) {
               mapInstance.addSource(`basemap-${sourceId}`, source as any);
             }
