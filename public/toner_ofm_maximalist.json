@@ -330,7 +330,7 @@
       "filter": ["==", "class", "city"],
       "layout": {
         "text-field": "{name}",
-        "text-font": ["Metropolis Black"],
+        "text-font": ["Metropolis Bold"],
         "text-transform": "uppercase",
         "text-size": {
           "stops": [[4, 12], [10, 18]]
