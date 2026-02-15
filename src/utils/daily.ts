@@ -7,7 +7,7 @@ export const TODAYS_DATE = new Date();
 
 let racesPromise: Promise<any[]> | null = null;
 
-async function getRaces(): Promise<any[]> {
+export async function getRaces(): Promise<any[]> {
     if (!racesPromise) {
         racesPromise = fetch(races_url).then(res => res.json());
     }
