@@ -893,7 +893,10 @@ export default function MapView() {
             const data = res.data.map((row: DepartureResult) => {
               row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
               row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
-              const dist = haversineDist({ lat: row.initial_lat, lon: row.initial_lon }, { lat: row.final_lat, lon: row.final_lon });
+              const dist = haversineDist({ lat: row.stop_lat, lon: row.stop_lon }, {
+                lat: row[mode() === 'departures' ? 'final_lat' : 'initial_lat'],
+                lon: row[mode() === 'departures' ? 'final_lon' : 'initial_lon'],
+              });
               const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
               const finish = new Date(row.final_arrival || "");
               if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
