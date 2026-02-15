@@ -252,7 +252,7 @@
       "source": "openmaptiles",
       "source-layer": "transportation",
       "filter": ["==", "class", "rail"],
-      "minzoom": 13,
+      "minzoom": 8,
       "paint": {
         "line-color": "#000",
         "line-width": {
