@@ -870,21 +870,32 @@ export default function MapView() {
 
       const timeField = mode() === 'departures' ? 'departure_time' : 'next_arrival';
       const h3Field = mode() === 'departures' ? 'h3' : 'next_h3';
-
+      const limBy = $playerSettings.get().hidePotentialDuplicateDepartures ? `
+          LIMIT 1 BY
+            source,
+            departure_time,
+            h3ToParent(next_h3, 9) -- eugh but this then excludes e.g. night trains which split...
+      ` : '';
       const query = `
-        SELECT *
-        FROM transitous_everything_20260213_edgelist_fahrtle
-        WHERE ${h3Field} IN (${context()?.h3Conditions})
-        ORDER by (
-          ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
-        ) ASC, travel_time ASC
-        LIMIT 1 BY 
-          stop_uuid, 
-          departure_time, 
-          route_short_name, 
-          trip_headsign, 
-          final_name
-        LIMIT 1000
+        SELECT * FROM (
+          SELECT * FROM (
+            SELECT *, ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440 sort_time
+            FROM transitous_everything_20260213_edgelist_fahrtle
+            WHERE ${h3Field} IN (${context()?.h3Conditions})
+            ORDER by sort_time ASC, travel_time ASC
+            LIMIT 1 BY 
+              stop_uuid, 
+              departure_time, 
+              route_short_name, 
+              trip_headsign, 
+              final_name
+            LIMIT 1000
+          )
+          ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC -- hmm geoDistance should probably be rounded
+          ${limBy}
+        )
+        ORDER BY sort_time ASC
+        LIMIT 200
       `;
 
       chQuery(query)

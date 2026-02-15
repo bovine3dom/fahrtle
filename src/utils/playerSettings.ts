@@ -23,4 +23,5 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   firstPersonFollow: { type: 'boolean', value: false, description: 'Follow camera first person' },
   maxStops: { type: 'number', value: 250, description: 'Maximum stops to show', min: 0, max: 1000 },
   showWaypoints: { type: 'boolean', value: true, description: 'Always show waypoints on map' },
+  hidePotentialDuplicateDepartures: { type: 'boolean', value: true, description: 'Hide duplicate departures (may hide some sleepers)' },
 }
