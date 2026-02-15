@@ -276,7 +276,7 @@ export default function DepartureBoard() {
   const handlePreviewClick = (row: DepartureResult, direction: "forwards" | "backwards" = "forwards") => {
     const query = `
           SELECT stop_lat, stop_lon, stop_name, arrival_time
-          FROM transitous_everything_20260117_stop_times_one_day_even_saner2
+          FROM transitous_everything_20260213_stop_times_one_day_even_saner2
           WHERE source = '${row['source']}'
             AND trip_id = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
@@ -309,7 +309,7 @@ export default function DepartureBoard() {
     setLoadingTripKey(key);
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
-      FROM transitous_everything_20260117_stop_times_one_day_even_saner2
+      FROM transitous_everything_20260213_stop_times_one_day_even_saner2
       WHERE source = '${row['source']}'
         AND trip_id = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'

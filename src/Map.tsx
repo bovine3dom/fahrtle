@@ -132,7 +132,7 @@ const updateStops = async (map: maplibregl.Map) => {
       stop_lon,
       stop_name,
       route_type
-    FROM transitous_everything_20260117_stop_statistics_unmerged3
+    FROM transitous_everything_20260213_stop_statistics_unmerged3
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
     ORDER BY crow_km desc
@@ -873,12 +873,18 @@ export default function MapView() {
 
       const query = `
         SELECT *
-        FROM transitous_everything_20260117_edgelist_fahrtle
+        FROM transitous_everything_20260213_edgelist_fahrtle
         WHERE ${h3Field} IN (${context()?.h3Conditions})
         ORDER by (
           ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440
-        ) ASC
-        LIMIT 200
+        ) ASC, travel_time ASC
+        LIMIT 1 BY 
+          stop_uuid, 
+          departure_time, 
+          route_short_name, 
+          trip_headsign, 
+          final_name
+        LIMIT 1000
       `;
 
       chQuery(query)
