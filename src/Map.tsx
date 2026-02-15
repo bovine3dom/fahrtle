@@ -623,7 +623,8 @@ export default function MapView() {
           'text-field': ['get', 'icon'],
           'text-size': 32,
           'text-allow-overlap': true,
-          'text-offset': [0, -0.2]
+          'text-offset': [0, -0.2],
+          'text-font': ['Metropolis Regular'],
         },
         paint: {
           'text-color': '#10b981',
@@ -640,7 +641,8 @@ export default function MapView() {
           'text-size': 14,
           'text-offset': [0, 1.2],
           'text-anchor': 'top',
-          'text-allow-overlap': true
+          'text-allow-overlap': true,
+          'text-font': ['Metropolis Regular'],
         },
         paint: {
           'text-color': '#000000',
@@ -705,6 +707,7 @@ export default function MapView() {
           'text-anchor': 'top',
           'text-allow-overlap': false,
           'text-ignore-placement': false,
+          'text-font': ['Metropolis Regular'],
         },
         paint: {
           'text-color': '#000000',
@@ -725,6 +728,7 @@ export default function MapView() {
           'text-anchor': 'top',
           'text-allow-overlap': false,
           'text-ignore-placement': false,
+          'text-font': ['Metropolis Regular'],
         },
         paint: {
           'text-color': ['get', 'color'],
@@ -748,6 +752,7 @@ export default function MapView() {
           'text-allow-overlap': true,
           'text-ignore-placement': false,
           'text-anchor': 'left',
+          'text-font': ['Metropolis Regular'],
           'symbol-z-order': 'source',
           'symbol-sort-key': ['get', 'crow_km'],
         },
