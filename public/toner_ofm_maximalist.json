@@ -25,6 +25,11 @@
       "minzoom": 0,
       "maxzoom": 8,
       "attribution": "&copy; <a href=\"https://www.naturalearthdata.com/about/terms-of-use/\">naturalearthdata.com</a>"
+    },
+    "mapterhorn":{
+      "type": "raster-dem",
+      "url": "https://tiles.mapterhorn.com/tilejson.json",
+      "maxzoom": 15
     }
   },
   "glyphs": "https://tiles.openstreetmap.us/fonts/{fontstack}/{range}.pbf",
@@ -144,6 +149,18 @@
           "#000000"
         ],
         "fill-opacity": 1
+      }
+    },
+    {
+      "id": "mapterhorn-layer",
+      "type": "hillshade",
+      "source": "mapterhorn",
+      "paint": {
+        "hillshade-shadow-color": "#000",
+        "hillshade-highlight-color": "#fff",
+        "hillshade-accent-color": "#fff",
+        "hillshade-exaggeration": 0.1,
+        "hillshade-method": "igor"
       }
     },
     {
