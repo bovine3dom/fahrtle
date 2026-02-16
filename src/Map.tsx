@@ -880,7 +880,7 @@ export default function MapView() {
         SELECT * FROM (
           SELECT * FROM (
             SELECT *, ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440 sort_time
-            FROM transitous_everything_20260213_edgelist_fahrtle
+            FROM transitous_everything_20260213_edgelist_fahrtle2
             WHERE ${h3Field} IN (${context()?.h3Conditions})
             ORDER by sort_time ASC, travel_time ASC
             LIMIT 1 BY 
