@@ -695,7 +695,7 @@ function App() {
                             style={{ cursor: 'pointer' }}
                           />
                           <label style={{ 'font-size': '0.8rem', 'color': '#64748b', 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setCompDriver(!compDriver())}>
-                            Add robot driver 🤖
+                            Add robot opponent 🤖
                           </label>
                         </div>
                       </div>
