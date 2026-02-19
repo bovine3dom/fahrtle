@@ -110,7 +110,8 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
         } else if (wp.type === 'wait') {
             return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else {
-            return `${wp.emoji} ${formatRowTime(wp.route_departure_time || '')} ${wp.route_short_name} ${wp.display_name}`;
+            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.display_name].filter(Boolean);
+            return `${wp.emoji} ${parts.join(' ')}`;
         }
     }).join('\n');
 
