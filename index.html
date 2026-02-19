@@ -28,10 +28,35 @@
   <meta property="twitter:image" content="https://compute.olie.science/fahrtle/social_preview.png" />
 
   <meta name="theme-color" content="#0f172a" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "VideoGame",
+      "name": "fahrtle",
+      "description": "A real-time multiplayer racing game built on global public transport data. Compete against friends to navigate the world's transport networks.",
+      "url": "https://compute.olie.science/fahrtle/",
+      "image": "https://compute.olie.science/fahrtle/social_preview.png",
+      "genre": "Educational Game",
+      "playMode": "MultiPlayer",
+      "applicationCategory": "Game",
+      "operatingSystem": "Web Browser",
+      "author": {
+        "@type": "Person",
+        "name": "Oliver Blanthorn"
+      }
+    }
+  </script>
 </head>
 
 <body>
   <div id="root"></div>
+  <noscript>
+    <div style="padding: 2rem; text-align: center; font-family: system-ui, sans-serif;">
+      <h1>fahrtle requires JavaScript</h1>
+      <p>Please enable JavaScript in your browser to play.</p>
+    </div>
+  </noscript>
   <script type="module" src="src/index.tsx"></script>
 </body>
 
