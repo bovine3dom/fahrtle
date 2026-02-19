@@ -197,8 +197,15 @@ function App() {
     return false;
   });
 
+  const isOnTransport = createMemo(() => {
+    const p = players()[myId()!];
+    if (!p) return false;
+    const now = time();
+    return p.waypoints.some(wp => now >= wp.startTime && now < wp.arrivalTime && !wp.isWalk);
+  });
+
   createEffect(() => {
-    if (!canCancel()) {
+    if (!canCancel() && isOnTransport()) {
       const me = players()[myId()!];
       const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
       isSnoozing && toggleSnooze()
