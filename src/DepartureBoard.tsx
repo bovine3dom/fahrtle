@@ -71,7 +71,7 @@ const ActionButton = (props: {
 );
 
 export default function DepartureBoard() {
-  const results = useStore($departureBoardResults);
+  const allResults = useStore($departureBoardResults);
   const currentTime = useStore($clock);
   const roomState = useStore($roomState);
   const mode = useStore($boardMode);
@@ -86,6 +86,11 @@ export default function DepartureBoard() {
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   const [flashError, setFlashError] = createSignal(false);
+
+  const results = createMemo(() => {
+    const data = allResults();
+    return mode() === 'departures' ? data.departures : data.arrivals;
+  });
 
   createEffect(() => {
     const res = results();
@@ -276,7 +281,7 @@ export default function DepartureBoard() {
 
   const close = () => {
     // $boardMode.set('departures'); // eugh but reactivity causes the board to pop up instantly
-    $departureBoardResults.set([]);
+    $departureBoardResults.set({ departures: [], arrivals: [] });
     $boardMinimized.set(false);
     setFilterType(null);
     setDistFilter(null);
@@ -420,7 +425,7 @@ export default function DepartureBoard() {
   };
 
   return (
-    <Show when={results() && results()!.length > 0}>
+    <Show when={allResults().departures.length > 0 || allResults().arrivals.length > 0}>
       <div
         class="departure-board-overlay"
         classList={{ minimized: isMinimized(), 'arrivals-mode': mode() === 'arrivals' }}

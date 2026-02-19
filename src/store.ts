@@ -112,7 +112,11 @@ export const $currentRoom = atom<string | null>(null);
 export const $myPlayerId = atom<string | null>(null);
 export const $players = map<Record<string, RenderablePlayer>>({});
 export const $globalRate = atom(1.0);
-export const $departureBoardResults = atom<DepartureResult[]>([]);
+interface DepartureBoardResults {
+  departures: DepartureResult[];
+  arrivals: DepartureResult[];
+}
+export const $departureBoardResults = map<DepartureBoardResults>({ departures: [], arrivals: [] });
 export const $boardMode = atom<'departures' | 'arrivals'>('departures');
 export const $lastClickContext = atom<{ h3Conditions: string, targetMinutes: number, stopTimeZone: string, clickTime: number } | null>(null);
 export const $stopTimeZone = atom<string>('Europe/Paris');

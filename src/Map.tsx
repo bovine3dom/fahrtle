@@ -3,7 +3,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $boardMode, $lastClickContext, $playerSettings } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -863,31 +863,28 @@ export default function MapView() {
     });
 
     const context = useStore($lastClickContext);
-    const mode = useStore($boardMode);
-    createEffect(() => {
-      if (context() === null) return;
-      context()?.clickTime; // force reactivity on repeated clicks in same position
 
-      const timeField = mode() === 'departures' ? 'departure_time' : 'next_arrival';
-      const h3Field = mode() === 'departures' ? 'h3' : 'next_h3';
+    const buildQuery = (queryMode: 'departures' | 'arrivals', ctx: NonNullable<ReturnType<typeof context>>) => {
+      const timeField = queryMode === 'departures' ? 'departure_time' : 'next_arrival';
+      const h3Field = queryMode === 'departures' ? 'h3' : 'next_h3';
       const limBy = $playerSettings.get().hidePotentialDuplicateDepartures ? `
           LIMIT 1 BY
             source,
             departure_time,
             h3ToParent(next_h3, 9) -- eugh but this then excludes e.g. night trains which split...
       ` : '';
-      const query = `
+      return `
         SELECT * FROM (
           SELECT * FROM (
-            SELECT *, ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${context()?.targetMinutes} + 1440) % 1440 sort_time
+            SELECT *, ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${ctx.targetMinutes} + 1440) % 1440 sort_time
             FROM transitous_everything_20260218_edgelist_fahrtle2
-            WHERE ${h3Field} IN (${context()?.h3Conditions})
+            WHERE ${h3Field} IN (${ctx.h3Conditions})
             ORDER by sort_time ASC, travel_time ASC
-            LIMIT 1 BY 
-              stop_uuid, 
-              departure_time, 
-              route_short_name, 
-              trip_headsign, 
+            LIMIT 1 BY
+              stop_uuid,
+              departure_time,
+              route_short_name,
+              trip_headsign,
               final_name
             LIMIT 1000
           )
@@ -897,31 +894,55 @@ export default function MapView() {
         ORDER BY sort_time ASC
         LIMIT 200
       `;
+    };
 
-      chQuery(query)
-        .then(res => {
-          if (res && res.data) {
-            const data = res.data.map((row: DepartureResult) => {
-              row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
-              row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
-              const dist = haversineDist({ lat: row.stop_lat, lon: row.stop_lon }, {
-                lat: row[mode() === 'departures' ? 'final_lat' : 'initial_lat'],
-                lon: row[mode() === 'departures' ? 'final_lon' : 'initial_lon'],
-              });
-              const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
-              const finish = new Date(row.final_arrival || "");
-              if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
-              row.dist = dist || 0;
-              const duration = (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
-              row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
-              return row;
-            })
-            $departureBoardResults.set(data);
+    const processResults = (res: any, currentMode: 'departures' | 'arrivals'): DepartureResult[] => {
+      if (!res || !res.data) return [];
+      return res.data.map((row: DepartureResult) => {
+        row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
+        row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
+        const dist = haversineDist({ lat: row.stop_lat, lon: row.stop_lon }, {
+          lat: row[currentMode === 'departures' ? 'final_lat' : 'initial_lat'],
+          lon: row[currentMode === 'departures' ? 'final_lon' : 'initial_lon'],
+        });
+        const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
+        const finish = new Date(row.final_arrival || "");
+        if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
+        row.dist = dist || 0;
+        const duration = (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
+        row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
+        return row;
+      });
+    };
+
+    createEffect(() => {
+      const ctx = context();
+      if (ctx === null) return;
+      ctx.clickTime; // force reactivity on repeated clicks in same position
+
+      const departuresQuery = buildQuery('departures', ctx);
+      const arrivalsQuery = buildQuery('arrivals', ctx);
+
+      $departureBoardResults.set({ departures: [], arrivals: [] });
+
+      chQuery(departuresQuery)
+        .then(res => processResults(res, 'departures'))
+        .then(departuresData => {
+          if (departuresData.length > 0) {
+            $departureBoardResults.setKey('departures', departuresData);
             $previewRoute.set(null);
             $boardMinimized.set(false);
           }
         })
-        .catch(err => console.error(`[ClickHouse] Query failed:`, err));
+        .catch(err => console.error(`[ClickHouse] Departures query failed:`, err));
+      chQuery(arrivalsQuery)
+        .then(res => processResults(res, 'arrivals'))
+        .then(arrivalsData => {
+          $departureBoardResults.setKey('arrivals', arrivalsData);
+        })
+        .catch(err => {
+          console.error(`[ClickHouse] Arrivals query failed:`, err);
+        });
     });
 
     const pickerMode = useStore($pickerMode);
