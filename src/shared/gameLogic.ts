@@ -2,6 +2,8 @@
 import simplify from 'simplify-js';
 import { haversineDist } from '../utils/geo';
 
+const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
+
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
 type Waypoint = {
@@ -750,7 +752,7 @@ function checkCountdownLogic(room: Room, hooks: GameHooks) {
 
     if (room.state === 'JOINING' && allReady) {
         room.state = 'COUNTDOWN';
-        room.countdownEnd = Date.now() + 5000;
+        room.countdownEnd = Date.now() + COUNTDOWN_DURATION;
         hooks.broadcastRoomState(room);
     } else if (room.state === 'COUNTDOWN' && !allReady) {
         room.state = 'JOINING';
