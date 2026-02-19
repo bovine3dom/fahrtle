@@ -7,6 +7,10 @@ import {
   handleGameClose
 } from "../src/shared/gameLogic";
 
+function log(...args: any[]) {
+  console.log(`[${new Date().toISOString()}]`, ...args);
+}
+
 type WSData = {
   roomId: string | null;
   playerId: string | null;
@@ -42,7 +46,7 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
     onRoomDeleted: (roomId: string) => {
       rooms.delete(roomId);
       process.stdout.write('\n'); // don't overwrite status line
-      console.log(`[Room: ${roomId}]: Deleted.`);
+      log(`Room: ${roomId}: Deleted.`);
     },
     sendToSender: (message: any) => ws.send(JSON.stringify(message)),
     subscribeToRoom: (roomId: string) => ws.subscribe(roomId)
@@ -56,7 +60,7 @@ const gameHooks: GameHooks = {
   onRoomDeleted: (roomId: string) => {
     rooms.delete(roomId);
     process.stdout.write('\n');
-    console.log(`[Room: ${roomId}]: Deleted.`);
+    log(`Room: ${roomId}: Deleted.`);
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
   subscribeToRoom: () => { /* Server root doesn't subscribe */ }
@@ -99,4 +103,4 @@ setInterval(() => {
   process.stdout.write(statusLine);
 }, 60000);
 
-console.log(`Game Server listening on ${server.hostname}:${server.port}`);
+log(`Game Server listening on ${server.hostname}:${server.port}`);
