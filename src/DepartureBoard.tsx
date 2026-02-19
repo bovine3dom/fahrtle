@@ -257,6 +257,16 @@ export default function DepartureBoard() {
     }
   });
 
+  createEffect((prevStopName) => {
+    const res = results();
+    const currentStopName = res && res.length > 0 ? res[0].stop_name : null;
+    if (currentStopName !== prevStopName) {
+      setFilterType(null);
+      setDistFilter(null);
+    }
+    return currentStopName;
+  }, null);
+
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
     const emojiFilter = ((r: DepartureResult) => (filterType() === null) || getRouteEmoji(r.route_type) === filterType());
