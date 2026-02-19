@@ -79,6 +79,7 @@ export async function augmentWithRailRoute(points: any[]) {
                     lat: simplifiedPoints[j][1],
                     time: pointTime,
                     stopName: isRealStop ? (j === 0 ? startWp.stopName : endWp.stopName) : undefined,
+                    timeStr: isRealStop ? (j === 0 ? startWp.timeStr : endWp.timeStr) : undefined,
                     isInterstop: !isRealStop,
                     isWalk: (i === 0 && j === 0) ? startWp.isWalk : false,
                 });
