@@ -280,7 +280,7 @@ export default function DepartureBoard() {
   });
 
   const close = () => {
-    // $boardMode.set('departures'); // eugh but reactivity causes the board to pop up instantly
+    $boardMode.set('departures');
     $departureBoardResults.set({ departures: [], arrivals: [] });
     $boardMinimized.set(false);
     setFilterType(null);
