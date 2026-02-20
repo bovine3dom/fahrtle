@@ -21,6 +21,16 @@ export const cityDbPromise = fetchCityData();
 const [cityDb] = createResource(() => cityDbPromise);
 
 
+export type CityInfo = { name: string; country_code: string; latitude: number; longitude: number };
+
+export async function getClosestCityObject(coords: Coords): Promise<CityInfo | null> {
+    const db = await cityDbPromise;
+    const results = around(db.tree, coords.lon, coords.lat, 1);
+    if (results.length === 0) return null;
+    const idx = results[0] as number;
+    return db.cities[idx];
+}
+
 export const createClosestCity = (coords: Accessor<Coords | null | undefined>) => {
     return createMemo(() => {
         const db = cityDb();

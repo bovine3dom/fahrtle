@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -287,6 +287,49 @@ function App() {
     if (!p) return -1;
     const t = time();
     return p.waypoints.findIndex((wp) => wp.arrivalTime > t);
+  });
+
+  const [lastTrackedWpIndex, setLastTrackedWpIndex] = createSignal(-1);
+  const [lastTrackedRoomState, setLastTrackedRoomState] = createSignal(roomState() ?? 'JOINING');
+
+  createEffect(() => {
+    const rs = roomState() ?? 'JOINING';
+    const prevRs = lastTrackedRoomState();
+    const today = new Date().toISOString().split('T')[0];
+
+    if (prevRs !== 'RUNNING' && rs === 'RUNNING') {
+      updatePlayerStats((stats) => ({
+        ...stats,
+        racesStarted: stats.racesStarted + 1,
+        lastPlayedDate: stats.lastPlayedDate !== today ? today : stats.lastPlayedDate,
+        daysPlayed: stats.lastPlayedDate !== today ? stats.daysPlayed + 1 : stats.daysPlayed,
+      }));
+    }
+    setLastTrackedRoomState(rs);
+  });
+
+  createEffect(() => {
+    const p = players()[myId()!];
+    const idx = currentWpIndex();
+    const prevIdx = lastTrackedWpIndex();
+
+    if (p && idx > prevIdx && prevIdx >= 0) {
+      const newWaypoints = p.waypoints.slice(prevIdx, idx);
+      const previousWaypoint = prevIdx > 0 ? p.waypoints[prevIdx - 1] : null;
+      if (newWaypoints.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        (async () => {
+          const { computeStatsDelta } = await import('./utils/stats');
+          const currentStats = $playerStats.get();
+          const updatedStats = await computeStatsDelta(currentStats, newWaypoints, false, today, previousWaypoint);
+          updatePlayerStats(() => updatedStats);
+        })();
+      }
+    }
+
+    if (idx >= 0) {
+      setLastTrackedWpIndex(idx);
+    }
   });
 
   const nextWaypoint = createMemo(() => {

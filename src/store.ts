@@ -142,6 +142,31 @@ export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | '
 export const $gameStartTime = atom<number | null>(null);
 export const $mapZoom = atom(14);
 
+import { loadStats, saveStats, type PlayerStats } from './utils/stats';
+let $playerStatsInstance: PlayerStats;
+
+if (typeof window !== 'undefined') {
+  $playerStatsInstance = loadStats();
+} else {
+  $playerStatsInstance = {
+    lastPlayedDate: '',
+    daysPlayed: 0,
+    racesStarted: 0,
+    racesFinished: 0,
+    countriesVisited: [],
+    byCountry: {},
+  };
+}
+
+export const $playerStats = atom<PlayerStats>($playerStatsInstance);
+
+export function updatePlayerStats(updater: (stats: PlayerStats) => PlayerStats): void {
+  const current = $playerStats.get();
+  const updated = updater(current);
+  $playerStats.set(updated);
+  saveStats(updated);
+}
+
 import { defaultPlayerSettings } from './utils/playerSettings';
 type SettingsType = typeof defaultPlayerSettings;
 type SettingsValue = { [K in keyof SettingsType]: any };

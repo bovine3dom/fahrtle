@@ -3,7 +3,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -1246,7 +1246,12 @@ export default function MapView() {
                   const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
                   if (finishCells.includes(myCell)) {
                     console.log("[Client] Crossed finish line!");
-                    finishRace(now - startTime);
+                    const finishTimeMs = now - startTime;
+                    finishRace(finishTimeMs);
+                    updatePlayerStats((stats) => ({
+                      ...stats,
+                      racesFinished: stats.racesFinished + 1,
+                    }));
                   }
                 } catch (e) { /* ignore H3 errors */ }
               }
