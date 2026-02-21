@@ -76,6 +76,10 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             if (prevWp) {
                 currentWalkDist += haversineDist({ lat: prevWp.y, lon: prevWp.x }, { lat: wp.y, lon: wp.x }) || 0;
             }
+        } else if (wp.isWait) {
+            pushWalk(prevWp || wp);
+            const waitDuration = wp.arrivalTime - wp.startTime;
+            pushWait(waitDuration, wp);
         } else {
             pushWalk(prevWp || wp);
 

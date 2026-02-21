@@ -6,6 +6,7 @@ import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
 import { sharedFakeServer } from './fakeServer';
 import { type Difficulty } from './shared/gameLogic';
+import { haversineDist } from './utils/geo';
 export type { Difficulty };
 
 if (typeof window !== 'undefined') {
@@ -44,6 +45,7 @@ export type Waypoint = {
   route_departure_time?: string;
   timeStr?: string;
   isInterstop?: boolean;
+  isWait?: boolean;
 };
 
 export type Player = {
@@ -439,6 +441,17 @@ export function submitWaypointsBatch(points: {
 
   const clockTime = $clock.get();
 
+  const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
+
+  const lastWaypoint = player.waypoints.length > 0 ? player.waypoints[player.waypoints.length - 1] : null;
+  const startX = lastWaypoint?.x ?? points[0].lng;
+  const startY = lastWaypoint?.y ?? points[0].lat;
+  const distance = haversineDist({ lat: startY, lon: startX }, { lat: points[0].lat, lon: points[0].lng }) || 0;
+  const walkingDuration = distance / BASE_SPEED;
+  const walkingArrival = clockTime + walkingDuration;
+  const departureTime = points[0].time;
+  const waitArrival = departureTime - (1000 * 60); // 1 minute leeway
+
   let totalVirtualTime = 0;
   let lastRealTime = clockTime;
   for (const p of points) {
@@ -476,21 +489,58 @@ export function submitWaypointsBatch(points: {
     segmentStartIdx = nextRealIdx + 1;
   }
 
-  const waypointsToSubmit = points.map((p, i) => ({
-    x: p.lng,
-    y: p.lat,
-    arrivalTime: p.time - (p.isInterstop ? 0 : (1000 * 60)), // leeway for reboarding
-    speedFactor: waypointSpeeds[i],
-    stopName: p.stopName,
-    isWalk: i === 0,
-    isInterstop: p.isInterstop,
-    route_color: p.route_color,
-    route_short_name: p.route_short_name,
-    display_name: p.display_name,
-    emoji: p.emoji,
-    route_departure_time: p.route_departure_time,
-    timeStr: p.timeStr
-  }));
+  const waypointsToSubmit: any[] = [];
+
+  waypointsToSubmit.push({
+    x: points[0].lng,
+    y: points[0].lat,
+    arrivalTime: walkingArrival,
+    speedFactor: waypointSpeeds[0],
+    stopName: points[0].stopName,
+    isWalk: true,
+    isInterstop: false,
+    route_color: points[0].route_color,
+    route_short_name: points[0].route_short_name,
+    display_name: points[0].display_name,
+    emoji: '🐾',
+    route_departure_time: points[0].route_departure_time,
+    timeStr: points[0].timeStr
+  });
+
+  if (waitArrival > walkingArrival) {
+    waypointsToSubmit.push({
+      x: points[0].lng,
+      y: points[0].lat,
+      arrivalTime: waitArrival,
+      speedFactor: waypointSpeeds[0],
+      stopName: `waiting for ${points[0].route_departure_time} ${points[0].route_short_name || ''}`.trim(),
+      isWait: true,
+      isInterstop: false,
+      route_color: points[0].route_color,
+      route_short_name: points[0].route_short_name,
+      display_name: points[0].display_name,
+      emoji: '⏳',
+      route_departure_time: points[0].route_departure_time,
+      timeStr: points[0].timeStr
+    });
+  }
+
+  for (let i = 1; i < points.length; i++) {
+    waypointsToSubmit.push({
+      x: points[i].lng,
+      y: points[i].lat,
+      arrivalTime: points[i].time - (points[i].isInterstop ? 0 : (1000 * 60)),
+      speedFactor: waypointSpeeds[i],
+      stopName: points[i].stopName,
+      isInterstop: points[i].isInterstop,
+      route_color: points[i].route_color,
+      route_short_name: points[i].route_short_name,
+      display_name: points[i].display_name,
+      emoji: points[i].emoji,
+      route_departure_time: points[i].route_departure_time,
+      timeStr: points[i].timeStr
+    });
+  }
 
   ws.send(JSON.stringify({
     type: 'ADD_WAYPOINTS_BATCH',

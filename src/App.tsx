@@ -192,7 +192,7 @@ function App() {
     if (futurePoints.length === 0) return false;
 
     if (futurePoints.length > 1) return true;
-    if (futurePoints[0].isWalk) return true;
+    if (futurePoints[0].isWalk || futurePoints[0].isWait) return true;
 
     return false;
   });
@@ -201,7 +201,7 @@ function App() {
     const p = players()[myId()!];
     if (!p) return false;
     const now = time();
-    return p.waypoints.some(wp => now >= wp.startTime && now < wp.arrivalTime && !wp.isWalk);
+    return p.waypoints.some(wp => now >= wp.startTime && now < wp.arrivalTime && !wp.isWalk && !wp.isWait);
   });
 
   createEffect(() => {
@@ -485,9 +485,9 @@ function App() {
                   <div style={{ display: 'flex', flex: 1, gap: '2px', position: 'relative', 'min-width': 0 }}>
                     <button
                       onClick={() => {
-                        if (nextWaypoint()?.isWalk) {
+                        if (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) {
                           stopImmediately();
-                          setActionFeedback("Walking stopped");
+                          setActionFeedback(nextWaypoint()?.isWait ? "Waiting stopped" : "Walking stopped");
                         } else {
                           stopImmediately(nextWaypoint()?.originalIndex);
                           setActionFeedback(`Stopping at ${nextWaypoint()?.stopName}`);
@@ -495,18 +495,18 @@ function App() {
                         setTimeout(() => setActionFeedback(null), 3000);
                       }}
                       style={{
-                        flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                        flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b', color: '#fff',
                         'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
                         'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                         'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                         cursor: 'pointer',
-                        border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                        border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
                         'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
                         'font-size': '0.9em', 'font-weight': 'bold',
                         'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
                         'min-width': 0
                       }}
-                      title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                      title={(nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
                     >
                       <span style={{ 'flex-shrink': 0 }}>{actionFeedback() ? '' : '🛑'}</span>
                       <span style={{
@@ -515,7 +515,7 @@ function App() {
                         'text-overflow': 'ellipsis',
                         'flex': 1
                       }}>
-                        {actionFeedback() || (nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`)}
+                        {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `Get off at ${nextWaypoint()?.stopName || ''}`)}
                       </span>
                     </button>
                     <Show when={futureWaypoints().length > 1}>
@@ -526,11 +526,11 @@ function App() {
                         }}
                         style={{
                           padding: '0 4px',
-                          background: nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b',
+                          background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b',
                           color: '#fff',
                           'border-top-left-radius': '0px',
                           'border-bottom-left-radius': '0px',
-                          border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
                           cursor: 'pointer'
                         }}
                       >
@@ -922,9 +922,9 @@ function App() {
                     <div style={{ display: 'flex', gap: '2px', position: 'relative', 'margin-bottom': '8px' }}>
                       <button
                         onClick={() => {
-                          if (nextWaypoint()?.isWalk) {
+                          if (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) {
                             stopImmediately();
-                            setActionFeedback("Walking stopped");
+                            setActionFeedback(nextWaypoint()?.isWait ? "Waiting stopped" : "Walking stopped");
                           } else {
                             stopImmediately(nextWaypoint()?.originalIndex);
                             setActionFeedback(`Alighting scheduled for ${nextWaypoint()?.stopName}`);
@@ -932,19 +932,19 @@ function App() {
                           setTimeout(() => setActionFeedback(null), 3000);
                         }}
                         style={{
-                          flex: 1, padding: '8px', 'background': nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b', color: '#fff',
+                          flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b', color: '#fff',
                           'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
                           'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                           'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                           cursor: 'pointer',
-                          border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
                           'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
                           'font-size': '0.9em', 'font-weight': 'bold',
                           'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
                         }}
-                        title={nextWaypoint()?.isWalk ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+                        title={(nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
                       >
-                        <span>{actionFeedback() ? '' : '🛑'}</span> {actionFeedback() || (nextWaypoint()?.isWalk ? 'Stop walking' : `Get off at ${nextWaypoint()?.stopName || ''}`)}
+                        <span>{actionFeedback() ? '' : '🛑'}</span> {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `Get off at ${nextWaypoint()?.stopName || ''}`)}
                       </button>
                       <Show when={futureWaypoints().length > 1}>
                         <button
@@ -954,13 +954,13 @@ function App() {
                           }}
                           style={{
                             padding: '0 8px',
-                            background: nextWaypoint()?.isWalk ? '#10b981' : '#f59e0b',
+                            background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b',
                             color: '#fff',
                             'border-top-left-radius': '0px',
                             'border-bottom-left-radius': '0px',
                             'border-top-right-radius': '4px',
                             'border-bottom-right-radius': '4px',
-                            border: nextWaypoint()?.isWalk ? '1px solid #059669' : '1px solid #d97706',
+                            border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
                             'border-left': '1px solid rgba(255,255,255,0.3)',
                             cursor: 'pointer'
                           }}

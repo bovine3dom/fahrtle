@@ -1114,7 +1114,7 @@ export default function MapView() {
 
         if ((player.id != "the-stig-🏎️") && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
           const pointFeatures = player.waypoints
-            .filter(wp => wp.stopName && !wp.isWalk)
+            .filter(wp => wp.stopName && !wp.isWalk && !wp.isWait)
             .map(wp => ({
               type: 'Feature',
               geometry: { type: 'Point', coordinates: [wp.x, wp.y] },

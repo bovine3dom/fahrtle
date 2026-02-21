@@ -132,10 +132,10 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
         timeMs += cs.transportTimeMs[t] ?? 0;
         distanceKm += cs.transportDistanceKm[t] ?? 0;
       }
-      return { timeMs, distanceKm };
+      return { timeMs, distanceKm, isWait: timeMs > 0 && distanceKm === 0 };
     };
 
-    let breakdown: Record<string, { timeMs: number; distanceKm: number }>;
+    let breakdown: Record<string, { timeMs: number; distanceKm: number; isWait: boolean }>;
     let type: 'country' | 'transport';
 
     if (countries.length > 0) {
@@ -143,10 +143,13 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
       for (const cs of Object.values(filteredByCountry)) {
         const transToUse = transports.length > 0 ? transports : Object.keys(cs.transportTimeMs);
         for (const t of transToUse) {
-          if (!breakdown[t]) breakdown[t] = { timeMs: 0, distanceKm: 0 };
+          if (!breakdown[t]) breakdown[t] = { timeMs: 0, distanceKm: 0, isWait: false };
           breakdown[t].timeMs += cs.transportTimeMs[t] ?? 0;
           breakdown[t].distanceKm += cs.transportDistanceKm[t] ?? 0;
         }
+      }
+      for (const t of Object.keys(breakdown)) {
+        breakdown[t].isWait = breakdown[t].timeMs > 0 && breakdown[t].distanceKm === 0;
       }
       type = 'transport';
     } else {
@@ -159,7 +162,7 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
     }
 
     const filtered = Object.entries(breakdown)
-      .filter(([_, d]) => d.distanceKm > 0)
+      .filter(([_, d]) => d.distanceKm > 0 || d.isWait)
       .sort((a, b) => b[1].timeMs - a[1].timeMs);
 
     return { breakdown: Object.fromEntries(filtered), type };

@@ -21,6 +21,7 @@ type Waypoint = {
     route_departure_time?: string;
     timeStr?: string;
     isInterstop?: boolean;
+    isWait?: boolean;
 };
 
 export type Player = {
@@ -571,11 +572,12 @@ export function handleIncomingMessage(
                 speedFactor: wp.speedFactor,
                 stopName: wp.stopName,
                 isWalk: wp.isWalk || false,
+                isWait: wp.isWait || false,
                 isInterstop: wp.isInterstop || false,
                 route_color: wp.route_color,
                 route_short_name: wp.route_short_name,
                 display_name: wp.display_name,
-                emoji: wp.isWalk ? '🐾' : wp.emoji,
+                emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
                 route_departure_time: wp.route_departure_time,
                 timeStr: wp.timeStr
             });
@@ -601,7 +603,7 @@ export function handleIncomingMessage(
 
         stepClock(room);
 
-        const { x, y, speedFactor, arrivalTime, stopName, isWalk, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
+        const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = player.waypoints[player.waypoints.length - 1];
 
         let start = lastPoint.arrivalTime;
@@ -625,11 +627,12 @@ export function handleIncomingMessage(
             speedFactor: speedFactor,
             stopName: stopName || undefined,
             isWalk: isWalk || false,
+            isWait: isWait || false,
             isInterstop: isInterstop || false,
             route_color,
             route_short_name,
             display_name,
-            emoji: isWalk ? '🐾' : emoji,
+            emoji: isWalk ? '🐾' : (isWait ? '⏳' : emoji),
             route_departure_time,
             timeStr
         };
