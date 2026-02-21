@@ -791,7 +791,7 @@ export default function MapView() {
         if (e.originalEvent.button === 1) {
           submitWaypointsBatch([
             { lat: e.lngLat.lat, lng: e.lngLat.lng, time: $clock.get() },
-          ])
+          ], { isTeleport: true })
         }
       });
 

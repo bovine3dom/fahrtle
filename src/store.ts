@@ -433,7 +433,10 @@ export function submitWaypointsBatch(points: {
   route_departure_time?: string | null,
   timeStr?: string,
   isInterstop?: boolean,
-}[]) {
+}[],
+  options: { isTeleport?: boolean } = {}
+) {
+  const { isTeleport = false } = options;
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
   const player = $players.get()[$myPlayerId.get() ?? ''];
@@ -491,55 +494,74 @@ export function submitWaypointsBatch(points: {
 
   const waypointsToSubmit: any[] = [];
 
-  waypointsToSubmit.push({
-    x: points[0].lng,
-    y: points[0].lat,
-    arrivalTime: walkingArrival,
-    speedFactor: waypointSpeeds[0],
-    stopName: points[0].stopName,
-    isWalk: true,
-    isInterstop: false,
-    route_color: points[0].route_color,
-    route_short_name: points[0].route_short_name,
-    display_name: points[0].display_name,
-    emoji: '🐾',
-    route_departure_time: points[0].route_departure_time,
-    timeStr: points[0].timeStr
-  });
-
-  if (waitArrival > walkingArrival) {
+  if (isTeleport) {
+    for (let i = 0; i < points.length; i++) {
+      waypointsToSubmit.push({
+        x: points[i].lng,
+        y: points[i].lat,
+        arrivalTime: clockTime,
+        speedFactor: 1,
+        stopName: points[i].stopName,
+        isInterstop: points[i].isInterstop,
+        route_color: points[i].route_color,
+        route_short_name: points[i].route_short_name,
+        display_name: points[i].display_name,
+        emoji: points[i].emoji,
+        route_departure_time: points[i].route_departure_time,
+        timeStr: points[i].timeStr
+      });
+    }
+  } else {
     waypointsToSubmit.push({
       x: points[0].lng,
       y: points[0].lat,
-      arrivalTime: waitArrival,
+      arrivalTime: walkingArrival,
       speedFactor: waypointSpeeds[0],
-      stopName: `waiting for ${points[0].route_departure_time} ${points[0].route_short_name || ''}`.trim(),
-      isWait: true,
+      stopName: points[0].stopName,
+      isWalk: true,
       isInterstop: false,
       route_color: points[0].route_color,
       route_short_name: points[0].route_short_name,
       display_name: points[0].display_name,
-      emoji: '⏳',
+      emoji: '🐾',
       route_departure_time: points[0].route_departure_time,
       timeStr: points[0].timeStr
     });
-  }
 
-  for (let i = 1; i < points.length; i++) {
-    waypointsToSubmit.push({
-      x: points[i].lng,
-      y: points[i].lat,
-      arrivalTime: points[i].time - (points[i].isInterstop ? 0 : (1000 * 60)),
-      speedFactor: waypointSpeeds[i],
-      stopName: points[i].stopName,
-      isInterstop: points[i].isInterstop,
-      route_color: points[i].route_color,
-      route_short_name: points[i].route_short_name,
-      display_name: points[i].display_name,
-      emoji: points[i].emoji,
-      route_departure_time: points[i].route_departure_time,
-      timeStr: points[i].timeStr
-    });
+    if (waitArrival > walkingArrival) {
+      waypointsToSubmit.push({
+        x: points[0].lng,
+        y: points[0].lat,
+        arrivalTime: waitArrival,
+        speedFactor: waypointSpeeds[0],
+        stopName: `waiting for ${points[0].route_departure_time} ${points[0].route_short_name || ''}`.trim(),
+        isWait: true,
+        isInterstop: false,
+        route_color: points[0].route_color,
+        route_short_name: points[0].route_short_name,
+        display_name: points[0].display_name,
+        emoji: '⏳',
+        route_departure_time: points[0].route_departure_time,
+        timeStr: points[0].timeStr
+      });
+    }
+
+    for (let i = 1; i < points.length; i++) {
+      waypointsToSubmit.push({
+        x: points[i].lng,
+        y: points[i].lat,
+        arrivalTime: points[i].time - (points[i].isInterstop ? 0 : (1000 * 60)),
+        speedFactor: waypointSpeeds[i],
+        stopName: points[i].stopName,
+        isInterstop: points[i].isInterstop,
+        route_color: points[i].route_color,
+        route_short_name: points[i].route_short_name,
+        display_name: points[i].display_name,
+        emoji: points[i].emoji,
+        route_departure_time: points[i].route_departure_time,
+        timeStr: points[i].timeStr
+      });
+    }
   }
 
   ws.send(JSON.stringify({
