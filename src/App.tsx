@@ -188,7 +188,7 @@ function App() {
   const canCancel = createMemo(() => {
     const p = players()[myId()!];
     if (!p) return false;
-    const futurePoints = p.waypoints.filter(wp => wp.arrivalTime > time());
+    const futurePoints = p.waypoints.filter(wp => (wp.arrivalTime > time()) && !wp.isInterstop );
     if (futurePoints.length === 0) return false;
 
     if (futurePoints.length > 1) return true;
