@@ -62,6 +62,26 @@ export async function augmentWithRailRoute(points: any[]) {
                 pointDistances.push(totalLegDist);
             }
 
+            const straightLineDist = haversineDist(
+                { lon: startWp.lng, lat: startWp.lat },
+                { lon: endWp.lng, lat: endWp.lat }
+            ) || 0;
+
+            if (straightLineDist > 0 && totalLegDist > straightLineDist * 3) {
+                console.warn(`[railRoute] Leg ${i} route too long (${totalLegDist.toFixed(1)}km vs ${straightLineDist.toFixed(1)}km straight), falling back to direct line`);
+                augmentedPoints.push({
+                    ...startWp,
+                    isInterstop: false,
+                });
+                if (i === route.legs.length - 1) {
+                    augmentedPoints.push({
+                        ...endWp,
+                        isInterstop: false,
+                    });
+                }
+                continue;
+            }
+
             const timeDiff = endWp.time - startWp.time;
 
             for (let j = 0; j < simplifiedPoints.length; j++) {
