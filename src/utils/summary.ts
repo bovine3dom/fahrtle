@@ -32,7 +32,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
         const last = summary[summary.length - 1];
         if (last && last.type === 'wait') {
             last.duration! += duration;
-        } else {
+        } else if (duration > 30 * 60 * 1000) {
             summary.push({
                 type: 'wait',
                 emoji: '⏳',
