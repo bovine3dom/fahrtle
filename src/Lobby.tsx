@@ -2,7 +2,7 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
-import { getDailyRace, getRaces } from './utils/daily';
+import { getDailyRace, getRaceByIndex, getRaces } from './utils/daily';
 import { createClosestCity, cityDbPromise } from './utils/tiny-cities';
 import { around } from 'geokdbush';
 import { sharedFakeServer } from './fakeServer';
@@ -27,10 +27,16 @@ export default function Lobby() {
   const [difficulty, setDifficulty] = createSignal<Difficulty>('Easy');
   const [wipeConfirm, setWipeConfirm] = createSignal(false);
   const [dailyRace, setDailyRace] = createSignal<{ start: [number, number], finish: [number, number], time: string } | null>(null);
+  const [selectedRaceIndex, setSelectedRaceIndex] = createSignal<number | null>(null);
 
   createEffect(() => {
     if (isDaily()) {
-      getDailyRace().then(race => setDailyRace(race));
+      const idx = selectedRaceIndex();
+      if (idx !== null) {
+        getRaceByIndex(idx).then(race => setDailyRace(race));
+      } else {
+        getDailyRace().then(race => setDailyRace(race));
+      }
     } else {
       setDailyRace(null);
     }
@@ -77,7 +83,10 @@ export default function Lobby() {
         }
 
         if (isDaily()) {
-          const race = await getDailyRace();
+          const raceIndex = selectedRaceIndex();
+          const race = raceIndex !== null 
+            ? await getRaceByIndex(raceIndex)
+            : await getDailyRace();
           initialBounds = {
             ...initialBounds,
             start: race.start,
@@ -92,6 +101,7 @@ export default function Lobby() {
       url.searchParams.delete('f');
       url.searchParams.delete('t');
       url.searchParams.delete('d');
+      url.searchParams.delete('r');
       url.searchParams.delete('daily');
       if (isSinglePlayer()) {
         url.searchParams.delete('room');
@@ -131,6 +141,15 @@ export default function Lobby() {
     if (params.get('daily') === '1') {
       $isSinglePlayer.set(true);
       $isDaily.set(true);
+    }
+    const raceParam = params.get('r');
+    if (raceParam !== null) {
+      const raceIdx = parseInt(raceParam, 10);
+      if (!isNaN(raceIdx)) {
+        $isSinglePlayer.set(true);
+        $isDaily.set(true);
+        setSelectedRaceIndex(raceIdx);
+      }
     }
     if (sharedRoom) {
       setRoom(sharedRoom);

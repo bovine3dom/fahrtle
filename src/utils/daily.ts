@@ -29,7 +29,14 @@ export async function getDailyRaceIndex(date: Date = TODAYS_DATE): Promise<numbe
 
 export async function getDailyRace(date: Date = TODAYS_DATE) {
     const [index, races] = await Promise.all([getDailyRaceIndex(date), getRaces()]);
-    const race = races[index];
+    return getRaceByIndex(index, races);
+}
+
+export async function getRaceByIndex(index: number, races?: any[]) {
+    if (!races) {
+        races = await getRaces();
+    }
+    const race = races[index % races.length];
 
     const { start_lat, start_lon, finish_lat, finish_lon } = race;
     const start = [start_lat, start_lon];
