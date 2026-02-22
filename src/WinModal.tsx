@@ -3,10 +3,11 @@ import { type Player, $gameBounds, $players, $gameStartTime, $playerStats } from
 import { getTravelSummary } from './utils/summary';
 import { sensibleNumber } from './utils/format';
 import { formatDuration } from './utils/time';
+import { colours } from './colours';
 
 const btnBase = { flex: 1, padding: '10px', 'font-weight': 'bold', 'font-size': '0.9em', 'border-radius': '8px', cursor: 'pointer' };
-const boxBase = { background: '#f8fafc', padding: '12px', 'border-radius': '8px', border: '1px solid #e2e8f0', 'font-family': 'monospace', 'font-size': '0.85em', 'white-space': 'pre-wrap', color: '#334155' };
-const c = { blue: '#3b82f6', grey: '#64748b', border: '#e2e8f0' };
+const boxBase = { background: colours.bgLight, padding: '12px', 'border-radius': '8px', border: `1px solid ${colours.borderLight}`, 'font-family': 'monospace', 'font-size': '0.85em', 'white-space': 'pre-wrap', color: colours.textBody };
+const c = { blue: colours.primary, grey: colours.textMuted, border: colours.borderLight };
 const s: Record<string, any> = {
   overlay: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', 'z-index': 1000, display: 'flex', 'justify-content': 'center', 'align-items': 'center', 'backdrop-filter': 'blur(4px)' },
   modal: { background: 'white', padding: '24px', 'border-radius': '16px', 'box-shadow': '0 4px 20px rgba(0,0,0,0.2)', 'max-width': '90%', width: '400px', display: 'flex', 'flex-direction': 'column', gap: '16px' },
@@ -55,8 +56,8 @@ const WinModal = (props: WinModalProps) => {
       <div onClick={(e) => e.stopPropagation()} style={s.modal}>
         <div style={{ 'text-align': 'center' }}>
           <div style={{ 'font-size': '2rem', 'margin-bottom': '8px' }}>🎉</div>
-          <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': '#0f172a' }}>Mission complete!</div>
-          <div style={{ 'color': '#64748b' }}>You have reached your destination.</div>
+          <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': colours.textDark }}>Mission complete!</div>
+          <div style={{ 'color': colours.textMuted }}>You have reached your destination.</div>
         </div>
 
         <div style={s.tabContainer}>
@@ -73,9 +74,9 @@ const WinModal = (props: WinModalProps) => {
         )}
 
         <div style={s.row}>
-          <button onClick={props.onSpectate} style={{ ...btnBase, background: 'white', color: '#0f172a', border: '1px solid #cbd5e1' }}>Spectate 🔭</button>
-          <button onClick={() => setStealthMode(!stealthMode())} style={{ ...btnBase, background: stealthMode() ? '#10b981' : '#a7a7a7ff', color: 'white', border: 'none', transition: 'background 0.2s' }}>{!stealthMode() ? 'Stealth 🥷' : 'Nerd 🤓'}</button>
-          <button onClick={copyToClipboard} style={{ ...btnBase, background: copied() ? '#10b981' : '#3b82f6', color: 'white', border: 'none', transition: 'background 0.2s' }}>{copied() ? 'Copied! ✓' : 'Copy results 📋'}</button>
+          <button onClick={props.onSpectate} style={{ ...btnBase, background: colours.white, color: colours.textDark, border: `1px solid ${colours.border}` }}>Spectate 🔭</button>
+          <button onClick={() => setStealthMode(!stealthMode())} style={{ ...btnBase, background: stealthMode() ? colours.success : colours.grey, color: colours.white, border: 'none', transition: 'background 0.2s' }}>{!stealthMode() ? 'Stealth 🥷' : 'Nerd 🤓'}</button>
+          <button onClick={copyToClipboard} style={{ ...btnBase, background: copied() ? colours.success : colours.primary, color: colours.white, border: 'none', transition: 'background 0.2s' }}>{copied() ? 'Copied! ✓' : 'Copy results 📋'}</button>
         </div>
       </div>
     </div>
@@ -187,8 +188,8 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
 
   const filterBtnStyle = (isSelected: boolean, isLarge: boolean = false) => ({
     padding: '2px 6px', 'font-size': isLarge ? '1.1em' : '1em',
-    background: isSelected ? '#3b82f6' : 'white',
-    border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer'
+    background: isSelected ? colours.primary : colours.white,
+    border: `1px solid ${colours.border}`, 'border-radius': '4px', cursor: 'pointer'
   });
 
   return (
@@ -239,7 +240,7 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
                     <td style={{ 'text-align': 'right' }}>{sensibleNumber(data.timeMs > 0 ? (data.distanceKm / (data.timeMs / 3600000)) : 0)}</td>
                   </tr>
                 ))}
-                <tr style={{ 'font-weight': 'bold', 'border-top': '2px solid #cbd5e1' }}>
+                <tr style={{ 'font-weight': 'bold', 'border-top': `2px solid ${colours.border}` }}>
                   <td>Total</td>
                   <td style={{ 'text-align': 'right' }}>{formatDuration(totals().totalTimeMs)}</td>
                   <td style={{ 'text-align': 'right' }}>{sensibleNumber(totals().totalDistanceKm)} km</td>

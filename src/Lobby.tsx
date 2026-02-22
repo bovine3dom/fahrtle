@@ -8,6 +8,7 @@ import { around } from 'geokdbush';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
 import { TODAYS_DATE } from './utils/daily';
+import { colours } from './colours';
 import bgImage from './assets/h3_hero.webp';
 import favicon from '../public/favicon.svg';
 
@@ -229,7 +230,7 @@ export default function Lobby() {
               padding: '8px',
               border: 'none',
               'border-radius': '6px',
-              background: !isSinglePlayer() ? '#3b82f6' : 'transparent',
+              background: !isSinglePlayer() ? colours.primary : 'transparent',
               color: 'white',
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -251,7 +252,7 @@ export default function Lobby() {
               padding: '8px',
               border: 'none',
               'border-radius': '6px',
-              background: (isSinglePlayer() && !isDaily()) ? '#3b82f6' : 'transparent',
+              background: (isSinglePlayer() && !isDaily()) ? colours.primary : 'transparent',
               color: 'white',
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -273,7 +274,7 @@ export default function Lobby() {
               padding: '8px',
               border: 'none',
               'border-radius': '6px',
-              background: isDaily() ? '#3b82f6' : 'transparent',
+              background: isDaily() ? colours.primary : 'transparent',
               color: 'white',
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -304,7 +305,7 @@ export default function Lobby() {
                 onClick={() => setRoom(generateRandomRoom())}
                 title="Generate Random ID"
                 style={{
-                  background: '#475569', border: 'none', cursor: 'pointer',
+                  background: colours.text, border: 'none', cursor: 'pointer',
                   'border-radius': '4px', 'font-size': '1.2rem', padding: '0 8px'
                 }}
               >
@@ -321,10 +322,10 @@ export default function Lobby() {
             'margin-bottom': '4px',
             'text-align': 'center'
           }}>
-            <div style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'margin-bottom': '4px', 'color': '#fbbf24' }}>
+            <div style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'margin-bottom': '4px', 'color': colours.warningBright }}>
               {TODAYS_DATE.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
-            <div style={{ 'font-size': '0.8rem', 'color': '#cbd5e1' }}>
+            <div style={{ 'font-size': '0.8rem', 'color': colours.border }}>
               <Show when={dailyRace()} fallback="Loading...">
                 {(race) => <>{createClosestCity(() => ({ lat: race().start[0], lon: race().start[1] }))()} ➡️ {createClosestCity(() => ({ lat: race().finish[0], lon: race().finish[1] }))()}</>}
               </Show>
@@ -372,8 +373,8 @@ export default function Lobby() {
               style={{
                 flex: 1,
                 padding: '10px',
-                'background': wipeConfirm() ? '#b91c1c' : '#fee2e2',
-                'color': wipeConfirm() ? '#ffffff' : '#991b1b',
+                'background': wipeConfirm() ? colours.danger : colours.dangerLight,
+                'color': wipeConfirm() ? colours.white : colours.dangerDark,
                 border: 'none',
                 'border-radius': '4px',
                 'font-weight': 'bold',
@@ -388,7 +389,7 @@ export default function Lobby() {
               style={{
                 flex: 1,
                 padding: '10px',
-                background: '#3b82f6',
+                background: colours.primary,
                 color: 'white',
                 border: 'none',
                 'border-radius': '4px',
@@ -401,7 +402,7 @@ export default function Lobby() {
           </>
         ) : (
           <button type="submit" style={{
-            padding: '10px', 'background': '#3b82f6', color: 'white', border: 'none',
+            padding: '10px', 'background': colours.primary, color: colours.white, border: 'none',
             'border-radius': '4px', 'font-weight': 'bold', cursor: 'pointer'
           }}>
             Launch

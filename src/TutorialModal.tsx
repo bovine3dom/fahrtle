@@ -1,4 +1,5 @@
 import { createSignal, For } from 'solid-js';
+import { colours } from './colours';
 
 interface TutorialModalProps {
     onClose: () => void;
@@ -85,10 +86,10 @@ const TutorialModal = (props: TutorialModalProps) => {
                 }}
             >
                 <div style={{ 'text-align': 'center' }}>
-                    <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': '#0f172a' }}>
+                    <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': colours.textDark }}>
                         {pages[currentPage()].title}
                     </div>
-                    <div style={{ 'font-size': '0.9em', 'color': '#64748b', 'margin-top': '4px' }}>
+                    <div style={{ 'font-size': '0.9em', 'color': colours.textMuted, 'margin-top': '4px' }}>
                         {currentPage() + 1} / {pages.length}
                     </div>
                 </div>
@@ -96,11 +97,11 @@ const TutorialModal = (props: TutorialModalProps) => {
                 <div style={{
                     width: '100%',
                     'aspect-ratio': '16/10',
-                    background: '#f1f5f9',
+                    background: colours.bg,
                     'border-radius': '8px',
                     position: 'relative',
                     overflow: 'hidden',
-                    border: '1px solid #e2e8f0'
+                    border: `1px solid ${colours.borderLight}`
                 }}>
                     <For each={pages}>
                         {(page, i) => (
@@ -124,7 +125,7 @@ const TutorialModal = (props: TutorialModalProps) => {
 
 
                 <div style={{
-                    'color': '#334155',
+                    'color': colours.textBody,
                     'font-size': 'clamp(0.8rem, 2vw, 1rem)',
                     'line-height': '1.5',
                     'min-height': '60px',
@@ -138,9 +139,9 @@ const TutorialModal = (props: TutorialModalProps) => {
                         onClick={handlePrev}
                         disabled={currentPage() === 0}
                         style={{
-                            padding: '10px 16px', background: 'white',
-                            color: currentPage() === 0 ? '#cbd5e1' : '#0f172a',
-                            border: '1px solid #cbd5e1',
+                            padding: '10px 16px', background: colours.white,
+                            color: currentPage() === 0 ? colours.border : colours.textDark,
+                            border: `1px solid ${colours.border}`,
                             'border-radius': '8px', cursor: currentPage() === 0 ? 'default' : 'pointer',
                             'font-weight': 'bold', 'font-size': '0.9em'
                         }}
@@ -152,8 +153,8 @@ const TutorialModal = (props: TutorialModalProps) => {
                         onClick={handleNext}
                         style={{
                             padding: '10px 24px',
-                            background: '#3b82f6',
-                            color: 'white', border: 'none',
+                            background: colours.primary,
+                            color: colours.white, border: 'none',
                             'border-radius': '8px', cursor: 'pointer',
                             'font-weight': 'bold', 'font-size': '0.9em'
                         }}

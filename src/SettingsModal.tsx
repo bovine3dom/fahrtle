@@ -2,6 +2,7 @@ import { For, Show } from 'solid-js';
 import { defaultPlayerSettings } from './utils/playerSettings';
 import { $playerSettings, updateSetting } from './store';
 import { useStore } from '@nanostores/solid';
+import { colours } from './colours';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -31,14 +32,14 @@ const SettingsModal = (props: SettingsModalProps) => {
                 }}
             >
                 <div style={{ 'text-align': 'center', 'margin-bottom': '8px' }}>
-                    <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': '#0f172a' }}>Settings ⚙️</div>
+                    <div style={{ 'font-size': '1.5rem', 'font-weight': 'bold', 'color': colours.textDark }}>Settings ⚙️</div>
                 </div>
 
                 <div style={{ display: 'flex', 'flex-direction': 'column', gap: '12px' }}>
                     <For each={Object.entries(defaultPlayerSettings).filter(([_, config]) => !config.hidden)}>
                         {([key, config]) => (
                             <div style={{ display: 'flex', 'flex-direction': 'column', gap: '4px' }}>
-                                <label style={{ 'font-size': '0.9em', 'font-weight': 'bold', 'color': '#334155' }}>
+                                <label style={{ 'font-size': '0.9em', 'font-weight': 'bold', 'color': colours.textBody }}>
                                     {config.description}
                                 </label>
 
@@ -48,7 +49,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                                         value={currentSettings()[key as keyof typeof currentSettings]}
                                         onInput={(e) => updateSetting(key, e.currentTarget.value)}
                                         style={{
-                                            padding: '8px', 'border-radius': '6px', border: '1px solid #cbd5e1',
+                                            padding: '8px', 'border-radius': '6px', border: `1px solid ${colours.border}`,
                                             'font-size': '1em'
                                         }}
                                     />
@@ -65,7 +66,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                                                 width: '40px', height: '40px', cursor: 'pointer'
                                             }}
                                         />
-                                        <span style={{ 'font-family': 'monospace', 'color': '#64748b' }}>
+                                        <span style={{ 'font-family': 'monospace', 'color': colours.textMuted }}>
                                             {currentSettings()[key as keyof typeof currentSettings]}
                                         </span>
                                     </div>
@@ -79,7 +80,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                                             onChange={(e) => updateSetting(key, e.currentTarget.checked)}
                                             style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
                                         />
-                                        <span style={{ 'font-size': '0.9em', 'color': '#475569' }}>
+                                        <span style={{ 'font-size': '0.9em', 'color': colours.text }}>
                                             {currentSettings()[key as keyof typeof currentSettings] ? 'Enabled' : 'Disabled'}
                                         </span>
                                     </div>
@@ -90,7 +91,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                                         value={currentSettings()[key as keyof typeof currentSettings] as string}
                                         onChange={(e) => updateSetting(key, e.currentTarget.value)}
                                         style={{
-                                            padding: '8px', 'border-radius': '6px', border: '1px solid #cbd5e1',
+                                            padding: '8px', 'border-radius': '6px', border: `1px solid ${colours.border}`,
                                             'font-size': '1em', 'background': 'white'
                                         }}
                                     >
@@ -125,7 +126,7 @@ const SettingsModal = (props: SettingsModalProps) => {
                         onClick={props.onClose}
                         style={{
                             flex: 1, padding: '10px',
-                            background: '#3b82f6',
+                            background: colours.primary,
                             color: 'white', border: 'none',
                             'border-radius': '8px', cursor: 'pointer',
                             'font-weight': 'bold', 'font-size': '0.9em'

@@ -11,6 +11,7 @@ import { formatDuration, parseUserTime } from './utils/time';
 import { parseCoords, sensibleNumber } from './utils/format';
 import { createClosestCity } from './utils/tiny-cities';
 import { getTimeZone } from './timezone';
+import { colours } from './colours';
 const MapView = lazy(() => import('./Map'));
 
 import confetti from 'canvas-confetti';
@@ -22,9 +23,9 @@ import TutorialModal from './TutorialModal';
 function getSpeedButtonState(desiredRate: number | undefined, forceRealtime: boolean | undefined) {
   const isSnoozing = (desiredRate || 1) > 1 && !forceRealtime;
   const isForcing = forceRealtime;
-  if (isForcing) return { icon: '⏱', label: 'Forcing realtime (1x)', style: { bg: '#10b981', border: '#059669', color: 'white' as const } };
-  if (isSnoozing) return { icon: '⏩', label: 'Snoozing (500x)', style: { bg: '#3b82f6', border: '#2563eb', color: 'white' as const } };
-  return { icon: '💤', label: 'Snooze', style: { bg: '#f1f5f9', border: '#cbd5e1', color: '#475569' as const } };
+  if (isForcing) return { icon: '⏱', label: 'Forcing realtime (1x)', style: { bg: colours.success, border: colours.successDark, color: colours.white } };
+  if (isSnoozing) return { icon: '⏩', label: 'Snoozing (500x)', style: { bg: colours.primary, border: colours.primaryDark, color: colours.white } };
+  return { icon: '💤', label: 'Snooze', style: { bg: colours.bg, border: colours.border, color: colours.text } };
 }
 
 function handleSpeedCycle(desiredRate: number | undefined, forceRealtime: boolean | undefined, doToggle: () => void, doForce: () => void) {
@@ -421,7 +422,7 @@ function App() {
                   onClick={() => setShowTutorial(true)}
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    padding: '4px 8px', 'font-size': '1.2em', color: colours.textMuted,
                     opacity: 0.8, transition: 'opacity 0.2s'
                   }}
                   title="Tutorial"
@@ -434,7 +435,7 @@ function App() {
                   onClick={() => setShowSettings(true)}
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    padding: '4px 8px', 'font-size': '1.2em', color: colours.textMuted,
                     opacity: 0.8, transition: 'opacity 0.2s',
                     'margin-left': '2px'
                   }}
@@ -448,7 +449,7 @@ function App() {
                   onClick={() => setMinimized(!minimized())}
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    padding: '4px 8px', 'font-size': '1.2em', color: '#64748b',
+                    padding: '4px 8px', 'font-size': '1.2em', color: colours.textMuted,
                     'margin-left': '4px'
                   }}
                   title={minimized() ? "Expand" : "Minimize"}
@@ -472,9 +473,9 @@ function App() {
                         !players()[myId()!].isReady ? fitGameBounds() : null;
                       }}
                       style={{
-                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
-                        color: players()[myId()!]?.isReady ? '#475569' : 'white',
-                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
+                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? colours.bg : colours.primary,
+                        color: players()[myId()!]?.isReady ? colours.text : 'white',
+                        border: '1px solid colours.border', 'border-radius': '4px', cursor: 'pointer',
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                       }}
                     >
@@ -482,8 +483,8 @@ function App() {
                     </button>
                   }>
                     <button disabled style={{
-                      flex: 1, padding: '8px', background: '#f1f5f9', color: '#94a3b8',
-                      border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                      flex: 1, padding: '8px', background: colours.bg, color: colours.textLight,
+                      border: '1px solid colours.border', 'border-radius': '4px', cursor: 'not-allowed',
                       'font-size': '0.9em', 'font-weight': 'bold',
                       'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
                       'min-width': 0
@@ -513,12 +514,12 @@ function App() {
                         setTimeout(() => setActionFeedback(null), 3000);
                       }}
                       style={{
-                        flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b', color: '#fff',
+                        flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning, color: '#fff',
                         'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
                         'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                         'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                         cursor: 'pointer',
-                        border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
+                        border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
                         'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
                         'font-size': '0.9em', 'font-weight': 'bold',
                         'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
@@ -544,11 +545,11 @@ function App() {
                         }}
                         style={{
                           padding: '0 4px',
-                          background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b',
+                          background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning,
                           color: '#fff',
                           'border-top-left-radius': '0px',
                           'border-bottom-left-radius': '0px',
-                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
+                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
                           cursor: 'pointer'
                         }}
                       >
@@ -594,7 +595,7 @@ function App() {
                                   'align-items': 'center',
                                   gap: '8px'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseEnter={(e) => e.currentTarget.style.background = colours.bg}
                                 onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                               >
                                 <span>{wp.emoji || '🏳️'}</span>
@@ -640,14 +641,14 @@ function App() {
                   {/* Header Info */}
                   <div style={{ 'margin-bottom': '8px' }}>
                     <Clock />
-                    <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px', 'text-align': 'center' }}>
+                    <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': colours.text, 'margin-bottom': '6px', 'text-align': 'center' }}>
                       {createClosestCity(() => bounds().start ? { lat: bounds().start![0], lon: bounds().start![1] } : null)()} ➡️ {createClosestCity(() => bounds().finish ? { lat: bounds().finish![0], lon: bounds().finish![1] } : null)()}
                     </div>
-                    <div style={{ 'font-size': '0.85em', 'color': '#d97706', 'margin-top': '2px' }}>
+                    <div style={{ 'font-size': '0.85em', 'color': colours.warningDark, 'margin-top': '2px' }}>
                       Time dilation: {rate().toFixed(2)}x
                     </div>
                     <Show when={elapsedTime()}>
-                      <div style={{ 'font-size': '0.85em', 'color': '#059669', 'margin-top': '2px', 'font-weight': 'bold' }}>
+                      <div style={{ 'font-size': '0.85em', 'color': colours.successDark, 'margin-top': '2px', 'font-weight': 'bold' }}>
                         Elapsed: {elapsedTime()}
                       </div>
                     </Show>
@@ -655,18 +656,18 @@ function App() {
 
                   <Show when={roomState() === 'JOINING'}>
                     <div style={{
-                      'background': '#f1f5f9', 'padding': '8px', 'border-radius': '4px',
-                      'border': '1px solid #cbd5e1', 'margin-bottom': '10px'
+                      'background': colours.bg, 'padding': '8px', 'border-radius': '4px',
+                      'border': '1px solid colours.border', 'margin-bottom': '10px'
                     }}>
                       <Show when={bounds()}>
-                        <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': '#475569', 'margin-bottom': '6px' }}>
+                        <div style={{ 'font-size': '0.75em', 'font-weight': 'bold', 'color': colours.text, 'margin-bottom': '6px' }}>
                           {createClosestCity(() => bounds().start ? { lat: bounds().start![0], lon: bounds().start![1] } : null)()} ➡️ {createClosestCity(() => bounds().finish ? { lat: bounds().finish![0], lon: bounds().finish![1] } : null)()}
                         </div>
                       </Show>
 
                       <Show when={!isDaily()}>
                         <div style={{ 'margin-bottom': '6px' }}>
-                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start time: </label>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Start time: </label>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <input
                               type="time"
@@ -680,7 +681,7 @@ function App() {
 
                       <Show when={!isDaily()}>
                         <div style={{ 'margin-bottom': '6px' }}>
-                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Start (lat, lng, but, seriously, use the picker): </label>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Start (lat, lng, but, seriously, use the picker): </label>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <input
                               type="text"
@@ -693,8 +694,8 @@ function App() {
                               onClick={() => togglePicker('start')}
                               title="Pick on Map"
                               style={{
-                                background: pickerMode() === 'start' ? '#3b82f6' : '#cbd5e1',
-                                color: pickerMode() === 'start' ? 'white' : '#475569',
+                                background: pickerMode() === 'start' ? colours.primary : colours.border,
+                                color: pickerMode() === 'start' ? 'white' : colours.text,
                                 border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
                               }}
                             >
@@ -704,7 +705,7 @@ function App() {
                         </div>
 
                         <div style={{ 'margin-bottom': '6px' }}>
-                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Finish (lat, lng)</label>
+                          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Finish (lat, lng)</label>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <input
                               type="text"
@@ -717,8 +718,8 @@ function App() {
                               onClick={() => togglePicker('finish')}
                               title="Pick on Map"
                               style={{
-                                background: pickerMode() === 'finish' ? '#3b82f6' : '#cbd5e1',
-                                color: pickerMode() === 'finish' ? 'white' : '#475569',
+                                background: pickerMode() === 'finish' ? colours.primary : colours.border,
+                                color: pickerMode() === 'finish' ? 'white' : colours.text,
                                 border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
                               }}
                             >
@@ -728,7 +729,7 @@ function App() {
                         </div>
                       </Show>
                       <div style={{ 'margin-bottom': '12px' }}>
-                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': '#64748b' }}>Difficulty: </label>
+                        <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Difficulty: </label>
                         <input
                           type="range"
                           min="0"
@@ -741,7 +742,7 @@ function App() {
                           }}
                           style={{ width: '100%', cursor: 'pointer' }}
                         />
-                        <div style={{ display: 'flex', 'justify-content': 'space-between', 'font-size': '0.65rem', 'color': '#64748b' }}>
+                        <div style={{ display: 'flex', 'justify-content': 'space-between', 'font-size': '0.65rem', 'color': 'colours.textMuted' }}>
                           <span style={{ opacity: diff() === 'Easy' ? 1 : 0.5 }}>Easy</span>
                           <span style={{ opacity: diff() === 'Normal' ? 1 : 0.5 }}>Normal</span>
                           <span style={{ opacity: diff() === 'Transport nerd' ? 1 : 0.5 }}>Nerd</span>
@@ -762,7 +763,7 @@ function App() {
                             onChange={(e) => setCompDriver(e.currentTarget.checked)}
                             style={{ cursor: 'pointer' }}
                           />
-                          <label style={{ 'font-size': '0.8rem', 'color': '#64748b', 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setCompDriver(!compDriver())}>
+                          <label style={{ 'font-size': '0.8rem', 'color': colours.textMuted, 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setCompDriver(!compDriver())}>
                             Add robot opponent 🤖
                           </label>
                         </div>
@@ -773,7 +774,7 @@ function App() {
                         disabled={isSaved()}
                         style={{
                           width: '100%', padding: '4px',
-                          'background': isSaved() ? '#10b981' : '#0f172a',
+                          'background': isSaved() ? colours.success : colours.textDark,
                           'color': 'white',
                           border: 'none', 'border-radius': '4px',
                           'cursor': isSaved() ? 'default' : 'pointer',
@@ -816,7 +817,7 @@ function App() {
                               style={{
                                 display: 'flex', 'align-items': 'center', gap: '8px', 'margin-bottom': '4px',
                                 'font-weight': p().id === myId() ? '800' : '400',
-                                'color': p().id === myId() ? '#0f172a' : '#334155',
+                                'color': p().id === myId() ? colours.textDark : colours.textBody,
                                 cursor: 'pointer',
                                 padding: '4px',
                                 'min-height': '42px',
@@ -857,7 +858,7 @@ function App() {
                                   {p().id} {p().id === myId() ? '(You)' : ''} {p().forceRealtime ? '⏱' : (p().desiredRate || 1) > 1 && '💤'}
                                 </div>
                                 <Show when={isFinished()}>
-                                  <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
+                                  <div style={{ 'font-size': '0.75em', 'color': colours.successDark, 'font-weight': 'bold' }}>
                                     Finished in {formatDuration(p().finishTime!)}
                                   </div>
                                 </Show>
@@ -866,7 +867,7 @@ function App() {
                                     <Show when={p().viewingStopName}>
                                       <div style={{
                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
-                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
+                                        'font-size': '0.7em', 'color': colours.textMuted, 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
                                       }}>
                                         🔍 Looking at departures @ {p().viewingStopName}
                                       </div>
@@ -875,7 +876,7 @@ function App() {
                                     {(wp) => (
                                       <div style={{
                                         'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap', 'display': 'block',
-                                        'font-size': '0.7em', 'color': '#64748b', 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
+                                        'font-size': '0.7em', 'color': colours.textMuted, 'margin-top': '0px', 'align-items': 'center', 'gap': '4px'
                                       }}>
                                         <Show when={wp().route_short_name}>
                                           <span
@@ -900,7 +901,7 @@ function App() {
                                 <span style={{
                                   'font-size': '0.75em',
                                   'font-family': 'monospace',
-                                  'color': '#64748b',
+                                  'color': colours.textMuted,
                                   'margin-right': '6px',
                                   'min-width': '60px',
                                   'text-align': 'right'
@@ -910,9 +911,9 @@ function App() {
                               </Show>
                               {roomState() !== 'RUNNING' && (
                                 p().isReady ? (
-                                  <span style={{ color: '#059669', 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
+                                  <span style={{ color: colours.successDark, 'font-size': '0.8em', 'font-weight': 'bold' }}>✓</span>
                                 ) : (
-                                  <span style={{ color: '#94a3b8', 'font-size': '0.8em' }}>...</span>
+                                  <span style={{ color: colours.textLight, 'font-size': '0.8em' }}>...</span>
                                 )
                               )}
                             </div>
@@ -928,8 +929,8 @@ function App() {
                   <Show when={canCancel()} fallback={
                     <Show when={roomState() === 'RUNNING'} >
                       <button disabled style={{
-                        width: '100%', padding: '8px', background: '#f1f5f9', color: '#94a3b8',
-                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'not-allowed',
+                        width: '100%', padding: '8px', background: colours.bg, color: colours.textLight,
+                        border: '1px solid colours.border', 'border-radius': '4px', cursor: 'not-allowed',
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
                         'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
                       }}>
@@ -950,12 +951,12 @@ function App() {
                           setTimeout(() => setActionFeedback(null), 3000);
                         }}
                         style={{
-                          flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b', color: '#fff',
+                          flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning, color: '#fff',
                           'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
                           'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                           'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
                           cursor: 'pointer',
-                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
+                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
                           'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
                           'font-size': '0.9em', 'font-weight': 'bold',
                           'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
@@ -972,13 +973,13 @@ function App() {
                           }}
                           style={{
                             padding: '0 8px',
-                            background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '#10b981' : '#f59e0b',
+                            background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning,
                             color: '#fff',
                             'border-top-left-radius': '0px',
                             'border-bottom-left-radius': '0px',
                             'border-top-right-radius': '4px',
                             'border-bottom-right-radius': '4px',
-                            border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid #059669' : '1px solid #d97706',
+                            border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
                             'border-left': '1px solid rgba(255,255,255,0.3)',
                             cursor: 'pointer'
                           }}
@@ -1025,7 +1026,7 @@ function App() {
                                     'align-items': 'center',
                                     gap: '8px'
                                   }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                  onMouseEnter={(e) => e.currentTarget.style.background = colours.bg}
                                   onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                                 >
                                   <span>{wp.emoji || '🏳️'}</span>
@@ -1045,9 +1046,9 @@ function App() {
                         !players()[myId()!].isReady ? fitGameBounds() : null;
                       }}
                       style={{
-                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? '#f1f5f9' : '#3b82f6',
-                        color: players()[myId()!]?.isReady ? '#475569' : 'white',
-                        border: '1px solid #cbd5e1', 'border-radius': '4px', cursor: 'pointer',
+                        width: '100%', padding: '10px', 'background': players()[myId()!]?.isReady ? colours.bg : colours.primary,
+                        color: players()[myId()!]?.isReady ? colours.text : 'white',
+                        border: '1px solid colours.border', 'border-radius': '4px', cursor: 'pointer',
                         'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                       }}
                     >
@@ -1078,9 +1079,9 @@ function App() {
                               <button
                                 onClick={() => setShowWinModal(true)}
                                 style={{
-                                  width: '100%', padding: '8px', 'background': '#f1f5f9',
-                                  color: '#475569',
-                                  border: '1px solid #cbd5e1',
+                                  width: '100%', padding: '8px', 'background': colours.bg,
+                                  color: colours.text,
+                                  border: '1px solid colours.border',
                                   'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
                                   'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
                                 }}
@@ -1104,9 +1105,9 @@ function App() {
                     }}
                     style={{
                       width: '100%', padding: '6px',
-                      'background': leaveConfirm() ? '#b91c1c' : '#fee2e2',
-                      'color': leaveConfirm() ? '#ffffff' : '#991b1b',
-                      border: '1px solid #fecaca', 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
+                      'background': leaveConfirm() ? colours.danger : colours.dangerLight,
+                      'color': leaveConfirm() ? colours.white : colours.dangerDark,
+                      border: `1px solid ${colours.dangerBorder}`, 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.85em',
                       'margin-top': '8px',
                       transition: 'all 0.2s'
                     }}
@@ -1114,7 +1115,7 @@ function App() {
                     {leaveConfirm() ? 'Click again to confirm' : $isSinglePlayer.get() ? 'Return to main menu' : 'Leave room'}
                   </button>
 
-                  <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': '#94a3b8', 'margin-top': '6px', 'text-align': 'center' }}>
+                  <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': colours.textLight, 'margin-top': '6px', 'text-align': 'center' }}>
                     {roomState() === 'RUNNING' ? 'Click map for departures, double click to board or walk' : 'Waiting for game to start...'}
                   </div>
                 </div>
