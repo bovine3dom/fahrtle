@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -18,6 +18,24 @@ import { getTravelSummary } from './utils/summary';
 import WinModal from './WinModal';
 import SettingsModal from './SettingsModal';
 import TutorialModal from './TutorialModal';
+
+function getSpeedButtonState(desiredRate: number | undefined, forceRealtime: boolean | undefined) {
+  const isSnoozing = (desiredRate || 1) > 1 && !forceRealtime;
+  const isForcing = forceRealtime;
+  if (isForcing) return { icon: '⏱', label: 'Forcing realtime (1x)', style: { bg: '#10b981', border: '#059669', color: 'white' as const } };
+  if (isSnoozing) return { icon: '⏩', label: 'Snoozing (500x)', style: { bg: '#3b82f6', border: '#2563eb', color: 'white' as const } };
+  return { icon: '💤', label: 'Snooze', style: { bg: '#f1f5f9', border: '#cbd5e1', color: '#475569' as const } };
+}
+
+function handleSpeedCycle(desiredRate: number | undefined, forceRealtime: boolean | undefined, doToggle: () => void, doForce: () => void) {
+  const isForcing = forceRealtime;
+  const isSnoozing = (desiredRate || 1) > 1;
+  if (isForcing || isSnoozing) {
+    doForce();
+  } else {
+    doToggle();
+  }
+}
 
 function App() {
   const room = useStore($currentRoom);
@@ -594,21 +612,21 @@ function App() {
 
                 {roomState() === 'RUNNING' && (() => {
                   const me = players()[myId()!];
-                  const isSnoozing = (me?.desiredRate || 1.0) > 1.0;
+                  const state = getSpeedButtonState(me?.desiredRate, me?.forceRealtime);
                   return (
                     <button
-                      onClick={() => toggleSnooze()}
+                      onClick={() => handleSpeedCycle(me?.desiredRate, me?.forceRealtime, toggleSnooze, forceRealtime)}
                       style={{
-                        padding: '8px', 'background': isSnoozing ? '#3b82f6' : '#f1f5f9',
-                        color: isSnoozing ? 'white' : '#475569',
-                        border: isSnoozing ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                        padding: '8px', 'background': state.style.bg,
+                        color: state.style.color,
+                        border: `1px solid ${state.style.border}`,
                         'border-radius': '4px', cursor: 'pointer', 'font-size': '1.2em', 'font-weight': 'bold',
                         'display': 'flex', 'align-items': 'center', 'justify-content': 'center',
                         'width': '42px', 'flex-shrink': 0
                       }}
-                      title={isSnoozing ? 'Snoozing (500x)' : 'Snooze'}
+                      title={`${state.label} (cycle to change)`}
                     >
-                      <span>{isSnoozing ? '⏩' : '💤'}</span>
+                      <span>{state.icon}</span>
                     </button>
                   );
                 })()}
@@ -836,7 +854,7 @@ function App() {
                                   <Show when={isFinished()}>
                                     <span style={{ "margin-right": "4px" }}>{getMedal(index())}</span>
                                   </Show>
-                                  {p().id} {p().id === myId() ? '(You)' : ''} {(p().desiredRate || 1) > 1 && '💤'}
+                                  {p().id} {p().id === myId() ? '(You)' : ''} {p().forceRealtime ? '⏱' : (p().desiredRate || 1) > 1 && '💤'}
                                 </div>
                                 <Show when={isFinished()}>
                                   <div style={{ 'font-size': '0.75em', 'color': '#059669', 'font-weight': 'bold' }}>
@@ -1040,21 +1058,21 @@ function App() {
                   <Show when={roomState() === 'RUNNING'}>
                     <Show when={players()[myId()!]}>
                       {(me) => {
-                        const isSnoozing = createMemo(() => (me().desiredRate || 1.0) > 1.0);
+                        const state = createMemo(() => getSpeedButtonState(me().desiredRate, me().forceRealtime));
                         return (
                           <>
                             <button
-                              onClick={() => toggleSnooze()}
+                              onClick={() => handleSpeedCycle(me().desiredRate, me().forceRealtime, toggleSnooze, forceRealtime)}
                               style={{
-                                width: '100%', padding: '8px', 'background': isSnoozing() ? '#3b82f6' : '#f1f5f9',
-                                color: isSnoozing() ? 'white' : '#475569',
-                                border: isSnoozing() ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                                width: '100%', padding: '8px', 'background': state().style.bg,
+                                color: state().style.color,
+                                border: `1px solid ${state().style.border}`,
                                 'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
                                 'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
                               }}
-                              title="Request 500x speed simulation"
+                              title={`${state().label} (cycle to change)`}
                             >
-                              <span>{isSnoozing() ? '⏩' : '💤'}</span> {isSnoozing() ? 'Snoozing (500x)' : 'Snooze'}
+                              <span>{state().icon}</span> {state().label}
                             </button>
                             <Show when={me().finishTime}>
                               <button

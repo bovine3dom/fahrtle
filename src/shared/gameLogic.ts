@@ -30,6 +30,7 @@ export type Player = {
     isReady: boolean;
     waypoints: Waypoint[];
     desiredRate: number; // 1.0 or 500.0
+    forceRealtime: boolean; // explicitly force 1x regardless of waypoint speed
     finishTime: number | null;
     disconnectedAt: number | null;
     viewingStopName: string | null;
@@ -277,6 +278,7 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             isReady: true,
             waypoints: finalWaypoints,
             desiredRate: 1e9, // always lower priority than humans
+            forceRealtime: false,
             finishTime: null,
             disconnectedAt: null,
             viewingStopName: null
@@ -374,6 +376,7 @@ export function handleIncomingMessage(
                     speedFactor: 1
                 }],
                 desiredRate: 1.0,
+                forceRealtime: false,
                 finishTime: null,
                 disconnectedAt: null,
                 viewingStopName: null,
@@ -458,12 +461,36 @@ export function handleIncomingMessage(
         if (!room) return;
         const player = room.players[wsData.playerId];
         if (player) {
+            player.forceRealtime = false;
             player.desiredRate = player.desiredRate > 1.0 ? 1.0 : 500.0;
 
             hooks.publish(wsData.roomId, {
                 type: 'PLAYER_SNOOZE_UPDATE',
                 playerId: wsData.playerId,
-                desiredRate: player.desiredRate
+                desiredRate: player.desiredRate,
+                forceRealtime: player.forceRealtime
+            });
+
+            triggerUpdate(wsData.roomId);
+        }
+    }
+
+    if (message.type === 'FORCE_REALTIME') {
+        if (!wsData.roomId || !wsData.playerId) return;
+        const room = rooms.get(wsData.roomId);
+        if (!room) return;
+        const player = room.players[wsData.playerId];
+        if (player) {
+            player.forceRealtime = !player.forceRealtime;
+            if (player.forceRealtime) {
+                player.desiredRate = 1.0;
+            }
+
+            hooks.publish(wsData.roomId, {
+                type: 'PLAYER_SNOOZE_UPDATE',
+                playerId: wsData.playerId,
+                desiredRate: player.desiredRate,
+                forceRealtime: player.forceRealtime
             });
 
             triggerUpdate(wsData.roomId);
@@ -825,11 +852,11 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
 
     for (const pid in room.players) {
         const p = room.players[pid];
-        let currentFactor = p.desiredRate || 1.0;
+        let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
 
         for (const wp of p.waypoints) {
             if (vTime >= wp.startTime && vTime < wp.arrivalTime) {
-                currentFactor = Math.max(wp.speedFactor, p.desiredRate || 1.0);
+                currentFactor = p.forceRealtime ? 1.0 : Math.max(wp.speedFactor, p.desiredRate || 1.0);
                 break;
             }
         }
@@ -883,11 +910,13 @@ export function handleGameClose(
 
                 const roomConnections = hooks.getSubscriberCount(wsData.roomId);
                 if (roomConnections > 0) {
+                    player.forceRealtime = false;
                     player.desiredRate = 500.0;
                     hooks.publish(wsData.roomId, {
                         type: 'PLAYER_SNOOZE_UPDATE',
                         playerId: wsData.playerId,
-                        desiredRate: player.desiredRate
+                        desiredRate: player.desiredRate,
+                        forceRealtime: player.forceRealtime
                     });
 
                     updateRoomLogic(room, hooks, updateRoomCallback);

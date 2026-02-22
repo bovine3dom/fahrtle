@@ -56,6 +56,7 @@ export type Player = {
   renderableSegments?: AnimationSegment[];
   finishTime?: number;
   desiredRate?: number;
+  forceRealtime?: boolean;
   viewingStopName?: string | null;
 };
 
@@ -374,7 +375,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
 
     if (msg.type === 'PLAYER_SNOOZE_UPDATE') {
       const p = $players.get()[msg.playerId];
-      if (p) $players.setKey(msg.playerId, { ...p, desiredRate: msg.desiredRate });
+      if (p) $players.setKey(msg.playerId, { ...p, desiredRate: msg.desiredRate, forceRealtime: msg.forceRealtime });
     }
 
     if (msg.type === 'PLAYER_VIEW_UPDATE') {
@@ -603,6 +604,11 @@ export function toggleReady() {
 export function toggleSnooze() {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'TOGGLE_SNOOZE' }));
+}
+
+export function forceRealtime() {
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
+  ws.send(JSON.stringify({ type: 'FORCE_REALTIME' }));
 }
 
 export function stopImmediately(destinationWpIndex?: number) {
