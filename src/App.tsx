@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -1161,6 +1161,10 @@ function App() {
           player={players()[myId()!]!}
           onSpectate={handleSpectate}
           onClose={() => setShowWinModal(false)}
+          onRaceAgain={() => {
+            raceAgain(players()[myId()!]!.waypoints);
+            setShowWinModal(false);
+          }}
         />
       )}
     </>

@@ -54,6 +54,7 @@ export type Room = {
     virtualTime: number;
     lastRealTime: number;
     playbackRate: number;
+    initialStartTime: number | null;
 
     // Game Loop
     timerId?: ReturnType<typeof setTimeout>;
@@ -354,6 +355,7 @@ export function handleIncomingMessage(
                 virtualTime: now,
                 lastRealTime: now,
                 playbackRate: 1.0,
+                initialStartTime: null,
                 difficulty: 'Easy'
             };
             rooms.set(roomId, room);
@@ -440,6 +442,82 @@ export function handleIncomingMessage(
         });
 
         checkCountdownLogic(room, hooks);
+        triggerUpdate(wsData.roomId);
+    }
+
+    // --- RACE AGAIN ---
+    if (message.type === 'RACE_AGAIN') {
+        if (!wsData.roomId || !wsData.playerId) return;
+        const room = rooms.get(wsData.roomId);
+        const player = room?.players[wsData.playerId];
+        if (!room || !player) return;
+
+        console.log('[RACE_AGAIN] Starting race again', {
+            roomId: wsData.roomId,
+            playerId: wsData.playerId,
+            currentVirtualTime: room.virtualTime,
+            initialStartTime: room.initialStartTime,
+            gameStartTime: room.gameStartTime,
+            playerWaypointCount: player.waypoints.length,
+            ghostWaypointCount: message.waypoints.length
+        });
+
+        const ghostId = `ghost-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const hue = Math.floor(Math.random() * 360);
+        const ghost: Player = {
+            id: ghostId,
+            color: `hsl(${hue}, 30%, 50%)`,
+            isReady: true,
+            waypoints: message.waypoints,
+            desiredRate: 1e9,
+            forceRealtime: false,
+            finishTime: null,
+            disconnectedAt: null,
+            viewingStopName: null,
+            isGhost: true
+        };
+
+        room.players[ghostId] = ghost;
+
+        const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
+        player.waypoints = [{
+            x: spawn.x,
+            y: spawn.y,
+            startTime: room.virtualTime,
+            arrivalTime: room.virtualTime,
+            speedFactor: 1
+        }];
+        player.isReady = false;
+        player.finishTime = null;
+        room.state = 'JOINING';
+        room.virtualTime = room.initialStartTime || room.virtualTime;
+        room.gameStartTime = null;
+
+        console.log('[RACE_AGAIN] After reset', {
+            newVirtualTime: room.virtualTime,
+            newGameStartTime: room.gameStartTime,
+            playerWaypoints: player.waypoints
+        });
+
+        hooks.publish(wsData.roomId, {
+            type: 'PLAYER_JOINED',
+            playerId: ghostId,
+            player: ghost
+        });
+
+        hooks.publish(wsData.roomId, {
+            type: 'PLAYER_WAYPOINTS_UPDATE',
+            playerId: wsData.playerId,
+            waypoints: player.waypoints
+        });
+
+        hooks.publish(wsData.roomId, {
+            type: 'READY_UPDATE',
+            playerId: wsData.playerId,
+            isReady: false
+        });
+
+        hooks.broadcastRoomState(room);
         triggerUpdate(wsData.roomId);
     }
 
@@ -573,6 +651,16 @@ export function handleIncomingMessage(
         if (!room || room.state !== 'RUNNING') return;
         const player = room.players[wsData.playerId];
         if (!player) return;
+
+        console.log('[ADD_WAYPOINTS_BATCH] Before stepClock', {
+            playerId: wsData.playerId,
+            roomState: room.state,
+            virtualTime: room.virtualTime,
+            gameStartTime: room.gameStartTime,
+            initialStartTime: room.initialStartTime,
+            playerWaypointCount: player.waypoints.length,
+            lastWpArrival: player.waypoints[player.waypoints.length - 1]?.arrivalTime
+        });
 
         stepClock(room);
         player.viewingStopName = null;
@@ -826,6 +914,9 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
         room.state = 'RUNNING';
         room.gameStartTime = room.virtualTime;
+        if (!room.initialStartTime) {
+            room.initialStartTime = room.virtualTime;
+        }
         room.countdownEnd = null;
         hooks.broadcastRoomState(room);
 

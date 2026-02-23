@@ -22,6 +22,7 @@ interface WinModalProps {
   player: Player;
   onSpectate: () => void;
   onClose: () => void;
+  onRaceAgain?: () => void;
 }
 
 const WinModal = (props: WinModalProps) => {
@@ -78,6 +79,11 @@ const WinModal = (props: WinModalProps) => {
           <button onClick={() => setStealthMode(!stealthMode())} style={{ ...btnBase, background: stealthMode() ? colours.success : colours.grey, color: colours.white, border: 'none', transition: 'background 0.2s' }}>{!stealthMode() ? 'Stealth 🥷' : 'Nerd 🤓'}</button>
           <button onClick={copyToClipboard} style={{ ...btnBase, background: copied() ? colours.success : colours.primary, color: colours.white, border: 'none', transition: 'background 0.2s' }}>{copied() ? 'Copied! ✓' : 'Copy results 📋'}</button>
         </div>
+        {props.onRaceAgain && (
+        <div style={s.row}>
+          <button onClick={props.onRaceAgain} style={{ ...btnBase, background: colours.success, color: colours.white, border: 'none', transition: 'background 0.2s' }}>Race again! 👻</button>
+        </div>
+        )}
       </div>
     </div>
   );
