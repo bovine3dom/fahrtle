@@ -95,6 +95,7 @@ export default function Lobby() {
             time: race.time,
             difficulty: initialBounds?.difficulty || difficulty(),
             dailyRaceIndex: dailyIdx,
+            ghosts: true,
           };
         }
       }
