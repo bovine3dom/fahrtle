@@ -34,6 +34,7 @@ export type Player = {
     finishTime: number | null;
     disconnectedAt: number | null;
     viewingStopName: string | null;
+    isGhost: boolean;
 };
 
 export type Room = {
@@ -281,7 +282,8 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             forceRealtime: false,
             finishTime: null,
             disconnectedAt: null,
-            viewingStopName: null
+            viewingStopName: null,
+            isGhost: true
         };
 
         hooks.publish(room.id, {
@@ -375,11 +377,12 @@ export function handleIncomingMessage(
                     arrivalTime: 0,
                     speedFactor: 1
                 }],
-                desiredRate: 1.0,
+                desiredRate: 1,
                 forceRealtime: false,
                 finishTime: null,
                 disconnectedAt: null,
                 viewingStopName: null,
+                isGhost: false
             };
         } else {
             const player = room.players[playerId];
@@ -521,7 +524,7 @@ export function handleIncomingMessage(
             if (posChanged || timeChanged) {
                 const pids = Object.keys(room.players);
                 for (const pid of pids) {
-                    if (pid === 'the-stig-🏎️') {
+                    if (room.players[pid].isGhost) {
                         delete room.players[pid];
                         continue;
                     }
@@ -774,9 +777,9 @@ export function handleIncomingMessage(
 }
 
 function checkCountdownLogic(room: Room, hooks: GameHooks) {
-    const pCount = Object.keys(room.players).filter(pid => pid !== 'the-stig-🏎️').length;
-    const readyCount = Object.entries(room.players)
-        .filter(([pid, p]) => pid !== 'the-stig-🏎️' && p.isReady)
+    const pCount = Object.keys(room.players).filter(pid => !room.players[pid].isGhost).length;
+    const readyCount = Object.values(room.players)
+        .filter(p => !p.isGhost && p.isReady)
         .length;
     const allReady = pCount > 0 && readyCount === pCount;
 
@@ -879,19 +882,20 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
         });
     }
 
-    const cd = room.players['the-stig-🏎️'];
-    if (cd && !cd.finishTime && cd.waypoints.length > 0) {
-        const lastWp = cd.waypoints[cd.waypoints.length - 1];
-        if (room.virtualTime >= lastWp.arrivalTime) {
-            cd.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
-            hooks.publish(room.id, {
-                type: 'PLAYER_FINISH_UPDATE',
-                playerId: 'the-stig-🏎️',
-                finishTime: cd.finishTime
-            });
+    const ghosts = Object.values(room.players).filter(p => p.isGhost);
+    for (const ghost of ghosts) {
+        if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
+            const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
+            if (room.virtualTime >= lastWp.arrivalTime) {
+                ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
+                hooks.publish(room.id, {
+                    type: 'PLAYER_FINISH_UPDATE',
+                    playerId: ghost.id,
+                    finishTime: ghost.finishTime
+                });
+            }
         }
     }
-
     scheduleNextTick(room, updateCallback);
 }
 

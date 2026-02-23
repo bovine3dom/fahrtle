@@ -1109,10 +1109,10 @@ export default function MapView() {
         routeFeatures.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: player.color, sort_key: Number(player.id != "the-stig-🏎️") }
+          properties: { color: player.color, sort_key: Number(!player.isGhost) }
         });
 
-        if ((player.id != "the-stig-🏎️") && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
+        if ((!player.isGhost) && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
           const pointFeatures = player.waypoints
             .filter(wp => wp.stopName && !wp.isWalk && !wp.isWait)
             .map(wp => ({

@@ -58,6 +58,7 @@ export type Player = {
   desiredRate?: number;
   forceRealtime?: boolean;
   viewingStopName?: string | null;
+  isGhost: boolean;
 };
 
 export type AnimationSegment = {
@@ -67,9 +68,7 @@ export type AnimationSegment = {
   endTime: number;
 };
 
-type RenderablePlayer = Player & {
-  segments: AnimationSegment[];
-};
+type RenderablePlayer = Player & { isGhost: boolean } & { segments: AnimationSegment[] };
 
 export interface DepartureResult {
   source: string;
@@ -632,7 +631,11 @@ function processPlayer(raw: Player): RenderablePlayer {
     }
   }
 
-  return { ...raw, segments };
+  return {
+    ...raw,
+    isGhost: raw.isGhost,
+    segments
+  };
 }
 
 export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean) {
