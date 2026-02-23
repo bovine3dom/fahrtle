@@ -2,6 +2,7 @@ import { serve, type ServerWebSocket } from "bun";
 import {
   type Room,
   type GameHooks,
+  type Waypoint,
   updateRoomLogic,
   handleIncomingMessage,
   handleGameClose
@@ -11,6 +12,16 @@ function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
 }
 
+type GhostEntry = {
+  playerId: string;
+  playerName: string;
+  waypoints: Waypoint[];
+  finishTime: number;
+  submittedAt: number;
+};
+
+const ghostsByRaceIndex = new Map<string, GhostEntry[]>();
+
 type WSData = {
   roomId: string | null;
   playerId: string | null;
@@ -18,10 +29,84 @@ type WSData = {
 
 const rooms = new Map<string, Room>();
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 const server = serve<WSData>({
   port: 8080,
   fetch(req: Request, server: any) {
     if (server.upgrade(req)) return;
+
+    const url = new URL(req.url);
+    const pathMatch = url.pathname.match(/^\/api\/ghosts\/(\d+)$/);
+
+    if (pathMatch) {
+      const raceIndex = pathMatch[1];
+      console.log('[Ghosts] Server received request', req.method, 'for race', raceIndex);
+
+      if (req.method === 'OPTIONS') {
+        return new Response(null, { headers: corsHeaders });
+      }
+
+      if (req.method === 'GET') {
+        const ghosts = ghostsByRaceIndex.get(raceIndex) || [];
+        console.log('[Ghosts] GET returning', ghosts.length, 'ghosts');
+        return new Response(JSON.stringify(ghosts), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (req.method === 'POST') {
+        return req.json().then((body: { playerId: string; playerName: string; waypoints: Waypoint[]; finishTime: number }) => {
+          const { playerId, playerName, waypoints, finishTime } = body;
+          console.log('[Ghosts] POST from', playerId, playerName, 'finishTime:', finishTime, 'waypoints:', waypoints?.length);
+
+          if (!playerId || !waypoints || !finishTime) {
+            console.log('[Ghosts] Missing required fields');
+            return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
+          }
+
+          const filteredWaypoints = waypoints.filter((wp: Waypoint) => !wp.isInterstop);
+          console.log('[Ghosts] Filtered to', filteredWaypoints.length, 'non-interstop waypoints');
+
+          if (!ghostsByRaceIndex.has(raceIndex)) {
+            ghostsByRaceIndex.set(raceIndex, []);
+          }
+
+          const ghosts = ghostsByRaceIndex.get(raceIndex)!;
+          const existingIdx = ghosts.findIndex(g => g.playerId === playerId);
+
+          const newEntry: GhostEntry = {
+            playerId,
+            playerName,
+            waypoints: filteredWaypoints,
+            finishTime,
+            submittedAt: Date.now()
+          };
+
+          if (existingIdx === -1) {
+            ghosts.push(newEntry);
+            console.log('[Ghosts] Added new ghost for', playerId);
+          } else if (finishTime < ghosts[existingIdx].finishTime) {
+            ghosts[existingIdx] = newEntry;
+            console.log('[Ghosts] Updated ghost for', playerId, 'with faster time');
+          } else {
+            console.log('[Ghosts] Keeping existing ghost (slower time)');
+          }
+
+          return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+        }).catch((e) => {
+          console.log('[Ghosts] JSON parse error:', e);
+          return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: corsHeaders });
+        });
+      }
+
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    }
+
     return new Response("WebSocket Game Server", { status: 200 });
   },
   websocket: {
@@ -83,6 +168,7 @@ function broadcastRoomState(room: Room) {
     realTime: Date.now(),
     isRerun: room.isRerun,
     computerDriver: room.computerDriver,
+    ghosts: room.ghosts,
     rate: room.state === 'RUNNING' ? room.playbackRate : 0
   }));
 }

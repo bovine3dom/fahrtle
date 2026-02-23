@@ -7,7 +7,7 @@ const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
 
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
-type Waypoint = {
+export type Waypoint = {
     x: number;
     y: number;
     startTime: number;   // Virtual Timestamp
@@ -62,6 +62,7 @@ export type Room = {
 
     difficulty: Difficulty;
     computerDriver?: boolean;
+    ghosts?: boolean;
 
     isRerun: boolean;
 };
@@ -418,6 +419,7 @@ export function handleIncomingMessage(
             difficulty: room.difficulty,
             isRerun: room.isRerun,
             computerDriver: room.computerDriver,
+            ghosts: room.ghosts,
             realTime: now,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0,
             players: room.players
@@ -534,6 +536,55 @@ export function handleIncomingMessage(
         triggerUpdate(wsData.roomId);
     }
 
+    // --- ADD GHOSTS ---
+    if (message.type === 'ADD_GHOSTS') {
+        console.log('[Ghosts] Server ADD_GHOSTS received', { roomId: wsData.roomId, ghostCount: message.ghosts?.length });
+        
+        if (!wsData.roomId) return;
+        const room = rooms.get(wsData.roomId);
+        if (!room) {
+            console.log('[Ghosts] Room not found!');
+            return;
+        }
+
+        const { ghosts } = message;
+        if (!Array.isArray(ghosts)) {
+            console.log('[Ghosts] ghosts is not an array!');
+            return;
+        }
+
+        for (const ghostData of ghosts) {
+            const { playerName, waypoints } = ghostData;
+            console.log('[Ghosts] Adding ghost', playerName, 'with', waypoints?.length, 'waypoints');
+            const ghostId = `👻-${playerName}`;
+            const hue = Math.floor(Math.random() * 360);
+            
+            const ghost: Player = {
+                id: ghostId,
+                color: `hsl(${hue}, 30%, 50%)`,
+                isReady: true,
+                waypoints: waypoints,
+                desiredRate: 1e9,
+                forceRealtime: false,
+                finishTime: null,
+                disconnectedAt: null,
+                viewingStopName: null,
+                isGhost: true
+            };
+
+            room.players[ghostId] = ghost;
+            console.log('[Ghosts] Added ghost to room:', ghostId);
+
+            hooks.publish(wsData.roomId, {
+                type: 'PLAYER_JOINED',
+                playerId: ghostId,
+                player: ghost
+            });
+        }
+
+        hooks.broadcastRoomState(room);
+    }
+
     if (message.type === 'UPDATE_PLAYER_COLOR') {
         if (!wsData.roomId || !wsData.playerId) return;
         const room = rooms.get(wsData.roomId);
@@ -601,6 +652,7 @@ export function handleIncomingMessage(
         room.finishPos = message.finishPos;
         room.difficulty = message.difficulty || 'Normal';
         room.computerDriver = !!message.computerDriver;
+        room.ghosts = !!message.ghosts;
 
         if (message.startTime) {
             room.virtualTime = message.startTime;

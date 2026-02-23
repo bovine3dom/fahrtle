@@ -2,7 +2,7 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
-import { getDailyRace, getRaceByIndex, getRaces } from './utils/daily';
+import { getDailyRace, getRaceByIndex, getRaces, getDailyRaceIndex } from './utils/daily';
 import { createClosestCity, cityDbPromise } from './utils/tiny-cities';
 import { around } from 'geokdbush';
 import { sharedFakeServer } from './fakeServer';
@@ -87,12 +87,14 @@ export default function Lobby() {
           const race = raceIndex !== null 
             ? await getRaceByIndex(raceIndex)
             : await getDailyRace();
+          const dailyIdx = raceIndex !== null ? raceIndex : await getDailyRaceIndex();
           initialBounds = {
             ...initialBounds,
             start: race.start,
             finish: race.finish,
             time: race.time,
-            difficulty: initialBounds?.difficulty || difficulty()
+            difficulty: initialBounds?.difficulty || difficulty(),
+            dailyRaceIndex: dailyIdx,
           };
         }
       }

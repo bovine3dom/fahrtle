@@ -61,6 +61,7 @@ function App() {
   const [finishStr, setFinishStr] = createSignal("");
   const [diff, setDiff] = createSignal<Difficulty>("Easy");
   const [compDriver, setCompDriver] = createSignal(false);
+  const [useGhosts, setUseGhosts] = createSignal(false);
   const [showWinModal, setShowWinModal] = createSignal(false);
   const [showSettings, setShowSettings] = createSignal(false);
 
@@ -139,6 +140,7 @@ function App() {
 
     setDiff(b.difficulty);
     setCompDriver(!!b.computerDriver);
+    setUseGhosts(!!b.ghosts);
   });
 
 
@@ -180,6 +182,7 @@ function App() {
 
     if (b.difficulty !== diff()) return false;
     if (!!b.computerDriver !== compDriver()) return false;
+    if (!!b.ghosts !== useGhosts()) return false;
     return checkField(startStr(), b.start) && checkField(finishStr(), b.finish);
   });
 
@@ -194,7 +197,7 @@ function App() {
       if (p) ts = p;
     }
 
-    setGameBounds(s, f, ts, diff(), compDriver());
+    setGameBounds(s, f, ts, diff(), compDriver(), useGhosts());
   };
 
   const togglePicker = (mode: 'start' | 'finish') => {
@@ -769,6 +772,23 @@ function App() {
                           </label>
                         </div>
                       </div>
+
+                      <Show when={isDaily()}>
+                        <div style={{ 'margin-bottom': '12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              checked={useGhosts()}
+                              onChange={(e) => setUseGhosts(e.currentTarget.checked)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <label style={{ 'font-size': '0.8rem', 'color': colours.textMuted, 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => setUseGhosts(!useGhosts())}>
+                              Play against ghosts 👻
+                            </label>
+                          </div>
+                        </div>
+                      </Show>
 
                       <button
                         onClick={updateBounds}

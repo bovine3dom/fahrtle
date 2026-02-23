@@ -3,7 +3,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -1252,6 +1252,13 @@ export default function MapView() {
                       ...stats,
                       racesFinished: stats.racesFinished + 1,
                     }));
+                    const bounds = $gameBounds.get();
+                    const dailyIndex = $currentDailyRaceIndex.get();
+                    console.log('[Ghosts] Finish check:', { ghosts: bounds.ghosts, dailyIndex });
+                    if (bounds.ghosts && dailyIndex !== null) {
+                      console.log('[Ghosts] Calling submitGhostWaypoints on finish');
+                      submitGhostWaypoints(dailyIndex, finishTimeMs);
+                    }
                   }
                 } catch (e) { /* ignore H3 errors */ }
               }

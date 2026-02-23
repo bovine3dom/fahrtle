@@ -7,6 +7,7 @@ import { throttle } from 'throttle-debounce';
 import { sharedFakeServer } from './fakeServer';
 import { type Difficulty } from './shared/gameLogic';
 import { haversineDist } from './utils/geo';
+
 export type { Difficulty };
 
 if (typeof window !== 'undefined') {
@@ -108,6 +109,8 @@ export interface DepartureResult {
 
 export const $isSinglePlayer = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_singleplayer') === 'true' : false);
 export const $isDaily = atom(typeof localStorage !== 'undefined' ? localStorage.getItem('fahrtle_daily') === 'true' : false);
+export const $currentDailyRaceIndex = atom<number | null>(null);
+let ghostsFetchedForIndex: number | null = null;
 
 const $connected = atom(false);
 export const $currentRoom = atom<string | null>(null);
@@ -138,7 +141,7 @@ export const $boardMinimized = atom(false);
 export const $isFollowing = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
 export const $playerDistances = map<Record<string, number | null>>({});
-export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty: Difficulty, computerDriver?: boolean }>({ start: null, finish: null, time: undefined, difficulty: 'Normal', computerDriver: false });
+export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty: Difficulty, computerDriver?: boolean, ghosts?: boolean }>({ start: null, finish: null, time: undefined, difficulty: 'Normal', computerDriver: false, ghosts: false });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
@@ -235,7 +238,7 @@ interface GenericWebSocket {
 
 let ws: GenericWebSocket | null = null;
 
-export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty, computerDriver?: boolean }) {
+export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty, computerDriver?: boolean, ghosts?: boolean, dailyRaceIndex?: number }) {
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
@@ -276,16 +279,30 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
         finishPos: initialBounds.finish,
         startTime: startTime,
         difficulty: initialBounds.difficulty || 'Normal',
-        computerDriver: initialBounds.computerDriver || false
+        computerDriver: initialBounds.computerDriver || false,
+        ghosts: initialBounds.ghosts || false
       }));
+
+      console.log('[Ghosts] connectAndJoin initialBounds', initialBounds);
+
+      if (initialBounds.ghosts && initialBounds.dailyRaceIndex !== undefined) {
+        console.log('[Ghosts] Calling fetchAndAddGhosts');
+        fetchAndAddGhosts(initialBounds.dailyRaceIndex);
+      }
 
       $gameBounds.set({
         start: initialBounds.start,
         finish: initialBounds.finish,
         time: startTime,
         difficulty: initialBounds.difficulty || 'Normal',
-        computerDriver: initialBounds.computerDriver || false
+        computerDriver: initialBounds.computerDriver || false,
+        ghosts: initialBounds.ghosts || false
       });
+
+      if (initialBounds.dailyRaceIndex !== undefined) {
+        console.log('[Ghosts] Setting $currentDailyRaceIndex to', initialBounds.dailyRaceIndex);
+        $currentDailyRaceIndex.set(initialBounds.dailyRaceIndex);
+      }
     }
 
     $currentRoom.set(roomId || ($isDaily.get() ? 'daily' : 'solo'));
@@ -328,18 +345,34 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $players.set(renderables);
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+
+      if (msg.ghosts && $isDaily.get()) {
+        const idx = $currentDailyRaceIndex.get();
+        if (idx !== null) {
+          console.log('[Ghosts] ROOM_STATE received with ghosts, fetching for index', idx);
+          fetchAndAddGhosts(idx);
+        }
+      }
     }
 
     if (msg.type === 'ROOM_STATE_UPDATE') {
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver });
+      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts });
       $gameStartTime.set(msg.gameStartTime);
       $isRerun.set(msg.isRerun);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+
+      if (msg.ghosts && $isDaily.get()) {
+        const idx = $currentDailyRaceIndex.get();
+        if (idx !== null) {
+          console.log('[Ghosts] ROOM_STATE_UPDATE received with ghosts, fetching for index', idx);
+          fetchAndAddGhosts(idx);
+        }
+      }
     }
 
     if (msg.type === 'READY_UPDATE') {
@@ -401,6 +434,108 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
   ws.onclose = () => {
     $connected.set(false);
     $currentRoom.set(null);
+    ghostsFetchedForIndex = null;
+  }
+}
+
+async function fetchAndAddGhosts(dailyRaceIndex: number) {
+  console.log('[Ghosts] fetchAndAddGhosts called', { dailyRaceIndex, wsReady: ws?.readyState, alreadyFetched: ghostsFetchedForIndex === dailyRaceIndex });
+  
+  if (ghostsFetchedForIndex === dailyRaceIndex) {
+    console.log('[Ghosts] Already fetched for this index, skipping');
+    return;
+  }
+  
+  ghostsFetchedForIndex = dailyRaceIndex;
+  
+  if (!ws || ws.readyState !== 1) {
+    console.log('[Ghosts] No WS or not ready');
+    return;
+  }
+  
+  const apiUrl = import.meta.env.PROD
+    ? import.meta.env.VITE_FAHRTLE_API_URI || 'http://localhost:8080'
+    : 'http://localhost:8080';
+  
+  const url = `${apiUrl}/api/ghosts/${dailyRaceIndex}`;
+  console.log('[Ghosts] GETting from', url);
+  
+  try {
+    const response = await fetch(url);
+    console.log('[Ghosts] GET response', response.ok, response.status);
+    if (!response.ok) return;
+    const ghosts = await response.json();
+    console.log('[Ghosts] Got ghosts:', ghosts?.length || 0);
+    
+    if (ghosts && ghosts.length > 0) {
+      console.log('[Ghosts] Sending ADD_GHOSTS to WS');
+      ws.send(JSON.stringify({
+        type: 'ADD_GHOSTS',
+        ghosts: ghosts.map((g: any) => ({
+          playerId: g.playerId,
+          playerName: g.playerName,
+          waypoints: g.waypoints,
+          finishTime: g.finishTime
+        }))
+      }));
+    } else {
+      console.log('[Ghosts] No ghosts to add');
+    }
+  } catch (e) {
+    console.error('[Ghosts] Failed to fetch ghosts:', e);
+  }
+}
+
+export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: number) {
+  console.log('[Ghosts] submitGhostWaypoints called', { dailyRaceIndex, finishTime });
+  
+  const myId = $myPlayerId.get();
+  const allPlayers = $players.get();
+  const player = myId ? allPlayers[myId] : null;
+  
+  console.log('[Ghosts] Player state', { myId, hasPlayer: !!player, waypointCount: player?.waypoints?.length });
+  
+  if (!player || !myId) {
+    console.log('[Ghosts] No player, skipping');
+    return;
+  }
+  
+  const playerName = $playerSettings.get().name || myId;
+  
+  const nonInterstopWaypoints = player.waypoints.filter(wp => !wp.isInterstop);
+  
+  console.log('[Ghosts] Non-interstop waypoints:', nonInterstopWaypoints.length);
+  
+  if (nonInterstopWaypoints.length === 0) {
+    console.log('[Ghosts] No non-interstop waypoints, skipping');
+    return;
+  }
+
+  const apiUrl = import.meta.env.PROD
+    ? import.meta.env.VITE_FAHRTLE_API_URI || 'http://localhost:8080'
+    : 'http://localhost:8080';
+
+  console.log('[Ghosts] POSTing to', `${apiUrl}/api/ghosts/${dailyRaceIndex}`);
+
+  try {
+    const response = await fetch(`${apiUrl}/api/ghosts/${dailyRaceIndex}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId: myId,
+        playerName: playerName,
+        waypoints: nonInterstopWaypoints,
+        finishTime: finishTime
+      })
+    });
+    
+    console.log('[Ghosts] POST response', response.ok, response.status);
+    
+    if (response.ok) {
+      console.log('[Ghosts] Submitted waypoints successfully');
+    }
+  } catch (e) {
+    console.error('[Ghosts] Failed to submit ghost waypoints:', e);
   }
 }
 
@@ -652,9 +787,10 @@ function processPlayer(raw: Player): RenderablePlayer {
   };
 }
 
-export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean) {
+export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean, ghosts?: boolean) {
   const currentDifficulty = difficulty || $gameBounds.get().difficulty;
   const currentComputerDriver = computerDriver !== undefined ? computerDriver : $gameBounds.get().computerDriver; // allow false (lol)
+  const currentGhosts = ghosts !== undefined ? ghosts : $gameBounds.get().ghosts;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'SET_GAME_BOUNDS',
@@ -662,6 +798,7 @@ export function setGameBounds(start: [number, number] | null, finish: [number, n
       finishPos: finish,
       startTime: startTime,
       difficulty: currentDifficulty,
+      ghosts: currentGhosts,
       computerDriver: currentComputerDriver
     }));
   }
