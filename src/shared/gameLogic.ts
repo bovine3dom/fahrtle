@@ -489,6 +489,13 @@ export function handleIncomingMessage(
         }];
         player.isReady = false;
         player.finishTime = null;
+
+        hooks.publish(wsData.roomId, {
+            type: 'PLAYER_FINISH_UPDATE',
+            playerId: wsData.playerId,
+            finishTime: null
+        });
+
         room.state = 'JOINING';
         room.virtualTime = room.initialStartTime;
         room.gameStartTime = null;
