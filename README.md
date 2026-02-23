@@ -6,6 +6,8 @@
 
 fahrtle is a real-time multiplayer racing game built on global public transport data. Compete against friends to see who can navigate the world's transit networks most efficiently using real-world schedules and routes.
 
+[Play it now here!](https://compute.olie.science/fahrtle)
+
 ## Features
 
 - **Real-time multiplayer**: Join rooms and race against other players in real-time.
