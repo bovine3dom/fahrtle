@@ -99,6 +99,7 @@ class FakeServer {
             serverTime: room.virtualTime,
             realTime: Date.now(),
             computerDriver: room.computerDriver,
+            isRerun: room.isRerun,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0
         });
     }

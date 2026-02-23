@@ -143,6 +143,7 @@ export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
 export const $mapZoom = atom(14);
+export const $isRerun = atom(false);
 
 import { loadStats, saveStats, type PlayerStats } from './utils/stats';
 let $playerStatsInstance: PlayerStats;
@@ -337,6 +338,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $countdownEnd.set(msg.countdownEnd);
       $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver });
       $gameStartTime.set(msg.gameStartTime);
+      $isRerun.set(msg.isRerun);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
     }
 

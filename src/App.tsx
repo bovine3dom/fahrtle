@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats, $isRerun } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -44,6 +44,7 @@ function App() {
   const players = useStore($players);
   const myId = useStore($myPlayerId);
   const roomState = useStore($roomState);
+  const isRerun = useStore($isRerun);
   const countdownEnd = useStore($countdownEnd);
   const speeds = useStore($playerSpeeds);
   const distances = useStore($playerDistances);
@@ -654,7 +655,7 @@ function App() {
                     </Show>
                   </div>
 
-                  <Show when={roomState() === 'JOINING'}>
+                  <Show when={roomState() === 'JOINING' && !isRerun()}>
                     <div style={{
                       'background': colours.bg, 'padding': '8px', 'border-radius': '4px',
                       'border': '1px solid colours.border', 'margin-bottom': '10px'

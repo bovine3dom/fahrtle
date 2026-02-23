@@ -62,6 +62,8 @@ export type Room = {
 
     difficulty: Difficulty;
     computerDriver?: boolean;
+
+    isRerun: boolean;
 };
 
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
@@ -357,6 +359,7 @@ export function handleIncomingMessage(
                 lastRealTime: now,
                 playbackRate: 1.0,
                 initialStartTime: now,
+                isRerun: false,
                 difficulty: 'Easy'
             };
             rooms.set(roomId, room);
@@ -413,6 +416,7 @@ export function handleIncomingMessage(
             startPos: room.startPos,
             finishPos: room.finishPos,
             difficulty: room.difficulty,
+            isRerun: room.isRerun,
             computerDriver: room.computerDriver,
             realTime: now,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0,
@@ -500,6 +504,7 @@ export function handleIncomingMessage(
         room.state = 'JOINING';
         room.virtualTime = room.initialStartTime;
         room.gameStartTime = null;
+        room.isRerun = true;
 
         console.log('[RACE_AGAIN] After reset', {
             newVirtualTime: room.virtualTime,
