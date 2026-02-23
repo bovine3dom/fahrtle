@@ -473,9 +473,9 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
   
   if (!ws || ws.readyState !== 1) return;
   
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
+  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
   
-  const url = `${apiUrl}/api/ghosts/${dailyRaceIndex}`;
+  const url = `${apiUrl}api/ghosts/${dailyRaceIndex}`;
   
   try {
     const response = await fetch(url);
@@ -515,7 +515,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
   const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
 
   try {
-    await fetch(`${apiUrl}/api/ghosts/${dailyRaceIndex}`, {
+    await fetch(`${apiUrl}api/ghosts/${dailyRaceIndex}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
