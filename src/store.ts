@@ -453,9 +453,7 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
     return;
   }
   
-  const apiUrl = import.meta.env.PROD
-    ? import.meta.env.VITE_FAHRTLE_API_URI || 'http://localhost:8080'
-    : 'http://localhost:8080';
+  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
   
   const url = `${apiUrl}/api/ghosts/${dailyRaceIndex}`;
   console.log('[Ghosts] GETting from', url);
