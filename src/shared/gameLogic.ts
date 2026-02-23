@@ -54,7 +54,7 @@ export type Room = {
     virtualTime: number;
     lastRealTime: number;
     playbackRate: number;
-    initialStartTime: number | null;
+    initialStartTime: number;
 
     // Game Loop
     timerId?: ReturnType<typeof setTimeout>;
@@ -355,7 +355,7 @@ export function handleIncomingMessage(
                 virtualTime: now,
                 lastRealTime: now,
                 playbackRate: 1.0,
-                initialStartTime: null,
+                initialStartTime: now,
                 difficulty: 'Easy'
             };
             rooms.set(roomId, room);
@@ -483,14 +483,14 @@ export function handleIncomingMessage(
         player.waypoints = [{
             x: spawn.x,
             y: spawn.y,
-            startTime: room.virtualTime,
-            arrivalTime: room.virtualTime,
+            startTime: room.initialStartTime,
+            arrivalTime: room.initialStartTime,
             speedFactor: 1
         }];
         player.isReady = false;
         player.finishTime = null;
         room.state = 'JOINING';
-        room.virtualTime = room.initialStartTime || room.virtualTime;
+        room.virtualTime = room.initialStartTime;
         room.gameStartTime = null;
 
         console.log('[RACE_AGAIN] After reset', {
@@ -914,9 +914,6 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
         room.state = 'RUNNING';
         room.gameStartTime = room.virtualTime;
-        if (!room.initialStartTime) {
-            room.initialStartTime = room.virtualTime;
-        }
         room.countdownEnd = null;
         hooks.broadcastRoomState(room);
 
