@@ -572,14 +572,6 @@ export function submitWaypointsBatch(points: {
   if (!player || points.length === 0) return;
 
   const clockTime = $clock.get();
-  console.log('[submitWaypointsBatch] Submitting waypoints', {
-    playerId: $myPlayerId.get(),
-    clockTime,
-    playerVirtualTime: player.waypoints[player.waypoints.length - 1]?.startTime,
-    playerFinishTime: player.finishTime,
-    pointCount: points.length,
-    firstPointTime: points[0].time
-  });
 
   const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 

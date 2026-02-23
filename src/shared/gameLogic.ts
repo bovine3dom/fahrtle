@@ -459,16 +459,6 @@ export function handleIncomingMessage(
         const player = room?.players[wsData.playerId];
         if (!room || !player) return;
 
-        console.log('[RACE_AGAIN] Starting race again', {
-            roomId: wsData.roomId,
-            playerId: wsData.playerId,
-            currentVirtualTime: room.virtualTime,
-            initialStartTime: room.initialStartTime,
-            gameStartTime: room.gameStartTime,
-            playerWaypointCount: player.waypoints.length,
-            ghostWaypointCount: message.waypoints.length
-        });
-
         const ghostId = `👻-${generatePilotName()}`;
         const hue = Math.floor(Math.random() * 360);
         const ghost: Player = {
@@ -507,12 +497,6 @@ export function handleIncomingMessage(
         room.virtualTime = room.initialStartTime;
         room.gameStartTime = null;
         room.isRerun = true;
-
-        console.log('[RACE_AGAIN] After reset', {
-            newVirtualTime: room.virtualTime,
-            newGameStartTime: room.gameStartTime,
-            playerWaypoints: player.waypoints
-        });
 
         hooks.publish(wsData.roomId, {
             type: 'PLAYER_JOINED',
@@ -706,16 +690,6 @@ export function handleIncomingMessage(
         if (!room || room.state !== 'RUNNING') return;
         const player = room.players[wsData.playerId];
         if (!player) return;
-
-        console.log('[ADD_WAYPOINTS_BATCH] Before stepClock', {
-            playerId: wsData.playerId,
-            roomState: room.state,
-            virtualTime: room.virtualTime,
-            gameStartTime: room.gameStartTime,
-            initialStartTime: room.initialStartTime,
-            playerWaypointCount: player.waypoints.length,
-            lastWpArrival: player.waypoints[player.waypoints.length - 1]?.arrivalTime
-        });
 
         stepClock(room);
         player.viewingStopName = null;

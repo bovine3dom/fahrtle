@@ -1245,7 +1245,6 @@ export default function MapView() {
                 try {
                   const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
                   if (finishCells.includes(myCell)) {
-                    console.log("[Client] Crossed finish line!");
                     const finishTimeMs = now - startTime;
                     finishRace(finishTimeMs);
                     updatePlayerStats((stats) => ({
