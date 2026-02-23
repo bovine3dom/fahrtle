@@ -604,6 +604,7 @@ export function handleIncomingMessage(
 
         if (message.startTime) {
             room.virtualTime = message.startTime;
+            room.initialStartTime = message.startTime;
         }
 
         if (room.startPos) {
