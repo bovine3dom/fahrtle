@@ -283,10 +283,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
         ghosts: initialBounds.ghosts || false
       }));
 
-      console.log('[Ghosts] connectAndJoin initialBounds', initialBounds);
-
       if (initialBounds.ghosts && initialBounds.dailyRaceIndex !== undefined) {
-        console.log('[Ghosts] Calling fetchAndAddGhosts');
         fetchAndAddGhosts(initialBounds.dailyRaceIndex);
       }
 
@@ -300,7 +297,6 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       });
 
       if (initialBounds.dailyRaceIndex !== undefined) {
-        console.log('[Ghosts] Setting $currentDailyRaceIndex to', initialBounds.dailyRaceIndex);
         $currentDailyRaceIndex.set(initialBounds.dailyRaceIndex);
       }
     }
@@ -352,7 +348,6 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       if (msg.ghosts && $isDaily.get()) {
         const idx = $currentDailyRaceIndex.get();
         if (idx !== null) {
-          console.log('[Ghosts] ROOM_STATE received with ghosts, fetching for index', idx);
           fetchAndAddGhosts(idx);
         }
       }
@@ -369,7 +364,6 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       if (msg.ghosts && $isDaily.get()) {
         const idx = $currentDailyRaceIndex.get();
         if (idx !== null) {
-          console.log('[Ghosts] ROOM_STATE_UPDATE received with ghosts, fetching for index', idx);
           fetchAndAddGhosts(idx);
         }
       }
@@ -439,34 +433,22 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
 }
 
 async function fetchAndAddGhosts(dailyRaceIndex: number) {
-  console.log('[Ghosts] fetchAndAddGhosts called', { dailyRaceIndex, wsReady: ws?.readyState, alreadyFetched: ghostsFetchedForIndex === dailyRaceIndex });
-  
-  if (ghostsFetchedForIndex === dailyRaceIndex) {
-    console.log('[Ghosts] Already fetched for this index, skipping');
-    return;
-  }
+  if (ghostsFetchedForIndex === dailyRaceIndex) return;
   
   ghostsFetchedForIndex = dailyRaceIndex;
   
-  if (!ws || ws.readyState !== 1) {
-    console.log('[Ghosts] No WS or not ready');
-    return;
-  }
+  if (!ws || ws.readyState !== 1) return;
   
   const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
   
   const url = `${apiUrl}/api/ghosts/${dailyRaceIndex}`;
-  console.log('[Ghosts] GETting from', url);
   
   try {
     const response = await fetch(url);
-    console.log('[Ghosts] GET response', response.ok, response.status);
     if (!response.ok) return;
     const ghosts = await response.json();
-    console.log('[Ghosts] Got ghosts:', ghosts?.length || 0);
     
     if (ghosts && ghosts.length > 0) {
-      console.log('[Ghosts] Sending ADD_GHOSTS to WS');
       ws.send(JSON.stringify({
         type: 'ADD_GHOSTS',
         ghosts: ghosts.map((g: any) => ({
@@ -476,47 +458,29 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
           finishTime: g.finishTime
         }))
       }));
-    } else {
-      console.log('[Ghosts] No ghosts to add');
     }
   } catch (e) {
-    console.error('[Ghosts] Failed to fetch ghosts:', e);
+    console.error('Failed to fetch ghosts:', e);
   }
 }
 
 export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: number) {
-  console.log('[Ghosts] submitGhostWaypoints called', { dailyRaceIndex, finishTime });
-  
   const myId = $myPlayerId.get();
   const allPlayers = $players.get();
   const player = myId ? allPlayers[myId] : null;
   
-  console.log('[Ghosts] Player state', { myId, hasPlayer: !!player, waypointCount: player?.waypoints?.length });
-  
-  if (!player || !myId) {
-    console.log('[Ghosts] No player, skipping');
-    return;
-  }
+  if (!player || !myId) return;
   
   const playerName = $playerSettings.get().name || myId;
   
   const nonInterstopWaypoints = player.waypoints.filter(wp => !wp.isInterstop);
   
-  console.log('[Ghosts] Non-interstop waypoints:', nonInterstopWaypoints.length);
-  
-  if (nonInterstopWaypoints.length === 0) {
-    console.log('[Ghosts] No non-interstop waypoints, skipping');
-    return;
-  }
+  if (nonInterstopWaypoints.length === 0) return;
 
-  const apiUrl = import.meta.env.PROD
-    ? import.meta.env.VITE_FAHRTLE_API_URI || 'http://localhost:8080'
-    : 'http://localhost:8080';
-
-  console.log('[Ghosts] POSTing to', `${apiUrl}/api/ghosts/${dailyRaceIndex}`);
+  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
 
   try {
-    const response = await fetch(`${apiUrl}/api/ghosts/${dailyRaceIndex}`, {
+    await fetch(`${apiUrl}/api/ghosts/${dailyRaceIndex}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -526,14 +490,8 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
         finishTime: finishTime
       })
     });
-    
-    console.log('[Ghosts] POST response', response.ok, response.status);
-    
-    if (response.ok) {
-      console.log('[Ghosts] Submitted waypoints successfully');
-    }
   } catch (e) {
-    console.error('[Ghosts] Failed to submit ghost waypoints:', e);
+    console.error('Failed to submit ghost waypoints:', e);
   }
 }
 

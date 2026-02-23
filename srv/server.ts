@@ -45,7 +45,6 @@ const server = serve<WSData>({
 
     if (pathMatch) {
       const raceIndex = pathMatch[1];
-      console.log('[Ghosts] Server received request', req.method, 'for race', raceIndex);
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders });
@@ -53,7 +52,6 @@ const server = serve<WSData>({
 
       if (req.method === 'GET') {
         const ghosts = ghostsByRaceIndex.get(raceIndex) || [];
-        console.log('[Ghosts] GET returning', ghosts.length, 'ghosts');
         return new Response(JSON.stringify(ghosts), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -62,15 +60,10 @@ const server = serve<WSData>({
       if (req.method === 'POST') {
         return req.json().then((body: { playerId: string; playerName: string; waypoints: Waypoint[]; finishTime: number }) => {
           const { playerId, playerName, waypoints, finishTime } = body;
-          console.log('[Ghosts] POST from', playerId, playerName, 'finishTime:', finishTime, 'waypoints:', waypoints?.length);
 
           if (!playerId || !waypoints || !finishTime) {
-            console.log('[Ghosts] Missing required fields');
             return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
           }
-
-          const filteredWaypoints = waypoints.filter((wp: Waypoint) => !wp.isInterstop);
-          console.log('[Ghosts] Filtered to', filteredWaypoints.length, 'non-interstop waypoints');
 
           if (!ghostsByRaceIndex.has(raceIndex)) {
             ghostsByRaceIndex.set(raceIndex, []);
@@ -82,24 +75,19 @@ const server = serve<WSData>({
           const newEntry: GhostEntry = {
             playerId,
             playerName,
-            waypoints: filteredWaypoints,
+            waypoints: waypoints,
             finishTime,
             submittedAt: Date.now()
           };
 
           if (existingIdx === -1) {
             ghosts.push(newEntry);
-            console.log('[Ghosts] Added new ghost for', playerId);
           } else if (finishTime < ghosts[existingIdx].finishTime) {
             ghosts[existingIdx] = newEntry;
-            console.log('[Ghosts] Updated ghost for', playerId, 'with faster time');
-          } else {
-            console.log('[Ghosts] Keeping existing ghost (slower time)');
           }
 
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-        }).catch((e) => {
-          console.log('[Ghosts] JSON parse error:', e);
+        }).catch(() => {
           return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: corsHeaders });
         });
       }

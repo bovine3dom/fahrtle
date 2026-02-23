@@ -538,24 +538,15 @@ export function handleIncomingMessage(
 
     // --- ADD GHOSTS ---
     if (message.type === 'ADD_GHOSTS') {
-        console.log('[Ghosts] Server ADD_GHOSTS received', { roomId: wsData.roomId, ghostCount: message.ghosts?.length });
-        
         if (!wsData.roomId) return;
         const room = rooms.get(wsData.roomId);
-        if (!room) {
-            console.log('[Ghosts] Room not found!');
-            return;
-        }
+        if (!room) return;
 
         const { ghosts } = message;
-        if (!Array.isArray(ghosts)) {
-            console.log('[Ghosts] ghosts is not an array!');
-            return;
-        }
+        if (!Array.isArray(ghosts)) return;
 
         for (const ghostData of ghosts) {
             const { playerName, waypoints } = ghostData;
-            console.log('[Ghosts] Adding ghost', playerName, 'with', waypoints?.length, 'waypoints');
             const ghostId = `👻-${playerName}`;
             const hue = Math.floor(Math.random() * 360);
             
@@ -573,7 +564,6 @@ export function handleIncomingMessage(
             };
 
             room.players[ghostId] = ghost;
-            console.log('[Ghosts] Added ghost to room:', ghostId);
 
             hooks.publish(wsData.roomId, {
                 type: 'PLAYER_JOINED',

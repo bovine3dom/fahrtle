@@ -1254,9 +1254,7 @@ export default function MapView() {
                     }));
                     const bounds = $gameBounds.get();
                     const dailyIndex = $currentDailyRaceIndex.get();
-                    console.log('[Ghosts] Finish check:', { ghosts: bounds.ghosts, dailyIndex });
                     if (bounds.ghosts && dailyIndex !== null) {
-                      console.log('[Ghosts] Calling submitGhostWaypoints on finish');
                       submitGhostWaypoints(dailyIndex, finishTimeMs);
                     }
                   }
