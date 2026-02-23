@@ -283,8 +283,12 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
         ghosts: initialBounds.ghosts || false
       }));
 
-      if (initialBounds.ghosts && initialBounds.dailyRaceIndex !== undefined) {
-        fetchAndAddGhosts(initialBounds.dailyRaceIndex);
+      if (initialBounds.dailyRaceIndex !== undefined) {
+        if (initialBounds.ghosts) {
+          fetchAndAddGhosts(initialBounds.dailyRaceIndex);
+        } else {
+          removeGhosts();
+        }
       }
 
       $gameBounds.set({
@@ -341,11 +345,14 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $players.set(renderables);
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
+      const previousGhosts = $gameBounds.get().ghosts;
       $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts });
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
 
-      if (msg.ghosts && $isDaily.get()) {
+      if (previousGhosts && !msg.ghosts) {
+        removeGhosts();
+      } else if (msg.ghosts && $isDaily.get()) {
         const idx = $currentDailyRaceIndex.get();
         if (idx !== null) {
           fetchAndAddGhosts(idx);
@@ -356,12 +363,15 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
     if (msg.type === 'ROOM_STATE_UPDATE') {
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
+      const prevGhosts = $gameBounds.get().ghosts;
       $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts });
       $gameStartTime.set(msg.gameStartTime);
       $isRerun.set(msg.isRerun);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
 
-      if (msg.ghosts && $isDaily.get()) {
+      if (prevGhosts && !msg.ghosts) {
+        removeGhosts();
+      } else if (msg.ghosts && $isDaily.get()) {
         const idx = $currentDailyRaceIndex.get();
         if (idx !== null) {
           fetchAndAddGhosts(idx);
@@ -430,6 +440,30 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
     $currentRoom.set(null);
     ghostsFetchedForIndex = null;
   }
+}
+
+async function removeGhosts() {
+  const allPlayers = $players.get();
+  const ghostPlayers = Object.values(allPlayers).filter(p => p.isGhost);
+
+  if (ghostPlayers.length === 0) return;
+
+  if (ws && ws.readyState === 1) {
+    for (const ghost of ghostPlayers) {
+      ws.send(JSON.stringify({
+        type: 'PLAYER_KICK',
+        playerId: ghost.id
+      }));
+    }
+  }
+
+  const current = { ...allPlayers };
+  for (const ghost of ghostPlayers) {
+    delete current[ghost.id];
+  }
+  $players.set(current);
+
+  ghostsFetchedForIndex = null;
 }
 
 async function fetchAndAddGhosts(dailyRaceIndex: number) {
@@ -746,7 +780,8 @@ function processPlayer(raw: Player): RenderablePlayer {
 export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean, ghosts?: boolean) {
   const currentDifficulty = difficulty || $gameBounds.get().difficulty;
   const currentComputerDriver = computerDriver !== undefined ? computerDriver : $gameBounds.get().computerDriver; // allow false (lol)
-  const currentGhosts = ghosts !== undefined ? ghosts : $gameBounds.get().ghosts;
+  const previousGhosts = $gameBounds.get().ghosts;
+  const currentGhosts = ghosts !== undefined ? ghosts : previousGhosts;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'SET_GAME_BOUNDS',
@@ -757,6 +792,10 @@ export function setGameBounds(start: [number, number] | null, finish: [number, n
       ghosts: currentGhosts,
       computerDriver: currentComputerDriver
     }));
+
+    if (previousGhosts && !currentGhosts) {
+      removeGhosts();
+    }
   }
 }
 

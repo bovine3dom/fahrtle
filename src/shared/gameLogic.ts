@@ -918,6 +918,24 @@ export function handleIncomingMessage(
             finishTime: player.finishTime
         });
     }
+
+    // --- PLAYER KICK ---
+    if (message.type === 'PLAYER_KICK') {
+        if (!wsData.roomId) return;
+        const room = rooms.get(wsData.roomId);
+        if (!room) return;
+
+        const { playerId } = message;
+        if (!playerId || !room.players[playerId]) return;
+
+        delete room.players[playerId];
+        hooks.publish(wsData.roomId, {
+            type: 'PLAYER_LEFT',
+            playerId: playerId
+        });
+        checkCountdownLogic(room, hooks);
+        hooks.broadcastRoomState(room);
+    }
 }
 
 function checkCountdownLogic(room: Room, hooks: GameHooks) {
