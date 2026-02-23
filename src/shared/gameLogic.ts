@@ -1,6 +1,7 @@
 // src/shared/gameLogic.ts
 import simplify from 'simplify-js';
 import { haversineDist } from '../utils/geo';
+import { generatePilotName } from '../names';
 
 const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
 
@@ -462,7 +463,7 @@ export function handleIncomingMessage(
             ghostWaypointCount: message.waypoints.length
         });
 
-        const ghostId = `ghost-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const ghostId = `👻-${generatePilotName()}`;
         const hue = Math.floor(Math.random() * 360);
         const ghost: Player = {
             id: ghostId,
