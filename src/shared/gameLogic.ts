@@ -546,13 +546,12 @@ export function handleIncomingMessage(
         if (!Array.isArray(ghosts)) return;
 
         for (const ghostData of ghosts) {
-            const { playerName, waypoints } = ghostData;
+            const { playerName, waypoints, color } = ghostData;
             const ghostId = `👻-${playerName}`;
-            const hue = Math.floor(Math.random() * 360);
             
             const ghost: Player = {
                 id: ghostId,
-                color: `hsl(${hue}, 30%, 50%)`,
+                color: color || `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
                 isReady: true,
                 waypoints: waypoints,
                 desiredRate: 1e9,

@@ -660,7 +660,7 @@ export default function MapView() {
         paint: {
           'line-color': '#ffffff',
           'line-width': 7,
-          'line-opacity': 1.0
+          'line-opacity': ['get', 'opacity'],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       }, getBeforeId("routes-casing", mapInstance));
@@ -671,7 +671,7 @@ export default function MapView() {
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 3,
-          'line-opacity': 1.0,
+          'line-opacity': ['get', 'opacity'],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round', 'line-sort-key': ['get', 'sort_key'] }
       }, getBeforeId("routes-line", mapInstance));
@@ -1109,7 +1109,7 @@ export default function MapView() {
         routeFeatures.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: player.color, sort_key: Number(!player.isGhost) }
+          properties: { color: player.color, sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0.3 : 1 }
         });
 
         if (!(player.id == 'the-stig-🏎️') && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly

@@ -15,6 +15,7 @@ function log(...args: any[]) {
 type GhostEntry = {
   playerId: string;
   playerName: string;
+  color?: string;
   waypoints: Waypoint[];
   finishTime: number;
   submittedAt: number;
@@ -58,8 +59,8 @@ const server = serve<WSData>({
       }
 
       if (req.method === 'POST') {
-        return req.json().then((body: { playerId: string; playerName: string; waypoints: Waypoint[]; finishTime: number }) => {
-          const { playerId, playerName, waypoints, finishTime } = body;
+        return req.json().then((body: { playerId: string; playerName: string; color?: string; waypoints: Waypoint[]; finishTime: number }) => {
+          const { playerId, playerName, color, waypoints, finishTime } = body;
 
           if (!playerId || !waypoints || !finishTime) {
             return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
@@ -75,6 +76,7 @@ const server = serve<WSData>({
           const newEntry: GhostEntry = {
             playerId,
             playerName,
+            color,
             waypoints: waypoints,
             finishTime,
             submittedAt: Date.now()

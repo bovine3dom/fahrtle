@@ -488,6 +488,7 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
         ghosts: ghosts.map((g: any) => ({
           playerId: g.playerId,
           playerName: g.playerName,
+          color: g.color ?? `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
           waypoints: g.waypoints,
           finishTime: g.finishTime
         }))
@@ -520,6 +521,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
       body: JSON.stringify({
         playerId: myId,
         playerName: playerName,
+        color: player.color,
         waypoints: nonInterstopWaypoints,
         finishTime: finishTime
       })
