@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect, createSignal, untrack, Show, For } from 'solid-js';
+import { onMount, onCleanup, createEffect, createMemo, createSignal, untrack, Show, For } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
@@ -1109,7 +1109,7 @@ export default function MapView() {
         routeFeatures.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: player.color, sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0.3 : 1 }
+          properties: { color: player.color, sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0 : 1 }
         });
 
         if (!(player.id == 'the-stig-🏎️') && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
@@ -1121,6 +1121,7 @@ export default function MapView() {
               properties: {
                 stop_name: wp.stopName,
                 arrival_time: wp.timeStr || "",
+                opacity: player.isGhost ? 0 : 1,
                 color: player.color // this seems awkward, why do we need to specify it per point
               }
             }));
@@ -1133,6 +1134,22 @@ export default function MapView() {
     const rSource = mapInstance.getSource('routes') as maplibregl.GeoJSONSource;
     if (rSource) {
       rSource.setData({ type: 'FeatureCollection', features: routeFeatures as any });
+    }
+  });
+
+  const myId = useStore($myPlayerId);
+  const isFinished = createMemo(() => players()[myId() || ''].finishTime != null);
+  createEffect(async () => {
+    const finished = isFinished(); // ... i really don't understand why this is necessary
+    await ensureMapLoaded(mapInstance);
+    if (finished) {
+      mapInstance.setPaintProperty('routes-casing', 'line-opacity', 1);
+      mapInstance.setPaintProperty('routes-line', 'line-opacity', 1);
+      mapInstance.setPaintProperty('routes-labels', 'text-opacity', 1);
+    } else {
+      mapInstance.setPaintProperty('routes-casing', 'line-opacity', ['get', 'opacity']);
+      mapInstance.setPaintProperty('routes-line', 'line-opacity', ['get', 'opacity']);
+      mapInstance.setPaintProperty('routes-labels', 'text-opacity', ['get', 'opacity']);
     }
   });
 
