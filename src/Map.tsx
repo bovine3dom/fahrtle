@@ -17,6 +17,7 @@ import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
 import { map_update_lock } from './utils/map_lock';
 import { give_me_more_trains } from './utils/i_bloody_love_trains';
+import { getCountry, countryToFlag } from "./utils/tiny-countries";
 
 let mapInstance: maplibregl.Map;
 
@@ -797,6 +798,8 @@ export default function MapView() {
 
       mapInstance.on('click', (e) => {
         !import.meta.env.PROD && console.log(`{ lat = "${e.lngLat.lat}", lon = "${e.lngLat.lng}" }`);
+        !import.meta.env.PROD && getCountry({lat: e.lngLat.lat, lon: e.lngLat.lng}).then((c) => console.log(countryToFlag(c || '')));
+
         if (clickTimeout) clearTimeout(clickTimeout);
 
         clickTimeout = setTimeout(() => {

@@ -4,6 +4,7 @@ import { getTravelSummary } from './utils/summary';
 import { sensibleNumber } from './utils/format';
 import { formatDuration } from './utils/time';
 import { colours } from './colours';
+import { countryToFlag } from './utils/tiny-countries';
 
 const btnBase = { flex: 1, padding: '10px', 'font-weight': 'bold', 'font-size': '0.9em', 'border-radius': '8px', cursor: 'pointer' };
 const boxBase = { background: colours.bgLight, padding: '12px', 'border-radius': '8px', border: `1px solid ${colours.borderLight}`, 'font-family': 'monospace', 'font-size': '0.85em', 'white-space': 'pre-wrap', color: colours.textBody };
@@ -87,12 +88,6 @@ const WinModal = (props: WinModalProps) => {
       </div>
     </div>
   );
-};
-
-const countryToFlag = (code: string) => {
-  if (!code || code.length !== 2) return '🏳️';
-  const offset = 127397;
-  return String.fromCodePoint(...code.toUpperCase().split('').map(c => c.charCodeAt(0) + offset));
 };
 
 const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
