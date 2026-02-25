@@ -67,6 +67,7 @@ export type AnimationSegment = {
   end: [number, number];
   startTime: number;
   endTime: number;
+  isInterstop: boolean;
 };
 
 type RenderablePlayer = Player & { isGhost: boolean } & { segments: AnimationSegment[] };
@@ -762,6 +763,7 @@ function processPlayer(raw: Player): RenderablePlayer {
         end: [wp.x, wp.y],
         startTime: wp.startTime + offset,
         endTime: wp.arrivalTime + offset,
+        isInterstop: wp.isInterstop || false
       });
     }
   }

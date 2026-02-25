@@ -823,7 +823,8 @@ function App() {
                         {(id, index) => {
                           const p = () => players()[id];
                           const isFinished = createMemo(() => p().finishTime != null);
-                          const nextWp = createMemo(() => p().waypoints.find((wp: any) => wp.arrivalTime > time() && !wp.isInterstop));
+                          const nextWpIndex = createMemo(() => p().segments.findIndex((s: any) => s.startTime > time() && !s.isInterstop));
+                          const nextWp = createMemo(() => p().waypoints[nextWpIndex() || 1]); // default to first real waypoint
                           const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
                           const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
