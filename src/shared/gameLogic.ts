@@ -1018,10 +1018,12 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     }
 
     const ghosts = Object.values(room.players).filter(p => p.isGhost);
+    const playerStart = Object.values(room.players).filter(p => !p.isGhost)[0]?.waypoints[0]?.startTime || 0;
     for (const ghost of ghosts) {
+        const offset = playerStart - ghost.waypoints[0].startTime;
         if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
             const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
-            if (room.virtualTime >= lastWp.arrivalTime) {
+            if (room.virtualTime >= (offset + lastWp.arrivalTime)) {
                 ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
                 hooks.publish(room.id, {
                     type: 'PLAYER_FINISH_UPDATE',
