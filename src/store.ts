@@ -750,6 +750,8 @@ export function stopImmediately(destinationWpIndex?: number) {
 
 function processPlayer(raw: Player): RenderablePlayer {
   const segments: AnimationSegment[] = [];
+  const myStart = $players.get()[$myPlayerId.get()||'']?.waypoints[0].startTime;
+  const offset = myStart - raw?.waypoints[0].startTime; // this hack doesn't feel right
 
   for (let i = 0; i < raw.waypoints.length; i++) {
     const wp = raw.waypoints[i];
@@ -758,9 +760,15 @@ function processPlayer(raw: Player): RenderablePlayer {
       segments.push({
         start: [prev.x, prev.y],
         end: [wp.x, wp.y],
-        startTime: wp.startTime,
-        endTime: wp.arrivalTime
+        startTime: wp.startTime + offset,
+        endTime: wp.arrivalTime + offset,
       });
+    }
+  }
+
+  for (let i = 1; i < segments.length; i++) {
+    if (segments[i].startTime !== segments[i - 1].endTime) {
+      segments[i].startTime = segments[i - 1].endTime;
     }
   }
 
