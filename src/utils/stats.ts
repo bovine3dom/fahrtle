@@ -1,5 +1,5 @@
 import type { Waypoint } from '../store';
-import { getClosestCityObject, type CityInfo } from './tiny-cities';
+import { getCountry } from './tiny-countries';
 import { haversineDist } from './geo';
 
 const STATS_KEY = 'fahrtle_stats';
@@ -68,9 +68,8 @@ export function saveStats(stats: PlayerStats): void {
   }
 }
 
-async function getCountryForWaypoint(wp: Waypoint): Promise<string | null> {
-  const city: CityInfo | null = await getClosestCityObject({ lat: wp.y, lon: wp.x });
-  return city?.country_code ?? null;
+function getCountryForWaypoint(wp: Waypoint): Promise<string | null> {
+  return getCountry({ lat: wp.y, lon: wp.x });
 }
 
 function getTransportKey(wp: Waypoint): string {
