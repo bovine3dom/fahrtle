@@ -9,6 +9,7 @@ const ideal_hierarchy: string[] = [
   "openrailwaymap-layer",
   "course-markers-h3-filled", // finish area hexes
   "h3-cell-line", // pink hex departure board 'search area' on click
+  "preview-route-casing", // white outline around player tracks
   "preview-route-line", // route preview
   "stops-layer", // stops for departure boards
   "routes-casing", // white outline around player tracks

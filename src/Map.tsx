@@ -666,6 +666,7 @@ export default function MapView() {
         layout: { 'line-cap': 'round', 'line-join': 'round' }
       }, getBeforeId("routes-casing", mapInstance));
 
+
       mapInstance.addLayer({
         id: 'routes-line', type: 'line', source: 'routes',
         filter: ['==', '$type', 'LineString'],
@@ -684,6 +685,15 @@ export default function MapView() {
       }, getBeforeId("h3-cell-line", mapInstance));
 
       mapInstance.addSource('preview-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      mapInstance.addLayer({
+        id: 'preview-route-casing', type: 'line', source: 'preview-route',
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 10,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' }
+      }, getBeforeId("preview-route-casing", mapInstance));
+
       mapInstance.addLayer({
         id: 'preview-route-line', type: 'line', source: 'preview-route',
         filter: ['==', '$type', 'LineString'],
