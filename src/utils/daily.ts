@@ -3,6 +3,7 @@ import races_url from '../assets/races_weighted_pop.json?url';
 const INSANE_JS_MONTH_MODIFIER = 1;
 const BASE_DATE = [2026, 2 - INSANE_JS_MONTH_MODIFIER, 18]; // NB: JS months, but not days, are zero-based (really)
 
+export { BASE_DATE };
 export const TODAYS_DATE = new Date();
 
 let racesPromise: Promise<any[]> | null = null;

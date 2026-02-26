@@ -7,10 +7,11 @@ import { createClosestCity, cityDbPromise } from './utils/tiny-cities';
 import { around } from 'geokdbush';
 import { sharedFakeServer } from './fakeServer';
 import { generatePilotName } from './names';
-import { TODAYS_DATE } from './utils/daily';
+import { TODAYS_DATE, BASE_DATE } from './utils/daily';
 import { colours } from './colours';
 import bgImage from './assets/h3_hero.webp';
 import favicon from '../public/favicon.svg';
+import { RaceCalendar } from './RaceCalendar';
 
 export default function Lobby() {
   const generateRandomRoom = () => {
@@ -28,6 +29,17 @@ export default function Lobby() {
   const [wipeConfirm, setWipeConfirm] = createSignal(false);
   const [dailyRace, setDailyRace] = createSignal<{ start: [number, number], finish: [number, number], time: string } | null>(null);
   const [selectedRaceIndex, setSelectedRaceIndex] = createSignal<number | null>(null);
+  const [showCalendar, setShowCalendar] = createSignal(false);
+
+  const currentDate = () => {
+    const idx = selectedRaceIndex();
+    if (idx !== null) {
+      const base = new Date(BASE_DATE[0], BASE_DATE[1], BASE_DATE[2]);
+      base.setDate(base.getDate() + idx);
+      return base;
+    }
+    return TODAYS_DATE;
+  };
 
   createEffect(() => {
     if (isDaily()) {
@@ -342,16 +354,44 @@ export default function Lobby() {
             'padding': '8px',
             'border-radius': '8px',
             'margin-bottom': '4px',
-            'text-align': 'center'
+            'text-align': 'center',
+            position: 'relative'
           }}>
-            <div style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'margin-bottom': '4px', 'color': colours.warningBright }}>
-              {TODAYS_DATE.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <div style={{ 'margin-bottom': '4px' }}>
+              <span style={{ 'font-size': '0.9rem', 'font-weight': 'bold', 'color': colours.warningBright }}>
+                {currentDate().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
             </div>
             <div style={{ 'font-size': '0.8rem', 'color': colours.border }}>
               <Show when={dailyRace()} fallback="Loading...">
                 {(race) => <>{createClosestCity(() => ({ lat: race().start[0], lon: race().start[1] }))()} ➡️ {createClosestCity(() => ({ lat: race().finish[0], lon: race().finish[1] }))()}</>}
               </Show>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowCalendar(!showCalendar())}
+              title="Pick a previous day"
+              style={{
+                position: 'absolute',
+                bottom: '8px',
+                right: '8px',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                'font-size': '1rem',
+                padding: '2px 6px',
+                'border-radius': '4px',
+                color: 'white'
+              }}
+            >
+              ♻️
+            </button>
+            <Show when={showCalendar()}>
+              <RaceCalendar
+                onSelect={(idx: number) => setSelectedRaceIndex(idx)}
+                onClose={() => setShowCalendar(false)}
+              />
+            </Show>
           </div>
         </Show>
 
