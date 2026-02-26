@@ -4,6 +4,7 @@ import { formatRowTime, sensibleNumber } from './format';
 import { haversineDist } from './geo';
 import { createClosestCity, cityDbPromise } from './tiny-cities';
 import { formatDuration } from './time';
+import { $currentDailyRaceIndex } from '../store';
 
 type SummaryEntry = {
     type: 'transport' | 'walk' | 'wait';
@@ -143,6 +144,10 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
         }
     } else {
         url.searchParams.set('daily', "1");
+        const dailyIdx = $currentDailyRaceIndex.get();
+        if (dailyIdx !== null) {
+            url.searchParams.set('r', dailyIdx.toString());
+        }
     }
 
     if (gameBounds.difficulty) {
@@ -150,7 +155,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
     }
 
 
-    const dayPrefix = isDaily ? ` daily #${await getDailyRaceIndex()}!` : '';
+    const dayPrefix = isDaily ? ` daily #${$currentDailyRaceIndex.get() ?? await getDailyRaceIndex()}!` : '';
 
     travel = `I just played #fahrtle${dayPrefix}\n${startCity()} ➡️ ${finishCity()} (${sensibleNumber(haversineDist(gameBounds.start ? { lat: gameBounds.start[0], lon: gameBounds.start[1] } : null, gameBounds.finish ? { lat: gameBounds.finish[0], lon: gameBounds.finish[1] } : null) || 0)} km)\n${travel}`;
     if (player.finishTime) {
