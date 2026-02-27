@@ -301,6 +301,30 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
           }
         ]
       }
+    case 'Virtual Earth':
+      return {
+        'version': 8,
+        'sources': {
+          'raster-tiles': {
+            'type': 'raster',
+            'tiles': [
+              'https://tiles.virtualearth.net/tiles/a{quadkey}.jpg?g=45',
+            ],
+            'maxzoom': 17,
+            'tileSize': 128,
+            'attribution':
+              '<a href="https://en.wikipedia.org/wiki/Microsoft_Virtual_Earth" target="_blank">&copy; Microsoft Virtual Earth</a>'
+          }
+        },
+        'layers': [
+          {
+            'id': 'simple-tiles',
+            'type': 'raster',
+            'source': 'raster-tiles',
+            'minzoom': 0,
+          }
+        ]
+      }
     default:
       return "https://tiles.openfreemap.org/styles/positron"
   }
