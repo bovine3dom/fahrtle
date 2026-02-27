@@ -49,6 +49,52 @@ export function getPlayerScreenPosition(playerId: string): { x: number, y: numbe
   };
 }
 
+export function handleMapClickForDepartures(lat: number, lng: number, shiftKey: boolean = false) {
+  const h3Index = latLngToCell(lat, lng, 11);
+  const radius = shiftKey ? 0 : 2;
+  const neighborhood = gridDisk(h3Index, radius);
+
+  const features = neighborhood.map(index => {
+    const boundary = cellToBoundary(index);
+    const coords = boundary.map(p => [p[1], p[0]]);
+    coords.push(coords[0]);
+    return {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: {}
+    };
+  });
+
+  const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
+  if (source) {
+    source.setData({
+      type: 'FeatureCollection',
+      features: features as any
+    });
+
+    setTimeout(() => {
+      if (mapInstance) {
+        const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
+        if (s) s.setData({ type: 'FeatureCollection', features: [] });
+      }
+    }, 1000);
+  }
+
+  const stopZone = getTimeZone(lat, lng);
+  $stopTimeZone.set(stopZone);
+
+  const simTime = $clock.get();
+  const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
+  const localDate = new Date(localDateStr);
+  const hour = localDate.getHours();
+  const minute = localDate.getMinutes();
+
+  const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
+  const targetMinutes = hour * 60 + minute;
+
+  $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone, clickTime: Date.now() });
+}
+
 export function fitGameBounds() {
   const bounds = $gameBounds.get();
   if (!mapInstance) return;
@@ -336,6 +382,7 @@ export default function MapView() {
   let frameId: number;
   let smoothedMyBearing = 0;
   const [mapReady, setMapReady] = createSignal(false);
+  const [clickPopupPos, setClickPopupPos] = createSignal<{ lat: number, lng: number } | null>(null);
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
@@ -817,7 +864,7 @@ export default function MapView() {
           clearTimeout(clickTimeout);
           clickTimeout = null;
         }
-        if ($pickerMode.get()) return;
+        if ($pickerMode.get() || $playerSettings.get().walkConfirm) return;
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
@@ -835,6 +882,10 @@ export default function MapView() {
         !import.meta.env.PROD && getCountry({lat: e.lngLat.lat, lon: e.lngLat.lng}).then((c) => console.log(countryToFlag(c || '')));
 
         if (clickTimeout) clearTimeout(clickTimeout);
+        if ($playerSettings.get().walkConfirm) {
+          setClickPopupPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+          return;
+        }
 
         clickTimeout = setTimeout(() => {
           const mode = $pickerMode.get();
@@ -843,49 +894,7 @@ export default function MapView() {
             $pickerMode.set(null);
             return;
           }
-          const h3Index = latLngToCell(e.lngLat.lat, e.lngLat.lng, 11);
-          const radius = e.originalEvent.shiftKey ? 0 : 2;
-          const neighborhood = gridDisk(h3Index, radius);
-
-          const features = neighborhood.map(index => {
-            const boundary = cellToBoundary(index);
-            const coords = boundary.map(p => [p[1], p[0]]);
-            coords.push(coords[0]);
-            return {
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: coords },
-              properties: {}
-            };
-          });
-
-          const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
-          if (source) {
-            source.setData({
-              type: 'FeatureCollection',
-              features: features as any
-            });
-
-            setTimeout(() => {
-              if (mapInstance) {
-                const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
-                if (s) s.setData({ type: 'FeatureCollection', features: [] });
-              }
-            }, 1000);
-          }
-
-          const stopZone = getTimeZone(e.lngLat.lat, e.lngLat.lng);
-          $stopTimeZone.set(stopZone);
-
-          const simTime = $clock.get();
-          const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
-          const localDate = new Date(localDateStr);
-          const hour = localDate.getHours();
-          const minute = localDate.getMinutes();
-
-          const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
-          const targetMinutes = hour * 60 + minute;
-
-          $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone, clickTime: Date.now() });
+          handleMapClickForDepartures(e.lngLat.lat, e.lngLat.lng, e.originalEvent.shiftKey);
 
           clickTimeout = null;
         }, 300);
@@ -1456,6 +1465,56 @@ export default function MapView() {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#eee' }} />
+      
+      <Show when={clickPopupPos()}>
+        {(pos) => {
+          const initialPos = { lat: pos().lat, lng: pos().lng };
+          const popup = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            anchor: 'bottom',
+            maxWidth: 'none',
+            offset: [0, 15],
+          })
+            .setLngLat([initialPos.lng, initialPos.lat])
+            .setHTML('<div id="map-click-popup-container"></div>')
+            .addTo(mapInstance);
+
+          const handleClose = () => {
+            document.removeEventListener('click', closeOnOutsideClick);
+            popup.remove();
+            setClickPopupPos(null);
+          };
+
+          const closeOnOutsideClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            const popupEl = document.querySelector('.maplibregl-popup-content');
+            if (popupEl && !popupEl.contains(target)) {
+              handleClose();
+            }
+          };
+
+          setTimeout(() => {
+            document.addEventListener('click', closeOnOutsideClick);
+          }, 0);
+
+          const handleShowDepartures = () => {
+            $boardMinimized.set(false);
+          };
+
+          const container = document.getElementById('map-click-popup-container');
+          if (container) {
+            import('./MapClickPopup').then(({ default: Popup }) => {
+              import('solid-js/web').then(({ render }) => {
+                render(() => Popup({ lat: initialPos.lat, lng: initialPos.lng, onClose: handleClose, onShowDepartures: handleShowDepartures }), container);
+              });
+            });
+          }
+
+          return null;
+        }}
+      </Show>
+
       <button
         class="follow-btn"
         classList={{ active: isFollowing() }}

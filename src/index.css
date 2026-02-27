@@ -66,3 +66,52 @@ button:focus-visible {
   display: inline-block;
   text-align: center;
 }
+
+.map-click-popup {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.maplibregl-popup-content {
+  padding: 8px 12px !important;
+}
+
+.map-click-popup .popup-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.map-click-popup .walk-btn {
+  background-color: #10b981;
+  color: white;
+}
+
+.map-click-popup .walk-btn:hover {
+  background-color: #059669;
+}
+
+.map-click-popup .departures-btn {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.map-click-popup .departures-btn:hover {
+  background-color: #2563eb;
+}
+
+.map-click-popup .departures-precise-btn {
+  background-color: #8b5cf6;
+  color: white;
+}
+
+.map-click-popup .departures-precise-btn:hover {
+  background-color: #7c3aed;
+}
