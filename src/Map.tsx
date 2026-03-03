@@ -384,6 +384,26 @@ export default function MapView() {
   const [mapReady, setMapReady] = createSignal(false);
   const [clickPopupPos, setClickPopupPos] = createSignal<{ lat: number, lng: number } | null>(null);
   const isFollowing = useStore($isFollowing);
+  const globalRate = useStore($globalRate);
+  const glowSize = createMemo(() => {
+    const rate = globalRate();
+    const minGlow = 2;
+    const maxGlow = 30;
+    const minRate = 1;
+    const maxRate = 100;
+    const t = Math.min(Math.max((rate - minRate) / (maxRate - minRate), 0), 1);
+    return minGlow + t * (maxGlow - minGlow);
+  });
+
+  const glowOpacity = createMemo(() => {
+    const rate = globalRate();
+    const minOpacity = 0.1;
+    const maxOpacity = 0.8;
+    const minRate = 1;
+    const maxRate = 100;
+    const t = Math.min(Math.max((rate - minRate) / (maxRate - minRate), 0), 1);
+    return minOpacity + t * (maxOpacity - minOpacity);
+  });
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
   const playerMarkers = new Map<string, maplibregl.Marker>();
@@ -1464,6 +1484,17 @@ export default function MapView() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div
+        class="rate-glow"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          'pointer-events': 'none',
+          'z-index': 5,
+          '--glow-size': `${glowSize()}px`,
+          '--glow-opacity': glowOpacity(),
+        }}
+      />
       <div ref={mapContainer} style={{ width: '100%', height: '100%', background: '#eee' }} />
       
       <Show when={clickPopupPos()}>
@@ -1654,6 +1685,17 @@ export default function MapView() {
           0% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.15); opacity: 0.8; }
           100% { transform: scale(1); opacity: 1; }
+        }
+
+        .rate-glow {
+          box-shadow: inset 0 0 var(--glow-size) calc(var(--glow-size) / 2) rgba(255, 0, 0, var(--glow-opacity));
+          animation: pulse-glow 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+          0% { box-shadow: inset 0 0 var(--glow-size) calc(var(--glow-size) / 2) rgba(255, 0, 0, var(--glow-opacity)); }
+          50% { box-shadow: inset 0 0 calc(var(--glow-size) * 1.5) calc(var(--glow-size) * 0.75) rgba(255, 0, 0, calc(var(--glow-opacity) * 0.6)); }
+          100% { box-shadow: inset 0 0 var(--glow-size) calc(var(--glow-size) / 2) rgba(255, 0, 0, var(--glow-opacity)); }
         }
       `}</style>
     </div>
