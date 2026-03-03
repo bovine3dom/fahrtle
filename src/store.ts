@@ -7,6 +7,7 @@ import { throttle } from 'throttle-debounce';
 import { sharedFakeServer } from './fakeServer';
 import { type Difficulty } from './shared/gameLogic';
 import { haversineDist } from './utils/geo';
+import { formatRowTime } from './utils/format';
 
 export type { Difficulty };
 
@@ -664,7 +665,7 @@ export function submitWaypointsBatch(points: {
         y: points[0].lat,
         arrivalTime: waitArrival,
         speedFactor: waypointSpeeds[0],
-        stopName: `waiting for ${points[0].route_departure_time} ${points[0].route_short_name || ''}`.trim(),
+        stopName: `waiting for ${formatRowTime(points[0].route_departure_time || '')} ${points[0].route_short_name || ''}`.trim(),
         isWait: true,
         isInterstop: false,
         route_color: points[0].route_color,
