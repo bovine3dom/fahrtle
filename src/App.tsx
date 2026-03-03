@@ -388,7 +388,7 @@ function App() {
             position: 'absolute', top: '10px', left: '10px', 'z-index': 10,
             background: 'rgba(255,255,255,0.9)', padding: '12px', 'border-radius': '8px',
             'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-            'width': minimized() ? '280px' : '320px',
+            'width': '320px',
             'max-height': 'calc(100% - 100px)',
             'display': 'flex',
             'flex-direction': 'column',
@@ -526,7 +526,7 @@ function App() {
                         'text-overflow': 'ellipsis',
                         'flex': 1
                       }}>
-                        {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `Get off at ${nextWaypoint()?.stopName || ''}`)}
+                        {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `${nextWaypoint()?.stopName || ''}`)}
                       </span>
                     </button>
                     <Show when={futureWaypoints().length > 1}>
@@ -650,7 +650,7 @@ function App() {
                           'box-shadow': mode === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
                           transform: mode === 'auto' ? 'translateY(1px)' : 'none',
                         }}
-                        title="Auto (1x)"
+                        title="Auto"
                       >
                         ▶️ 
                       </button>
@@ -1166,7 +1166,7 @@ function App() {
                                   'box-shadow': mode() === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
                                   transform: mode() === 'auto' ? 'translateY(1px)' : 'none',
                                 }}
-                                title="Auto (1x)"
+                                title="Auto"
                               >
                                 ▶️ Auto
                               </button>
