@@ -20,22 +20,10 @@ import WinModal from './WinModal';
 import SettingsModal from './SettingsModal';
 import TutorialModal from './TutorialModal';
 
-function getSpeedButtonState(desiredRate: number | undefined, forceRealtime: boolean | undefined) {
-  const isSnoozing = (desiredRate || 1) > 1 && !forceRealtime;
-  const isForcing = forceRealtime;
-  if (isForcing) return { icon: '⏱', label: 'Forcing realtime (1x)', style: { bg: colours.success, border: colours.successDark, color: colours.white } };
-  if (isSnoozing) return { icon: '⏩', label: 'Snoozing (500x)', style: { bg: colours.primary, border: colours.primaryDark, color: colours.white } };
-  return { icon: '💤', label: 'Snooze', style: { bg: colours.bg, border: colours.border, color: colours.text } };
-}
-
-function handleSpeedCycle(desiredRate: number | undefined, forceRealtime: boolean | undefined, doToggle: () => void, doForce: () => void) {
-  const isForcing = forceRealtime;
-  const isSnoozing = (desiredRate || 1) > 1;
-  if (isForcing || isSnoozing) {
-    doForce();
-  } else {
-    doToggle();
-  }
+function getSpeedMode(desiredRate: number | undefined, forceRealtime: boolean | undefined): 'auto' | 'snooze' | 'realtime' {
+  if (forceRealtime) return 'realtime';
+  if ((desiredRate || 1) > 1) return 'snooze';
+  return 'auto';
 }
 
 function App() {
@@ -617,22 +605,71 @@ function App() {
 
                 {roomState() === 'RUNNING' && (() => {
                   const me = players()[myId()!];
-                  const state = getSpeedButtonState(me?.desiredRate, me?.forceRealtime);
+                  const mode = getSpeedMode(me?.desiredRate, me?.forceRealtime);
+                  const handleAutoClick = () => {
+                    if (mode === 'snooze') toggleSnooze();
+                    else if ((mode === 'realtime') || (mode === 'auto')) forceRealtime();
+                  };
+                  const handleSnoozeClick = () => {
+                    if (mode === 'auto') toggleSnooze();
+                    else if (mode === 'snooze') toggleSnooze(); // toggle off -> auto
+                    else if (mode === 'realtime') {
+                      forceRealtime();
+                      setTimeout(() => toggleSnooze(), 0);
+                    }
+                  };
+                  const handleRealtimeClick = () => {
+                    if (mode === 'realtime') forceRealtime(); // toggle off -> auto
+                    else forceRealtime();
+                  };
                   return (
-                    <button
-                      onClick={() => handleSpeedCycle(me?.desiredRate, me?.forceRealtime, toggleSnooze, forceRealtime)}
-                      style={{
-                        padding: '8px', 'background': state.style.bg,
-                        color: state.style.color,
-                        border: `1px solid ${state.style.border}`,
-                        'border-radius': '4px', cursor: 'pointer', 'font-size': '1.2em', 'font-weight': 'bold',
-                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center',
-                        'width': '42px', 'flex-shrink': 0
-                      }}
-                      title={`${state.label} (cycle to change)`}
-                    >
-                      <span>{state.icon}</span>
-                    </button>
+                    <div style={{ display: 'flex', 'flex-shrink': 0 }}>
+                      <button
+                        onClick={handleRealtimeClick}
+                        style={{
+                          padding: '6px 8px', 'background': mode === 'realtime' ? colours.success : colours.bg,
+                          color: mode === 'realtime' ? colours.white : colours.text,
+                          border: `1px solid ${mode === 'realtime' ? colours.successDark : colours.border}`,
+                          'border-right': 'none', 'border-radius': '4px 0 0 4px',
+                          cursor: 'pointer', 'font-size': '1em',
+                          'box-shadow': mode === 'realtime' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                          transform: mode === 'realtime' ? 'translateY(1px)' : 'none',
+                        }}
+                        title="Realtime (1x forced)"
+                      >
+                        ⏱
+                      </button>
+                      <button
+                        onClick={handleAutoClick}
+                        style={{
+                          padding: '6px 8px', 'background': mode === 'auto' ? colours.primary : colours.bg,
+                          color: mode === 'auto' ? colours.white : colours.text,
+                          border: `1px solid ${mode === 'auto' ? colours.primaryDark : colours.border}`,
+                          'border-right': 'none', 'border-left': 'none', 'border-radius': '0',
+                          cursor: 'pointer', 'font-size': '1em',
+                          'box-shadow': mode === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                          transform: mode === 'auto' ? 'translateY(1px)' : 'none',
+                        }}
+                        title="Auto (1x)"
+                      >
+                        ▶️ 
+                      </button>
+                      <button
+                        onClick={handleSnoozeClick}
+                        style={{
+                          padding: '6px 8px', 'background': mode === 'snooze' ? colours.primary : colours.bg,
+                          color: mode === 'snooze' ? colours.white : colours.text,
+                          border: `1px solid ${mode === 'snooze' ? colours.primaryDark : colours.border}`,
+                          'border-left': 'none', 'border-radius': '0 4px 4px 0',
+                          cursor: 'pointer', 'font-size': '1em',
+                          'box-shadow': mode === 'snooze' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                          transform: mode === 'snooze' ? 'translateY(1px)' : 'none',
+                        }}
+                        title="Snooze (500x)"
+                      >
+                        ⏩
+                      </button>
+                    </div>
                   );
                 })()}
               </div>
@@ -1081,22 +1118,75 @@ function App() {
                   <Show when={roomState() === 'RUNNING'}>
                     <Show when={players()[myId()!]}>
                       {(me) => {
-                        const state = createMemo(() => getSpeedButtonState(me().desiredRate, me().forceRealtime));
+                        const mode = createMemo(() => getSpeedMode(me().desiredRate, me().forceRealtime));
+                        const handleAutoClick = () => {
+                          if (mode() === 'snooze') toggleSnooze();
+                          else if ((mode() === 'realtime') || (mode() === 'auto')) forceRealtime();
+                        };
+                        const handleSnoozeClick = () => {
+                          if (mode() === 'auto') toggleSnooze();
+                          else if (mode() === 'snooze') toggleSnooze(); // toggle off -> auto
+                          else if (mode() === 'realtime') {
+                            forceRealtime();
+                            setTimeout(() => toggleSnooze(), 0);
+                          }
+                        };
+                        const handleRealtimeClick = () => {
+                          if (mode() === 'realtime') forceRealtime(); // toggle off -> auto
+                          else forceRealtime();
+                        };
                         return (
                           <>
-                            <button
-                              onClick={() => handleSpeedCycle(me().desiredRate, me().forceRealtime, toggleSnooze, forceRealtime)}
-                              style={{
-                                width: '100%', padding: '8px', 'background': state().style.bg,
-                                color: state().style.color,
-                                border: `1px solid ${state().style.border}`,
-                                'border-radius': '4px', cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                                'margin-top': '8px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                              }}
-                              title={`${state().label} (cycle to change)`}
-                            >
-                              <span>{state().icon}</span> {state().label}
-                            </button>
+                            <div style={{ display: 'flex', 'margin-top': '8px' }}>
+                              <button
+                                onClick={handleRealtimeClick}
+                                style={{
+                                  flex: 1, padding: '8px', 'background': mode() === 'realtime' ? colours.success : colours.bg,
+                                  color: mode() === 'realtime' ? colours.white : colours.text,
+                                  border: `1px solid ${mode() === 'realtime' ? colours.successDark : colours.border}`,
+                                  'border-right': 'none', 'border-radius': '4px 0 0 4px',
+                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
+                                  'box-shadow': mode() === 'realtime' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                  transform: mode() === 'realtime' ? 'translateY(1px)' : 'none',
+                                }}
+                                title="Realtime (1x forced)"
+                              >
+                                ⏱ Realtime
+                              </button>
+                              <button
+                                onClick={handleAutoClick}
+                                style={{
+                                  flex: 1, padding: '8px', 'background': mode() === 'auto' ? colours.primary : colours.bg,
+                                  color: mode() === 'auto' ? colours.white : colours.text,
+                                  border: `1px solid ${mode() === 'auto' ? colours.primaryDark : colours.border}`,
+                                  'border-right': 'none', 'border-left': 'none', 'border-radius': '0',
+                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
+                                  'box-shadow': mode() === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                  transform: mode() === 'auto' ? 'translateY(1px)' : 'none',
+                                }}
+                                title="Auto (1x)"
+                              >
+                                ▶️ Auto
+                              </button>
+                              <button
+                                onClick={handleSnoozeClick}
+                                style={{
+                                  flex: 1, padding: '8px', 'background': mode() === 'snooze' ? colours.primary : colours.bg,
+                                  color: mode() === 'snooze' ? colours.white : colours.text,
+                                  border: `1px solid ${mode() === 'snooze' ? colours.primaryDark : colours.border}`,
+                                  'border-left': 'none', 'border-radius': '0 4px 4px 0',
+                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
+                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
+                                  'box-shadow': mode() === 'snooze' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                  transform: mode() === 'snooze' ? 'translateY(1px)' : 'none',
+                                }}
+                                title="Snooze (500x)"
+                              >
+                                ⏩ Snooze
+                              </button>
+                            </div>
                             <Show when={me().finishTime}>
                               <button
                                 onClick={() => setShowWinModal(true)}
