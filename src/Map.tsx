@@ -18,6 +18,8 @@ import { getBeforeId } from './utils/layer_order';
 import { map_update_lock } from './utils/map_lock';
 import { give_me_more_trains } from './utils/i_bloody_love_trains';
 import { getCountry, countryToFlag } from "./utils/tiny-countries";
+import { Application, Sprite, Texture } from 'pixi.js';
+import { ZoomBlurFilter} from 'pixi-filters';
 
 let mapInstance: maplibregl.Map;
 
@@ -413,6 +415,7 @@ export default function MapView() {
         zoom: 14,
         fadeDuration: 0,
         doubleClickZoom: false,
+        canvasContextAttributes: {preserveDrawingBuffer: true},
       });
     } catch (err) {
       console.error('[Map] Error creating MapLibre instance:', err);
@@ -669,7 +672,56 @@ export default function MapView() {
       }
     }
 
-    mapInstance.on('load', () => {
+    mapInstance.on('load', async () => {
+      const mapCanvas = mapInstance.getCanvas();
+
+      const pixiApp = new Application();
+      await pixiApp.init({
+        width: mapCanvas.clientWidth,
+        height: mapCanvas.clientHeight,
+        backgroundAlpha: 0,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+      });
+
+      const pixiCanvas = pixiApp.canvas;
+      pixiCanvas.style.position = 'absolute';
+      pixiCanvas.style.top = '0';
+      pixiCanvas.style.left = '0';
+      pixiCanvas.style.width = '100%';
+      pixiCanvas.style.height = '100%';
+      pixiCanvas.style.pointerEvents = 'none'; 
+      mapContainer.appendChild(pixiCanvas);
+
+      const texture = Texture.from(mapCanvas);
+      texture.source.resolution = window.devicePixelRatio || 1;
+      const sprite = new Sprite(texture);
+      sprite.width = pixiApp.screen.width;
+      sprite.height = pixiApp.screen.height;
+
+      const zoomBlur = new ZoomBlurFilter({
+        strength: 0,
+        center:[pixiApp.screen.width / 2, pixiApp.screen.height / 2],
+        innerRadius: 80,
+        radius: -1
+      });
+
+      sprite.filters = [zoomBlur];
+      pixiApp.stage.addChild(sprite);
+      mapInstance.on('render', () => {
+        texture.source.update();
+        zoomBlur.strength = (Math.max($globalRate.get() - 1, 0) / 2000)**2;
+      });
+
+      mapInstance.on('resize', () => {
+        const newWidth = mapCanvas.clientWidth;
+        const newHeight = mapCanvas.clientHeight;
+        pixiApp.renderer.resize(newWidth, newHeight);
+        sprite.width = pixiApp.screen.width;
+        sprite.height = pixiApp.screen.height;
+        zoomBlur.center =[pixiApp.screen.width / 2, pixiApp.screen.height / 2];
+      });
+
       mapInstance.boxZoom.disable(); // give shift back
       // mapInstance.setProjection({type: 'globe'}); // kinda trippy
       mapInstance.addSource('course-markers', {
