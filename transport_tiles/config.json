@@ -7,25 +7,25 @@
     "maxzoom": 14,
     "basezoom": 14,
     "include_ids": false,
-    "compress": "gzip"
+    "compress": "none"
   },
   "layers": {
-    "transit_routes": {
+    "public_transport_routes": {
       "minzoom": 5,
       "maxzoom": 14,
       "description": "The actual lines representing bus, train, and ferry routes."
     },
-    "transit_tracks": {
+    "public_transport_tracks": {
       "minzoom": 10,
       "maxzoom": 14,
       "description": "Physical infrastructure like train tracks and subway lines."
     },
-    "transit_platforms": {
+    "public_transport_platforms": {
       "minzoom": 13,
       "maxzoom": 14,
       "description": "The physical footprint polygons of stations and waiting areas."
     },
-    "transit_stops": {
+    "public_transport_stops": {
       "minzoom": 12,
       "maxzoom": 14,
       "description": "Nodes representing bus stops and train stations."

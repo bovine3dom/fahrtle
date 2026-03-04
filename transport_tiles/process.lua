@@ -12,7 +12,7 @@ function node_function()
     local amenity = Find("amenity")
 
     if highway == "bus_stop" or railway == "station" or railway == "stop" or railway == "halt" or pt == "station" or pt == "stop_position" or amenity == "ferry_terminal" then
-        Layer("transit_stops", false)
+        Layer("public_transport_stops", false)
         Attribute("name", Find("name"))
         Attribute("network", Find("network"))
         Attribute("operator", Find("operator"))
@@ -36,14 +36,14 @@ function way_function()
     end
 
     if pt == "platform" or highway == "platform" or railway == "platform" then
-        Layer("transit_platforms", true) 
+        Layer("public_transport_platforms", true) 
         Attribute("name", Find("name"))
         Attribute("layer", Find("layer"))
         return
     end
 
     if railway == "rail" or railway == "subway" or railway == "tram" or railway == "light_rail" or railway == "funicular" or railway == "narrow_gauge" then
-        Layer("transit_tracks", false)
+        Layer("public_transport_tracks", false)
         Attribute("railway", railway)
         Attribute("tunnel", Find("tunnel"))
         Attribute("layer", Find("layer"))
@@ -96,7 +96,7 @@ function way_function()
     local route_ref = table.concat(final_refs, ", ")
 
     if is_transit then
-        Layer("transit_routes", false)
+        Layer("public_transport_routes", false)
         Attribute("route", route_type)
         Attribute("ref", route_ref)
         Attribute("network", route_network)
