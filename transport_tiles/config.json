@@ -16,7 +16,7 @@
       "description": "Physical rails"
     },
     "public_transport_routes_train": {
-      "minzoom": 4,
+      "minzoom": 8,
       "maxzoom": 14,
       "description": "National and regional trains"
     },
