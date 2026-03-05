@@ -7,6 +7,7 @@ const ideal_hierarchy: string[] = [
   "water-bathymetry",
   "mapterhorn-layer",
   "openrailwaymap-layer",
+  "public-transport",
   "course-markers-h3-filled", // finish area hexes
   "h3-cell-line", // pink hex departure board 'search area' on click
   "preview-route-casing", // white outline around player tracks

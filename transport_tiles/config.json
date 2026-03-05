@@ -10,25 +10,45 @@
     "compress": "none"
   },
   "layers": {
-    "public_transport_routes": {
-      "minzoom": 5,
-      "maxzoom": 14,
-      "description": "The actual lines representing bus, train, and ferry routes."
-    },
     "public_transport_tracks": {
       "minzoom": 10,
       "maxzoom": 14,
-      "description": "Physical infrastructure like train tracks and subway lines."
+      "description": "Physical rails"
     },
-    "public_transport_platforms": {
-      "minzoom": 13,
+    "public_transport_routes_train": {
+      "minzoom": 4,
       "maxzoom": 14,
-      "description": "The physical footprint polygons of stations and waiting areas."
+      "description": "National and regional trains"
     },
-    "public_transport_stops": {
+    "public_transport_routes_ferry": {
+      "minzoom": 4,
+      "maxzoom": 14,
+      "description": "Ferry lines"
+    },
+    "public_transport_routes_subway": {
+      "minzoom": 11,
+      "maxzoom": 14,
+      "description": "Underground metros"
+    },
+    "public_transport_routes_light_rail": {
+      "minzoom": 11,
+      "maxzoom": 14,
+      "description": "Light rail systems"
+    },
+    "public_transport_routes_tram": {
+      "minzoom": 11,
+      "maxzoom": 14,
+      "description": "Trams"
+    },
+    "public_transport_routes_coach": {
+      "minzoom": 8,
+      "maxzoom": 14,
+      "description": "Long distance coaches"
+    },
+    "public_transport_routes_bus": {
       "minzoom": 12,
       "maxzoom": 14,
-      "description": "Nodes representing bus stops and train stations."
+      "description": "Local city buses"
     }
   }
 }

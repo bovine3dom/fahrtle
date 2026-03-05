@@ -1,0 +1,231 @@
+{
+  "version": 8,
+  "name": "Transit Map Style",
+  "metadata": {
+    "maputnik:renderer": "mlgljs"
+  },
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "tiles":[
+        "https://compute.olie.science/versatiles/tiles/planet_transport_only/{z}/{x}/{y}"
+      ],
+      "minzoom": 0,
+      "maxzoom": 14
+    }
+  },
+  "glyphs": "https://tiles.openstreetmap.us/fonts/{fontstack}/{range}.pbf",
+  "sprite": "https://tiles.openfreemap.org/sprites/ofm_f384/ofm",
+  "layers":[
+    {
+      "id": "railways",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_tracks",
+      "filter": ["==", ["geometry-type"], "LineString"],
+      "layout": {
+        "line-join": "round",
+        "line-cap": "round"
+      },
+      "paint": {
+        "line-color": "#888888",
+        "line-width":[
+          "interpolate", ["linear"], ["zoom"],
+          10, 1,
+          14,["match", ["get", "railway"], "rail", 4, "subway", 3, 2]
+        ],
+        "line-dasharray": [
+          "case",["==", ["get", "tunnel"], "yes"], 
+          ["literal", [2, 2]], 
+          ["literal", [1, 0]]
+        ]
+      }
+    },
+    {
+      "id": "transit-lines-ferry-casing",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_ferry",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 14, 5],
+        "line-opacity": 0.2
+      }
+    },
+    {
+      "id": "transit-lines-ferry",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_ferry",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case", ["!=", ["get", "colour"], ""],["get", "colour"], "#555555"],
+        "line-width": ["interpolate",["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-dasharray": [4, 4]
+      }
+    },
+    {
+      "id": "transit-lines-train",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_train",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#444444"],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 4],
+        "line-opacity":["case", ["==", ["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+    {
+      "id": "transit-lines-subway",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_subway",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case",["!=", ["get", "colour"], ""], ["get", "colour"], "#0000ff"],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 3],
+        "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+    {
+      "id": "transit-lines-light_rail",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_light_rail",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#ff8800"],
+        "line-width":["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+    {
+      "id": "transit-lines-tram",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_tram",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color":["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#ff0000"],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-opacity": ["case", ["==",["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+    {
+      "id": "transit-lines-coach",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_coach",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#007700"],
+        "line-width":["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+    {
+      "id": "transit-lines-bus",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_bus",
+      "layout": { "line-join": "round", "line-cap": "round" },
+      "paint": {
+        "line-color": ["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#00aa00"],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-opacity": ["case", ["==",["get", "tunnel"], "yes"], 0.4, 1.0]
+      }
+    },
+
+    {
+      "id": "transit-nodes",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_stops",
+      "filter": ["==", ["geometry-type"], "Point"],
+      "paint": {
+        "circle-radius": 4,
+        "circle-color": "#ffffff",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": ["case", ["!=", ["get", "colour"], ""], ["get", "colour"], "#333333"]
+      }
+    },
+
+    {
+      "id": "transit-line-labels-ferry",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_ferry",
+      "layout": { "symbol-placement": "line", "text-field":["get", "ref"], "text-font": ["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-train",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_train",
+      "layout": { "symbol-placement": "line", "text-field": ["get", "ref"], "text-font":["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-subway",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_subway",
+      "layout": { "symbol-placement": "line", "text-field": ["get", "ref"], "text-font": ["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-light_rail",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_light_rail",
+      "layout": { "symbol-placement": "line", "text-field": ["get", "ref"], "text-font": ["Open Sans Regular"], "text-size":["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-tram",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_tram",
+      "layout": { "symbol-placement": "line", "text-field": ["get", "ref"], "text-font": ["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-coach",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_coach",
+      "layout": { "symbol-placement": "line", "text-field": ["get", "ref"], "text-font": ["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+    {
+      "id": "transit-line-labels-bus",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_routes_bus",
+      "layout": { "symbol-placement": "line", "text-field":["get", "ref"], "text-font": ["Open Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 14], "text-max-angle": 30, "symbol-spacing": 250, "text-transform": "uppercase" },
+      "paint": { "text-color": "#333333", "text-halo-color": "rgba(255, 255, 255, 0.9)", "text-halo-width": 2 }
+    },
+
+    {
+      "id": "transit-labels",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "public_transport_stops",
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Open Sans Regular"],
+        "text-size": 11,
+        "text-variable-anchor":["top", "bottom", "left", "right"],
+        "text-radial-offset": 0.8
+      },
+      "paint": {
+        "text-color": "#333333",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 2
+      }
+    }
+  ]
+}

@@ -6,24 +6,24 @@ function relation_scan_function()
 end
 
 function node_function()
-    local highway = Find("highway")
-    local railway = Find("railway")
-    local pt = Find("public_transport")
-    local amenity = Find("amenity")
+    -- local highway = Find("highway")
+    -- local railway = Find("railway")
+    -- local pt = Find("public_transport")
+    -- local amenity = Find("amenity")
 
-    if highway == "bus_stop" or railway == "station" or railway == "stop" or railway == "halt" or pt == "station" or pt == "stop_position" or amenity == "ferry_terminal" then
-        Layer("public_transport_stops", false)
-        Attribute("name", Find("name"))
-        Attribute("network", Find("network"))
-        Attribute("operator", Find("operator"))
-        Attribute("ref", Find("ref"))
+    -- if highway == "bus_stop" or railway == "station" or railway == "stop" or railway == "halt" or pt == "station" or pt == "stop_position" or amenity == "ferry_terminal" then
+    --     Layer("public_transport_stops", false)
+    --     Attribute("name", Find("name"))
+    --     Attribute("network", Find("network"))
+    --     Attribute("operator", Find("operator"))
+    --     Attribute("ref", Find("ref"))
         
-        if railway == "station" or pt == "station" or amenity == "ferry_terminal" then
-            Attribute("stop_type", "station")
-        else
-            Attribute("stop_type", "stop")
-        end
-    end
+    --     if railway == "station" or pt == "station" or amenity == "ferry_terminal" then
+    --         Attribute("stop_type", "station")
+    --     else
+    --         Attribute("stop_type", "stop")
+    --     end
+    -- end
 end
 
 function way_function()
@@ -35,12 +35,12 @@ function way_function()
         return
     end
 
-    if pt == "platform" or highway == "platform" or railway == "platform" then
-        Layer("public_transport_platforms", true) 
-        Attribute("name", Find("name"))
-        Attribute("layer", Find("layer"))
-        return
-    end
+--    if pt == "platform" or highway == "platform" or railway == "platform" then
+--        Layer("public_transport_platforms", true) 
+--        Attribute("name", Find("name"))
+--        Attribute("layer", Find("layer"))
+--        return
+--    end
 
     if railway == "rail" or railway == "subway" or railway == "tram" or railway == "light_rail" or railway == "funicular" or railway == "narrow_gauge" then
         Layer("public_transport_tracks", false)
@@ -96,7 +96,7 @@ function way_function()
     local route_ref = table.concat(final_refs, ", ")
 
     if is_transit then
-        Layer("public_transport_routes", false)
+        Layer("public_transport_routes_" .. route_type, false)
         Attribute("route", route_type)
         Attribute("ref", route_ref)
         Attribute("network", route_network)

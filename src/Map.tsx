@@ -267,6 +267,9 @@ const getPointer = (targetLat: number, targetLng: number): { x: number, y: numbe
 
 const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecification => {
   switch (setting) {
+    // :(
+    case 'Transport dark':
+    case 'Transport':
     case 'Positron':
       return "https://tiles.openfreemap.org/styles/positron"
     case 'Bright':
@@ -274,7 +277,7 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
     case 'Toner-like':
       return "./toner_ofm.json"
     case 'Monaco':
-      return "./monaco_transport.json"
+      return "./public_transport.json"
     case 'OSM Carto':
       return {
         'version': 8,
@@ -301,54 +304,54 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
       }
     case 'Liberty (3D)':
       return "https://tiles.openfreemap.org/styles/liberty"
-    case 'Transport':
-      return {
-        'version': 8,
-        'sources': {
-          'raster-tiles': {
-            'type': 'raster',
-            'tiles': [
-              `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
-            ],
-            'tileSize': 256,
-            'attribution':
-              '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-          }
-        },
-        'layers': [
-          {
-            'id': 'simple-tiles',
-            'type': 'raster',
-            'source': 'raster-tiles',
-            'minzoom': 0,
-            'maxzoom': 22
-          }
-        ]
-      }
-    case 'Transport dark':
-      return {
-        'version': 8,
-        'sources': {
-          'raster-tiles': {
-            'type': 'raster',
-            'tiles': [
-              `https://tile.thunderforest.com/transport-dark/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
-            ],
-            'tileSize': 256,
-            'attribution':
-              '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-          }
-        },
-        'layers': [
-          {
-            'id': 'simple-tiles',
-            'type': 'raster',
-            'source': 'raster-tiles',
-            'minzoom': 0,
-            'maxzoom': 22
-          }
-        ]
-      }
+    // case 'Transport':
+    //   return {
+    //     'version': 8,
+    //     'sources': {
+    //       'raster-tiles': {
+    //         'type': 'raster',
+    //         'tiles': [
+    //           `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
+    //         ],
+    //         'tileSize': 256,
+    //         'attribution':
+    //           '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+    //       }
+    //     },
+    //     'layers': [
+    //       {
+    //         'id': 'simple-tiles',
+    //         'type': 'raster',
+    //         'source': 'raster-tiles',
+    //         'minzoom': 0,
+    //         'maxzoom': 22
+    //       }
+    //     ]
+    //   }
+    // case 'Transport dark':
+    //   return {
+    //     'version': 8,
+    //     'sources': {
+    //       'raster-tiles': {
+    //         'type': 'raster',
+    //         'tiles': [
+    //           `https://tile.thunderforest.com/transport-dark/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
+    //         ],
+    //         'tileSize': 256,
+    //         'attribution':
+    //           '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+    //       }
+    //     },
+    //     'layers': [
+    //       {
+    //         'id': 'simple-tiles',
+    //         'type': 'raster',
+    //         'source': 'raster-tiles',
+    //         'minzoom': 0,
+    //         'maxzoom': 22
+    //       }
+    //     ]
+    //   }
     case 'Virtual Earth':
       return {
         'version': 8,
@@ -525,6 +528,50 @@ export default function MapView() {
             source: 'openrailwaymap',
             paint: { 'raster-opacity': 1 }
           }, getBeforeId("openrailwaymap-layer", mapInstance));
+        }
+      } finally {
+        unlock();
+      }
+    };
+
+    const updateTransportLayer = async (setting: string) => {
+      const unlock = await map_update_lock.lock();
+      try {
+        const sourceId = 'public-transport';
+        if (!setting) {
+          const existingLayers = mapInstance.getStyle().layers
+          .filter(l => l.id.startsWith(`${sourceId}-`))
+          .map(l => l.id);
+          for (const layerId of existingLayers) {
+            mapInstance.removeLayer(layerId);
+          }
+          if (mapInstance.getSource(sourceId)) {
+            mapInstance.removeSource(sourceId);
+          }
+          return;
+        }
+        const style = await fetch('./public_transport.json').then(r => r.json());
+
+        for (const layer of style.layers) {
+          const fullLayerId = `${sourceId}-${layer.id}`;
+          if (mapInstance.getLayer(fullLayerId)) {
+            mapInstance.removeLayer(fullLayerId);
+          }
+        }
+        if (mapInstance.getSource(sourceId)) {
+          mapInstance.removeSource(sourceId);
+        }
+
+        await ensureMapLoaded(mapInstance);
+
+        mapInstance.addSource(sourceId, style.sources.openmaptiles as any);
+
+        for (const layer of style.layers) {
+          mapInstance.addLayer({
+            ...layer,
+            id: `${sourceId}-${layer.id}`,
+            source: sourceId
+          }, getBeforeId(`${sourceId}-${layer.id}`, mapInstance));
         }
       } finally {
         unlock();
@@ -1010,6 +1057,12 @@ export default function MapView() {
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
       updateRailwaysLayer(setting);
+    });
+
+    createEffect(() => {
+      // backwards compat with old basemap (rip) setting
+      const setting = playerSettings().publicTransportLayer || (["Transport dark", "Transport"].includes(playerSettings().baseMap));
+      updateTransportLayer(setting);
     });
 
     createEffect(() => {
