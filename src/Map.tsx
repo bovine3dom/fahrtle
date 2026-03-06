@@ -3,7 +3,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, $boardMode } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -956,8 +956,9 @@ export default function MapView() {
     });
 
     const context = useStore($lastClickContext);
+    const boardPage = useStore($departureBoardPage);
 
-    const buildQuery = (queryMode: 'departures' | 'arrivals', ctx: NonNullable<ReturnType<typeof context>>) => {
+    const buildQuery = (queryMode: 'departures' | 'arrivals', ctx: NonNullable<ReturnType<typeof context>>, offset: number = 0) => {
       const timeField = queryMode === 'departures' ? 'departure_time' : 'next_arrival';
       const h3Field = queryMode === 'departures' ? 'h3' : 'next_h3';
       const limBy = $playerSettings.get().hidePotentialDuplicateDepartures ? `
@@ -985,7 +986,7 @@ export default function MapView() {
           ${limBy}
         )
         ORDER BY sort_time ASC
-        LIMIT 200
+        LIMIT 200 OFFSET ${offset}
       `;
     };
 
@@ -1013,8 +1014,11 @@ export default function MapView() {
       if (ctx === null) return;
       ctx.clickTime; // force reactivity on repeated clicks in same position
 
-      const departuresQuery = buildQuery('departures', ctx);
-      const arrivalsQuery = buildQuery('arrivals', ctx);
+      $departureBoardPage.set(0);
+      $departureBoardHasMore.set(true);
+
+      const departuresQuery = buildQuery('departures', ctx, 0);
+      const arrivalsQuery = buildQuery('arrivals', ctx, 0);
 
       $departureBoardResults.set({ departures: [], arrivals: [] });
 
@@ -1023,6 +1027,7 @@ export default function MapView() {
         .then(departuresData => {
           if (departuresData.length > 0) {
             $departureBoardResults.setKey('departures', departuresData);
+            $departureBoardHasMore.set(departuresData.length >= 200);
             $previewRoute.set(null);
             $boardMinimized.set(false);
           }
@@ -1035,6 +1040,36 @@ export default function MapView() {
         })
         .catch(err => {
           console.error(`[ClickHouse] Arrivals query failed:`, err);
+        });
+    });
+
+    createEffect(() => {
+      const ctx = context();
+      const page = boardPage();
+      if (ctx === null || page === 0) return;
+
+      const mode = $boardMode.get();
+      const offset = page * 200;
+      const query = buildQuery(mode, ctx, offset);
+
+      $departureBoardLoadingMore.set(true);
+
+      chQuery(query)
+        .then(res => processResults(res, mode))
+        .then(newData => {
+          if (newData.length > 0) {
+            const current = $departureBoardResults.get();
+            const key = mode as 'departures' | 'arrivals';
+            $departureBoardResults.setKey(key, [...current[key], ...newData]);
+            $departureBoardHasMore.set(newData.length >= 200);
+          } else {
+            $departureBoardHasMore.set(false);
+          }
+          $departureBoardLoadingMore.set(false);
+        })
+        .catch(err => {
+          console.error(`[ClickHouse] Load more query failed:`, err);
+          $departureBoardLoadingMore.set(false);
         });
     });
 

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, type Coords } from './utils/geo';
@@ -81,11 +81,48 @@ export default function DepartureBoard() {
   // const mapZoom = useStore($mapZoom);
   const preview = useStore($previewRoute);
 
+  const loadingMore = useStore($departureBoardLoadingMore);
+  const hasMore = useStore($departureBoardHasMore);
+
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [distFilter, setDistFilter] = createSignal<number | null>(null);
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   const [flashError, setFlashError] = createSignal(false);
+
+  createEffect(() => {
+    const res = results();
+    const sentinel = sentinelEl();
+    if (res && sentinel && res.length > 0) {
+      requestAnimationFrame(() => {
+        const rect = sentinel.getBoundingClientRect();
+        const parent = sentinel.parentElement;
+        if (parent) {
+          const parentRect = parent.getBoundingClientRect();
+          const isVisible = rect.top < parentRect.bottom;
+          if (isVisible && !loadingMore() && hasMore()) {
+            $departureBoardPage.set($departureBoardPage.get() + 1);
+          }
+        }
+      });
+    }
+  });
+
+  createEffect(() => {
+    const res = results();
+    const sentinel = sentinelEl();
+    if (res && sentinel && res.length > 0) {
+      const rect = sentinel.getBoundingClientRect();
+      const parent = sentinel.parentElement;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const isVisible = rect.top < parentRect.bottom;
+        if (isVisible && !loadingMore() && hasMore()) {
+          $departureBoardPage.set($departureBoardPage.get() + 1);
+        }
+      }
+    }
+  });
 
   const results = createMemo(() => {
     const data = allResults();
@@ -118,6 +155,22 @@ export default function DepartureBoard() {
   };
 
   const [myPos, setMyPos] = createSignal<Coords | null>(null);
+  const [sentinelEl, setSentinelEl] = createSignal<HTMLDivElement | null>(null);
+
+  createEffect(() => {
+    const sentinel = sentinelEl();
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry.isIntersecting && !loadingMore() && hasMore()) {
+        $departureBoardPage.set($departureBoardPage.get() + 1);
+      }
+    }, { rootMargin: '100px' });
+
+    observer.observe(sentinel);
+    onCleanup(() => observer.disconnect());
+  });
 
   onMount(() => {
     const interval = setInterval(() => {
@@ -752,6 +805,14 @@ export default function DepartureBoard() {
                   );
                 }}
               </For>
+              <div ref={setSentinelEl} class="table-sentinel">
+                <Show when={loadingMore()}>
+                  <div class="loading-more">Loading more...</div>
+                </Show>
+                <Show when={!hasMore() && displayResults().length > 0}>
+                  <div class="no-more-results">No more {mode()}</div>
+                </Show>
+              </div>
             </div>
           </div>
         </div>
@@ -1311,6 +1372,23 @@ export default function DepartureBoard() {
         .table-body::-webkit-scrollbar-thumb {
           background: var(--db-scrollbar-thumb);
           border-radius: 4px;
+        }
+
+        .table-sentinel {
+          padding: 16px;
+          text-align: center;
+          color: var(--db-text-muted);
+          font-size: 0.9rem;
+          min-height: 1px;
+        }
+
+        .loading-more {
+          color: var(--db-accent-yellow);
+          font-weight: 700;
+        }
+
+        .no-more-results {
+          opacity: 0.6;
         }
 
         .table-body .col-time {

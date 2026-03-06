@@ -124,6 +124,9 @@ interface DepartureBoardResults {
   arrivals: DepartureResult[];
 }
 export const $departureBoardResults = map<DepartureBoardResults>({ departures: [], arrivals: [] });
+export const $departureBoardPage = atom(0);
+export const $departureBoardLoadingMore = atom(false);
+export const $departureBoardHasMore = atom(true);
 export const $boardMode = atom<'departures' | 'arrivals'>('departures');
 export const $lastClickContext = atom<{ h3Conditions: string, targetMinutes: number, stopTimeZone: string, clickTime: number } | null>(null);
 export const $stopTimeZone = atom<string>('Europe/Paris');
