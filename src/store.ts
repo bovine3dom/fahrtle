@@ -517,7 +517,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
   
   if (nonInterstopWaypoints.length === 0) return;
 
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080';
+  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
 
   try {
     await fetch(`${apiUrl}api/ghosts/${dailyRaceIndex}`, {
