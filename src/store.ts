@@ -175,6 +175,49 @@ export function updatePlayerStats(updater: (stats: PlayerStats) => PlayerStats):
   saveStats(updated);
 }
 
+const createEmptyGameStats = (): PlayerStats => ({
+  lastPlayedDate: '',
+  daysPlayed: 0,
+  racesStarted: 0,
+  racesFinished: 0,
+  countriesVisited: [],
+  byCountry: {},
+});
+
+const GAME_STATS_KEY = 'fahrtle_current_game_stats';
+
+function loadCurrentGameStats(): PlayerStats {
+  try {
+    const raw = localStorage.getItem(GAME_STATS_KEY);
+    if (!raw) return createEmptyGameStats();
+    return JSON.parse(raw);
+  } catch {
+    return createEmptyGameStats();
+  }
+}
+
+function saveCurrentGameStats(stats: PlayerStats): void {
+  try {
+    localStorage.setItem(GAME_STATS_KEY, JSON.stringify(stats));
+  } catch { /* storage full or unavailable */ }
+}
+
+export const $currentGameStats = atom<PlayerStats>(typeof window !== 'undefined' ? loadCurrentGameStats() : createEmptyGameStats());
+
+export function updateCurrentGameStats(updater: (stats: PlayerStats) => PlayerStats): void {
+  const current = $currentGameStats.get();
+  const updated = updater(current);
+  $currentGameStats.set(updated);
+  saveCurrentGameStats(updated);
+}
+
+export function resetCurrentGameStats(): void {
+  $currentGameStats.set(createEmptyGameStats());
+  try {
+    localStorage.removeItem(GAME_STATS_KEY);
+  } catch { /* ignore */ }
+}
+
 import { defaultPlayerSettings } from './utils/playerSettings';
 type SettingsType = typeof defaultPlayerSettings;
 type SettingsValue = { [K in keyof SettingsType]: any };

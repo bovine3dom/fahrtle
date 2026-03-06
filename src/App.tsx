@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats, $isRerun } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats, $isRerun, updateCurrentGameStats, resetCurrentGameStats, $currentGameStats } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -309,11 +309,16 @@ function App() {
     const today = new Date().toISOString().split('T')[0];
 
     if (prevRs !== 'RUNNING' && rs === 'RUNNING') {
+      resetCurrentGameStats();
       updatePlayerStats((stats) => ({
         ...stats,
         racesStarted: stats.racesStarted + 1,
         lastPlayedDate: stats.lastPlayedDate !== today ? today : stats.lastPlayedDate,
         daysPlayed: stats.lastPlayedDate !== today ? stats.daysPlayed + 1 : stats.daysPlayed,
+      }));
+      updateCurrentGameStats((stats) => ({
+        ...stats,
+        racesStarted: stats.racesStarted + 1,
       }));
     }
     setLastTrackedRoomState(rs);
@@ -334,6 +339,10 @@ function App() {
           const currentStats = $playerStats.get();
           const updatedStats = await computeStatsDelta(currentStats, newWaypoints, false, today, previousWaypoint);
           updatePlayerStats(() => updatedStats);
+
+          const currentGameStats = $currentGameStats.get();
+          const updatedGameStats = await computeStatsDelta(currentGameStats, newWaypoints, false, today, previousWaypoint);
+          updateCurrentGameStats(() => updatedGameStats);
         })();
       }
     }

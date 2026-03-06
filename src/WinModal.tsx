@@ -1,5 +1,6 @@
 import { createSignal, createEffect, createMemo } from 'solid-js';
-import { type Player, $gameBounds, $players, $gameStartTime, $playerStats } from './store';
+import { useStore } from '@nanostores/solid';
+import { type Player, $gameBounds, $players, $gameStartTime, $playerStats, $currentGameStats } from './store';
 import { getTravelSummary } from './utils/summary';
 import { sensibleNumber } from './utils/format';
 import { formatDuration } from './utils/time';
@@ -31,7 +32,10 @@ const WinModal = (props: WinModalProps) => {
   const [stealthMode, setStealthMode] = createSignal(false);
   const [travelSummary, setTravelSummary] = createSignal('Loading...');
   const [activeTab, setActiveTab] = createSignal<'summary' | 'stats'>('summary');
-  const statsValue = $playerStats.get();
+  const [showThisGame, setShowThisGame] = createSignal(false);
+  const playerStats = useStore($playerStats);
+  const currentGameStats = useStore($currentGameStats);
+  const displayedStats = createMemo(() => showThisGame() ? currentGameStats() : playerStats());
 
   const stig = () => Object.values($players.get()).find(p => p.id === 'the-stig-🏎️');
   const stigDuration = () => {
@@ -72,7 +76,13 @@ const WinModal = (props: WinModalProps) => {
         )}
 
         {activeTab() === 'stats' && (
-          <StatsTab stats={statsValue} />
+          <>
+            <label style={{ display: 'flex', 'align-items': 'center', gap: '8px', 'font-size': '0.85em', cursor: 'pointer', 'margin-bottom': '8px' }}>
+              <input type="checkbox" checked={showThisGame()} onChange={(e) => setShowThisGame(e.currentTarget.checked)} />
+              This game only
+            </label>
+            <StatsTab stats={displayedStats()} />
+          </>
         )}
 
         <div style={s.row}>
