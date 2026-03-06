@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { serve, type ServerWebSocket } from "bun";
 import {
   type Room,
@@ -16,12 +17,10 @@ type GhostEntry = {
   playerId: string;
   playerName: string;
   color?: string;
-  waypoints: Waypoint[];
+  waypoints: string;
   finishTime: number;
   submittedAt: number;
 };
-
-const ghostsByRaceIndex = new Map<string, GhostEntry[]>();
 
 type WSData = {
   roomId: string | null;
@@ -35,6 +34,35 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+const db = new Database("ghosts.db", { create: true });
+db.exec("PRAGMA journal_mode = WAL;"); // improve write performance
+db.run(`
+  CREATE TABLE IF NOT EXISTS ghosts (
+    raceIndex TEXT,
+    playerId TEXT,
+    version REAL DEFAULT 0.1,
+    playerName TEXT,
+    color TEXT,
+    waypoints TEXT,
+    finishTime REAL,
+    submittedAt INTEGER,
+    PRIMARY KEY(raceIndex, playerId, version)
+  )
+`);
+
+const getGhostsQuery = db.prepare("SELECT * FROM ghosts WHERE raceIndex = ?");
+const upsertGhostQuery = db.prepare(`
+  INSERT INTO ghosts (raceIndex, playerId, playerName, color, waypoints, finishTime, submittedAt)
+  VALUES ($raceIndex, $playerId, $playerName, $color, $waypoints, $finishTime, $submittedAt)
+  ON CONFLICT(raceIndex, playerId, version) DO UPDATE SET
+    playerName = $playerName,
+    color = $color,
+    waypoints = $waypoints,
+    finishTime = $finishTime,
+    submittedAt = $submittedAt
+  WHERE $finishTime < ghosts.finishTime
+`);
 
 const server = serve<WSData>({
   port: 8080,
@@ -52,47 +80,34 @@ const server = serve<WSData>({
       }
 
       if (req.method === 'GET') {
-        const ghosts = ghostsByRaceIndex.get(raceIndex) || [];
+        const rows = getGhostsQuery.all(raceIndex) as GhostEntry[];
+        const ghosts = rows.map(g => ({
+          ...g,
+          waypoints: JSON.parse(g.waypoints) as Waypoint[]
+        }));
         return new Response(JSON.stringify(ghosts), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
       if (req.method === 'POST') {
-        return req.json().then((body: { playerId: string; playerName: string; color?: string; waypoints: Waypoint[]; finishTime: number }) => {
+        return req.json().then((body) => {
           const { playerId, playerName, color, waypoints, finishTime } = body;
-
-          if (!playerId || !waypoints || !finishTime) {
-            return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: corsHeaders });
-          }
-
-          if (!ghostsByRaceIndex.has(raceIndex)) {
-            ghostsByRaceIndex.set(raceIndex, []);
-          }
-
-          const ghosts = ghostsByRaceIndex.get(raceIndex)!;
-          const existingIdx = ghosts.findIndex(g => g.playerId === playerId);
-
-          const newEntry: GhostEntry = {
-            playerId,
-            playerName,
-            color,
-            waypoints: waypoints,
-            finishTime,
-            submittedAt: Date.now()
-          };
-
-          if (existingIdx === -1) {
-            ghosts.push(newEntry);
-          } else if (finishTime < ghosts[existingIdx].finishTime) {
-            ghosts[existingIdx] = newEntry;
-          }
-
+          db.transaction(() => {
+            upsertGhostQuery.run({
+              $raceIndex: raceIndex,
+              $playerId: playerId,
+              $playerName: playerName,
+              $color: color ?? null,
+              $waypoints: JSON.stringify(waypoints),
+              $finishTime: finishTime,
+              $submittedAt: Date.now()
+            });
+          })();
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-        }).catch(() => {
-          return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: corsHeaders });
         });
       }
+
 
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
     }
