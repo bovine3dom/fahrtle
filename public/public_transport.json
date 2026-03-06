@@ -70,7 +70,7 @@
       "layout": { "line-join": "round", "line-cap": "round" },
       "paint": {
         "line-color": ["case", ["all", ["has", "colour"], ["!=", ["get", "colour"], ""], ["!=", ["downcase", ["get", "colour"]], "black"], ["!=", ["downcase", ["get", "colour"]], "#000000"]], ["get", "colour"], ["literal", "#0000ff"]],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 3],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 4],
         "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 1.0, 1.0]
       }
     },
@@ -82,7 +82,7 @@
       "layout": { "line-join": "round", "line-cap": "round" },
       "paint": {
         "line-color": ["case", ["all", ["has", "colour"], ["!=", ["get", "colour"], ""], ["!=", ["downcase", ["get", "colour"]], "black"], ["!=", ["downcase", ["get", "colour"]], "#000000"]], ["get", "colour"], ["literal", "#ff8800"]],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 4],
         "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 1.0, 1.0]
       }
     },
@@ -94,7 +94,7 @@
       "layout": { "line-join": "round", "line-cap": "round" },
       "paint": {
         "line-color": ["case", ["all", ["has", "colour"], ["!=", ["get", "colour"], ""], ["!=", ["downcase", ["get", "colour"]], "black"], ["!=", ["downcase", ["get", "colour"]], "#000000"]], ["get", "colour"], ["literal", "#ff0000"]],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 3],
         "line-opacity": ["case", ["==", ["get", "tunnel"], "yes"], 1.0, 1.0]
       }
     },
