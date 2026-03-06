@@ -30,4 +30,4 @@ export const formatRowTime = (timeStr: string) => {
     }
 };
 
-export const sensibleNumber = (x: number) => Number.parseFloat(x.toPrecision(2)).toLocaleString('en-GB')
+export const sensibleNumber = (x: number, precision = 2) => Number.parseFloat(x.toPrecision(precision)).toLocaleString('en-GB')

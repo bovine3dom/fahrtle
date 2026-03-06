@@ -16,8 +16,41 @@ const routeTypeConfigs: Record<string, RouteTypeConfig> = {
     monorail: { emoji: '🚝', ranges: [12, 405] }
 };
 
-// surely this will come in handy one day
-// type RouteType = keyof typeof routeTypeConfigs;
+type RouteType = keyof typeof routeTypeConfigs;
+
+export const emojiToRouteType: Record<string, RouteType | 'walking'> = {
+    '🚆': 'rail',
+    '🚍': 'coach',
+    '🚇': 'subway',
+    '🚌': 'bus',
+    '🚎': 'trolleybus',
+    '🚋': 'tram',
+    '🚢': 'ferry',
+    '🛫': 'air',
+    '🚠': 'aerialLift',
+    '🚕': 'taxi',
+    '🚝': 'monorail',
+    '🐎': 'misc',
+    '🐾': 'walking',
+    '👽': 'misc', // unknown/alien types go to misc
+};
+
+// Emissions in gCO2e per passenger-kilometre
+export const routeTypeEmissions: Record<RouteType | 'walking', number> = {
+    rail: 4.5, // assuming electric
+    coach: 27,
+    subway: 28, // assuming dirty grid
+    bus: 97,
+    trolleybus: 30,
+    tram: 29,
+    ferry: 113,
+    air: 280,
+    aerialLift: 15,
+    taxi: 150,
+    monorail: 30,
+    misc: 300, // it's probably a norwegian PSO flight
+    walking: 80, // assuming meat-eater, 2g/kcal, 40kcal/km
+};
 
 export const getRouteEmoji = (type: number) => {
     for (const config of Object.values(routeTypeConfigs)) {
