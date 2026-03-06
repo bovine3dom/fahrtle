@@ -10,13 +10,8 @@
     "compress": "none"
   },
   "layers": {
-    "public_transport_tracks": {
-      "minzoom": 10,
-      "maxzoom": 14,
-      "description": "Physical rails"
-    },
     "public_transport_routes_train": {
-      "minzoom": 8,
+      "minzoom": 5,
       "maxzoom": 14,
       "description": "National and regional trains"
     },
@@ -41,12 +36,12 @@
       "description": "Trams"
     },
     "public_transport_routes_coach": {
-      "minzoom": 8,
+      "minzoom": 5,
       "maxzoom": 14,
       "description": "Long distance coaches"
     },
     "public_transport_routes_bus": {
-      "minzoom": 12,
+      "minzoom": 8,
       "maxzoom": 14,
       "description": "Local city buses"
     }
