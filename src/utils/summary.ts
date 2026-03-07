@@ -169,7 +169,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
         } else if (wp.type === 'wait') {
             return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else {
-            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.stop_name_alight ? `→ ${wp.arrival_time} ${wp.stop_name_alight}` : false].filter(Boolean);
+            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name || wp.display_name, wp.stop_name_alight ? `→ ${wp.arrival_time} ${wp.stop_name_alight}` : false].filter(Boolean);
             return `${wp.emoji} ${parts.join(' ')}`;
         }
     }).join('\n');
