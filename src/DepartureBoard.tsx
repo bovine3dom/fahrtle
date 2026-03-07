@@ -10,7 +10,7 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
 import { memoize } from 'micro-memoize';
-import { augmentWithRailRoute } from './utils/railRoute';
+import { augmentWithRailRoute, augmentWithShape } from './utils/railRoute';
 import { nextWaypoint } from './utils/memos';
 import { getServerTime } from './time-sync';
 import { DepartureRow, ActionButton } from './components/DepartureRow';
@@ -418,14 +418,22 @@ export default function DepartureBoard() {
           LIMIT 100
         `;
 
+    const shape_pls = chQuery(`select shape_id from transitous_everything_20260218_trips where trip_id = '${row.trip_id}' and source = '${row.source}' limit 1`).then(res => {
+      if (res.data.length == 0) return { data: [] };
+      return chQuery(`
+        select shape_pt_lat lat, shape_pt_lon lon from transitous_everything_20260218_shapes where shape_id = '${res.data[0].shape_id}'
+     `)
+    });
+    shape_pls.then(console.log);
     chQuery(query)
-      .then(res => {
+      .then(async res => {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
           const stopNames = res.data.map((r: any) => r.stop_name);
           const baseDate = new Date(new Date(res.data[0].arrival_time).setHours(0, 0, 0, 0));
           const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time, true, baseDate));
           const routePreview = { coords: coords as [number, number][], stopNames, stopTimes, row };
+          augmentWithShape(res.data.map((p: any) => ({lon: p.stop_lon, lat: p.stop_lat, hello: "world"})), (await shape_pls).data).then(console.log);
           $previewRoute.set(routePreview);
         }
       })
@@ -453,10 +461,17 @@ export default function DepartureBoard() {
       LIMIT 100
     `;
 
+    const shape_pls = chQuery(`select shape_id from transitous_everything_20260218_trips where trip_id = '${row.trip_id}' and source = '${row.source}' limit 1`).then(res => {
+      if (res.data.length == 0) return { data: [] };
+      return chQuery(`
+        select shape_pt_lat lat, shape_pt_lon lon from transitous_everything_20260218_shapes where shape_id = '${res.data[0].shape_id}'
+     `)
+    });
     chQuery(query)
-      .then(res => {
+      .then(async res => {
         if (res && res.data && res.data.length > 0) {
           const points = processTripResults(res.data, row);
+          augmentWithShape(points.map((p: any) => ({lon: p.lng, ...p})), (await shape_pls).data).then(console.log);
           submitTripWaypoints(points, row, close, () => setLoadingTripKey(null));
         } else {
           setLoadingTripKey(null);
