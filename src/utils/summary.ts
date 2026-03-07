@@ -15,6 +15,7 @@ type SummaryEntry = {
     route_departure_time?: string;
     route_short_name?: string;
     display_name?: string;
+    stop_name_alight?: string;
     x?: number;
     y?: number;
 };
@@ -28,6 +29,8 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
     let currentWalkDist = 0;
     let currentWalkStart: number | null = null;
     let currentWalkEnd: number | null = null;
+    let currentLegEndIdx: number | null = null;
+    let lastTransportRoute: string | undefined = undefined;
 
     const pushWait = (duration: number, wp: Waypoint) => {
         if (duration <= 0) return;
@@ -86,18 +89,38 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             pushWalk(prevWp || wp);
 
             if (wp.route_departure_time) {
-                const lastEntry = summary[summary.length - 1];
-                if (lastEntry?.type !== 'transport' || lastEntry.route_departure_time !== wp.route_departure_time || lastEntry.route_short_name !== wp.route_short_name) {
-                    summary.push({
-                        type: 'transport',
-                        route_departure_time: wp.route_departure_time,
-                        route_short_name: wp.route_short_name,
-                        display_name: wp.display_name,
-                        emoji: wp.emoji || '👽',
-                    });
+                const currentRoute = `${wp.route_departure_time}-${wp.route_short_name}`;
+                if (lastTransportRoute !== currentRoute) {
+                    if (currentLegEndIdx !== null) {
+                        const lastWpOfLeg = waypoints[currentLegEndIdx];
+                        summary.push({
+                            type: 'transport',
+                            route_departure_time: lastWpOfLeg.route_departure_time,
+                            route_short_name: lastWpOfLeg.route_short_name,
+                            display_name: lastWpOfLeg.display_name,
+                            stop_name_alight: lastWpOfLeg.stopName,
+                            emoji: lastWpOfLeg.emoji || '👽',
+                        });
+                    }
+                    currentLegEndIdx = i;
+                    lastTransportRoute = currentRoute;
+                } else {
+                    currentLegEndIdx = i;
                 }
             }
         }
+    }
+
+    if (currentLegEndIdx !== null) {
+        const lastWpOfLeg = waypoints[currentLegEndIdx];
+        summary.push({
+            type: 'transport',
+            route_departure_time: lastWpOfLeg.route_departure_time,
+            route_short_name: lastWpOfLeg.route_short_name,
+            display_name: lastWpOfLeg.display_name,
+            stop_name_alight: lastWpOfLeg.stopName,
+            emoji: lastWpOfLeg.emoji || '👽',
+        });
     }
 
     pushWalk(waypoints[waypoints.length - 1]);
@@ -137,7 +160,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
         } else if (wp.type === 'wait') {
             return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else {
-            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.display_name].filter(Boolean);
+            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.stop_name_alight ? "➡️ " + wp.stop_name_alight : false].filter(Boolean);
             return `${wp.emoji} ${parts.join(' ')}`;
         }
     }).join('\n');
