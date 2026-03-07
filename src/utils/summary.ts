@@ -18,6 +18,7 @@ type SummaryEntry = {
     display_name?: string;
     stop_name_alight?: string;
     arrival_time?: string;
+    arrival_ms: number;
     x?: number;
     y?: number;
 };
@@ -44,6 +45,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
                 type: 'wait',
                 emoji: '⏳',
                 duration: duration,
+                arrival_ms: wp.arrivalTime,
                 x: wp.x,
                 y: wp.y,
             });
@@ -61,6 +63,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
                     emoji: '🐾',
                     duration: duration,
                     distance: currentWalkDist,
+                    arrival_ms: wp.arrivalTime,
                     x: wp.x,
                     y: wp.y,
                 });
@@ -102,6 +105,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
                             display_name: lastWpOfLeg.display_name,
                             stop_name_alight: lastWpOfLeg.stopName,
                             arrival_time: lastWpOfLeg.timeStr,
+                            arrival_ms: lastWpOfLeg.arrivalTime,
                             emoji: lastWpOfLeg.emoji || '👽',
                         });
                     }
@@ -123,12 +127,13 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             display_name: lastWpOfLeg.display_name,
             stop_name_alight: lastWpOfLeg.stopName,
             arrival_time: lastWpOfLeg.timeStr,
+            arrival_ms: lastWpOfLeg.arrivalTime,
             emoji: lastWpOfLeg.emoji || '👽',
         });
     }
 
     pushWalk(waypoints[waypoints.length - 1]);
-    console.log(summary);
+    summary.sort((a, b) => a.arrival_ms - b.arrival_ms);
     return summary;
 }
 
