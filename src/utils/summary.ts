@@ -6,6 +6,7 @@ import { createClosestCity, cityDbPromise } from './tiny-cities';
 import { formatDuration } from './time';
 import { $currentDailyRaceIndex } from '../store';
 import { routeTypeEmissions, emojiToRouteType } from '../getRouteEmoji';
+import { getTimeZone } from '../timezone';
 
 type SummaryEntry = {
     type: 'transport' | 'walk' | 'wait';
@@ -16,6 +17,7 @@ type SummaryEntry = {
     route_short_name?: string;
     display_name?: string;
     stop_name_alight?: string;
+    arrival_time?: string;
     x?: number;
     y?: number;
 };
@@ -99,6 +101,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
                             route_short_name: lastWpOfLeg.route_short_name,
                             display_name: lastWpOfLeg.display_name,
                             stop_name_alight: lastWpOfLeg.stopName,
+                            arrival_time: lastWpOfLeg.timeStr,
                             emoji: lastWpOfLeg.emoji || '👽',
                         });
                     }
@@ -119,11 +122,13 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             route_short_name: lastWpOfLeg.route_short_name,
             display_name: lastWpOfLeg.display_name,
             stop_name_alight: lastWpOfLeg.stopName,
+            arrival_time: lastWpOfLeg.timeStr,
             emoji: lastWpOfLeg.emoji || '👽',
         });
     }
 
     pushWalk(waypoints[waypoints.length - 1]);
+    console.log(summary);
     return summary;
 }
 
@@ -148,7 +153,6 @@ const calculateCO2Emissions = (player: Player): number => {
     return totalCO2 / 1000;
 };
 
-import { getTimeZone } from '../timezone';
 
 /* convert object to a human readable string for sharing on socials */
 export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false, targetTime?: number) => {
@@ -160,7 +164,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
         } else if (wp.type === 'wait') {
             return `${wp.emoji} Waited ${formatDuration(wp.duration || 0)} in ${createClosestCity(() => ({ lat: wp.y || 0, lon: wp.x || 0 }))()}`;
         } else {
-            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.stop_name_alight ? "➡️ " + wp.stop_name_alight : false].filter(Boolean);
+            const parts = [formatRowTime(wp.route_departure_time || ''), wp.route_short_name, wp.stop_name_alight ? `→ ${wp.arrival_time} ${wp.stop_name_alight}` : false].filter(Boolean);
             return `${wp.emoji} ${parts.join(' ')}`;
         }
     }).join('\n');
