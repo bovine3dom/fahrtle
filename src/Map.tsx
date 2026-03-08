@@ -972,6 +972,14 @@ export default function MapView() {
             departure_time,
             h3ToParent(next_h3, 9) -- eugh but this then excludes e.g. night trains which split...
       ` : '';
+      const limByInner = $playerSettings.get().hidePotentialDuplicateDepartures ? `
+           LIMIT 1 BY
+             stop_uuid,
+             departure_time,
+             route_short_name,
+             trip_headsign,
+             final_name
+      ` : '';
       return `
         SELECT * FROM (
           SELECT * FROM (
@@ -979,12 +987,7 @@ export default function MapView() {
             FROM transitous_everything_20260218_edgelist_fahrtle2
             WHERE ${h3Field} IN (${ctx.h3Conditions})
             ORDER by sort_time ASC, travel_time ASC
-            LIMIT 1 BY
-              stop_uuid,
-              departure_time,
-              route_short_name,
-              trip_headsign,
-              final_name
+            ${limByInner}
             LIMIT 1000
           )
           ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC -- hmm geoDistance should probably be rounded
