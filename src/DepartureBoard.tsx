@@ -433,6 +433,22 @@ export default function DepartureBoard() {
             timeStr: p.timeStr,
           }));
 
+          // space out stops with identical times
+          const timeMap = new Map<number, number[]>();
+          points.forEach((p: { time: number }, idx: number) => {
+            const minuteKey = Math.floor(p.time / 60000) * 60000;
+            if (!timeMap.has(minuteKey)) timeMap.set(minuteKey, []);
+            timeMap.get(minuteKey)!.push(idx);
+          });
+          timeMap.forEach((indices: number[]) => {
+            if (indices.length > 1) {
+              const spacing = 60000 / indices.length;
+              indices.forEach((idx: number, i: number) => {
+                points[idx].time = points[idx].time + Math.round(i * spacing);
+              });
+            }
+          });
+
           const emoji = getRouteEmoji(row.route_type);
           if (emoji === '🚆') {
             augmentWithRailRoute(points).then(finalPoints => {
