@@ -349,7 +349,7 @@ export default function DepartureBoard() {
             AND trip_id = '${row['trip_id']}'
             AND sane_route_id = '${row.sane_route_id}'
             AND departure_time ${direction === 'forwards' ? '>=' : '<='} '${direction === 'forwards' ? row.departure_time : row.next_arrival}'
-          ORDER BY departure_time ${direction === 'forwards' ? 'ASC' : 'DESC'}
+          ORDER BY departure_time ${direction === 'forwards' ? 'ASC' : 'DESC'}, stop_sequence ${direction === 'forwards' ? 'ASC' : 'DESC'}
           LIMIT 100
         `;
 
@@ -382,7 +382,7 @@ export default function DepartureBoard() {
         AND trip_id = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'
         AND departure_time >= '${row.departure_time}'
-      ORDER BY departure_time ASC
+      ORDER BY departure_time ASC, stop_sequence ASC
       LIMIT 100
     `;
 
