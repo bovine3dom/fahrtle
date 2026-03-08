@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@googlemaps/polyline-codec": "^1.0.28",
+    "@kikuchan/decimal": "^0.1.0-alpha.7",
     "@nanostores/solid": "^1.1.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/d3": "^7.4.3",
@@ -23,6 +24,7 @@
     "h3-js": "^4.4.0",
     "kdbush": "^4.0.2",
     "maplibre-gl": "^5.15.0",
+    "maplibre-gl-nightlayer": "^1.0.0-alpha.14",
     "micro-memoize": "^5.1.1",
     "nanostores": "^1.1.0",
     "simplify-js": "^1.2.4",

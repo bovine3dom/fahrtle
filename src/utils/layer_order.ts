@@ -6,6 +6,7 @@ const ideal_hierarchy: string[] = [
   "basemap-",
   "water-bathymetry",
   "mapterhorn-layer",
+  "nightlayer",
   "openrailwaymap-layer",
   "public-transport",
   "course-markers-h3-filled", // finish area hexes

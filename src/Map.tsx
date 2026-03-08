@@ -18,8 +18,11 @@ import { getBeforeId } from './utils/layer_order';
 import { map_update_lock } from './utils/map_lock';
 import { give_me_more_trains } from './utils/i_bloody_love_trains';
 import { getCountry, countryToFlag } from "./utils/tiny-countries";
+import { NightLayer } from 'maplibre-gl-nightlayer';
 
 let mapInstance: maplibregl.Map;
+
+const NIGHT_LAYER = new NightLayer({opacity: 0.5});
 
 const lerpBearing = (a: number, b: number, t: number) => {
   let diff = b - a;
@@ -867,6 +870,8 @@ export default function MapView() {
         attribution: '&copy; <a href="https://transitous.org/sources" target="_blank">Transitous et al.</a>'
       });
 
+      mapInstance.addLayer(NIGHT_LAYER, getBeforeId("nightlayer", mapInstance));
+
       mapInstance.addLayer({
         id: 'stops-layer',
         type: 'symbol',
@@ -1111,6 +1116,16 @@ export default function MapView() {
     createEffect(() => {
       const setting = playerSettings().terrain3d;
       updateTerrain(setting);
+    });
+
+    const simTime = useStore($clock);
+    let i = 0;
+    createEffect(async () => {
+      simTime(); // force reactivity
+      i++;
+      await ensureMapLoaded(mapInstance);
+      if (!mapInstance) return;
+      NIGHT_LAYER.setDate(new Date(simTime()));
     });
 
     (window as any).mapInstance = mapInstance;
