@@ -47,6 +47,17 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
     return Array.from(indices).map(Number).sort((a, b) => b - a);
   };
 
+  const chartData = () => {
+    const entries = leaderboard() || [];
+    const indices = raceIndices().slice(0, 10).reverse();
+    return indices.map(idx => ({
+      raceIndex: idx,
+      count: entries.filter(e => parseInt(e.raceIndex, 10) === idx).length
+    }));
+  };
+
+  const maxCount = () => Math.max(...chartData().map(d => d.count), 1);
+
   const [raceLabels, setRaceLabels] = createSignal<Record<number, string>>({});
 
   // getting the values to update reactively in the select was a massive pita
@@ -177,6 +188,57 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
 
         <Show when={leaderboard() && raceIndices().length === 0}>
           <div style={s.loading}>No entries yet</div>
+        </Show>
+        
+        <Show when={leaderboard() && chartData().length > 0}>
+          <div style={{ 'margin-top': '8px' }}>
+            <div style={{ 'font-size': '0.8rem', color: colours.textLight, 'margin-bottom': '4px', 'text-align': 'center' }}>Players over last 10 races</div>
+            <svg width="100%" height="60" viewBox="0 0 400 60" preserveAspectRatio="none" style={{ 'font-size': '8px', fill: colours.textLight }}>
+              <For each={(() => {
+                const max = maxCount();
+                const step = Math.ceil(max / 5 / 5) * 5 || 5;
+                return Array.from({ length: Math.min(5, Math.ceil(max / step)) }, (_, i) => (i + 1) * step);
+              })()}>
+                {(tick) => {
+                  const y = 50 - (tick / maxCount()) * 40;
+                  return (
+                    <>
+                      <line x1="0" y1={y} x2="400" y2={y} stroke={colours.border} stroke-width="0.5" stroke-dasharray="2,2" />
+                      <text x="0" y={y - 2}>{tick}</text>
+                    </>
+                  );
+                }}
+              </For>
+              <For each={chartData()}>
+                {(d, i) => {
+                  const data = chartData();
+                  const len = data.length;
+                  const x = (i() / (len - 1)) * 380 + 10;
+                  const y = 50 - (d.count / maxCount()) * 40;
+                  const prevY = i() > 0 ? 50 - (data[i() - 1].count / maxCount()) * 40 : y;
+                  return i() > 0 ? (
+                    <line 
+                      x1={(i() - 1) / (len - 1) * 380 + 10} 
+                      y1={prevY} 
+                      x2={x} 
+                      y2={y} 
+                      stroke={colours.primary} 
+                      stroke-width="2" 
+                    />
+                  ) : null;
+                }}
+              </For>
+              <For each={chartData()}>
+                {(d, i) => {
+                  const data = chartData();
+                  const len = data.length;
+                  const x = (i() / (len - 1)) * 380 + 10;
+                  const y = 50 - (d.count / maxCount()) * 40;
+                  return <circle cx={x} cy={y} r="3" fill={colours.primary} />;
+                }}
+              </For>
+            </svg>
+          </div>
         </Show>
         
         <button onClick={props.onClose} style={s.closeBtn}>Close</button>
