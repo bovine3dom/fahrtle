@@ -52,6 +52,12 @@ db.run(`
 `);
 
 const getGhostsQuery = db.prepare("SELECT * FROM ghosts WHERE raceIndex = ?");
+const getLeaderboardQuery = db.prepare(`
+  SELECT playerName, raceIndex, finishTime
+  FROM ghosts
+  WHERE version = $version
+  ORDER BY raceIndex ASC, finishTime ASC
+`);
 const upsertGhostQuery = db.prepare(`
   INSERT INTO ghosts (raceIndex, playerId, playerName, color, waypoints, finishTime, submittedAt)
   VALUES ($raceIndex, $playerId, $playerName, $color, $waypoints, $finishTime, $submittedAt)
@@ -109,6 +115,18 @@ const server = serve<WSData>({
       }
 
 
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    }
+
+    const leaderboardMatch = url.pathname.match(/^\/api\/leaderboard\/(\d+(\.\d+)?)$/);
+    if (leaderboardMatch) {
+      const version = leaderboardMatch[1];
+      if (req.method === 'GET') {
+        const rows = getLeaderboardQuery.all({ $version: parseFloat(version) }) as { playerName: string; raceIndex: string; finishTime: number }[];
+        return new Response(JSON.stringify(rows), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
     }
 

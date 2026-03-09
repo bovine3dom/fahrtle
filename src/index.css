@@ -20,6 +20,16 @@ body {
   background-color: #242424;
 }
 
+select.dark-select {
+  background-color: #1e293b !important;
+  color: white !important;
+}
+
+select.dark-select option {
+  background-color: #1e293b !important;
+  color: white !important;
+}
+
 a {
   font-weight: 500;
   color: #646cff;

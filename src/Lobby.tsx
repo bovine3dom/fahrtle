@@ -12,6 +12,7 @@ import { colours } from './colours';
 import bgImage from './assets/h3_hero.webp';
 import favicon from '../public/favicon.svg';
 import { RaceCalendar } from './RaceCalendar';
+import LeaderboardModal from './LeaderboardModal';
 
 export default function Lobby() {
   const generateRandomRoom = () => {
@@ -30,6 +31,27 @@ export default function Lobby() {
   const [dailyRace, setDailyRace] = createSignal<{ start: [number, number], finish: [number, number], time: string } | null>(null);
   const [selectedRaceIndex, setSelectedRaceIndex] = createSignal<number | null>(null);
   const [showCalendar, setShowCalendar] = createSignal(false);
+  const [leaderboardVersion] = createSignal(0.1);
+  const [showLeaderboard, setShowLeaderboard] = createSignal(false);
+
+  const openLeaderboard = () => {
+    setShowLeaderboard(true);
+  };
+
+  const closeLeaderboard = () => {
+    setShowLeaderboard(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('leaderboard');
+    window.history.pushState(window.history.state, '', url);
+  };
+
+  onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const leaderboardParam = params.get('leaderboard');
+    if (leaderboardParam && leaderboardParam.includes('-')) {
+      setShowLeaderboard(true);
+    }
+  });
 
   const currentDate = () => {
     const idx = selectedRaceIndex();
@@ -470,6 +492,24 @@ export default function Lobby() {
             Launch
           </button>
         )}
+        <Show when={isDaily()}>
+        <button
+          type="button"
+          onClick={openLeaderboard}
+          style={{
+            padding: '8px',
+            background: 'transparent',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.3)',
+            'border-radius': '4px',
+            cursor: 'pointer',
+            'font-size': '0.85rem',
+            'margin-top': '8px'
+          }}
+        >
+          🏆 Leaderboard
+        </button>
+        </Show>
       </form>
       <a
         href="https://github.com/bovine3dom/fahrtle?tab=readme-ov-file#fahrtle"
@@ -511,6 +551,10 @@ export default function Lobby() {
         </svg>
         <span>readme.md</span>
       </a>
+
+      <Show when={showLeaderboard()}>
+        <LeaderboardModal version={leaderboardVersion()} onClose={closeLeaderboard} />
+      </Show>
     </div>
   );
 }
