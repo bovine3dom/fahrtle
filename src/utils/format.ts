@@ -17,11 +17,20 @@ export const parseCoords = (s: string): [number, number] | null => {
     return null;
 };
 
-export const formatRowTime = (timeStr: string) => {
+const CH_BASE_DATE = new Date('2026-01-01');
+export const formatRowTime = (timeStr: string, showDays = false, baseDate = CH_BASE_DATE) => {
     if (!timeStr) return '--:--';
     try {
         if (timeStr.length >= 16) {
-            return timeStr.substring(11, 16);
+            const time = timeStr.substring(11, 16);
+            if (showDays) {
+                const date = new Date(timeStr);
+                const dayDiff = Math.floor((date.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (dayDiff != 0) {
+                    return `${time} ${Math.sign(dayDiff) >= 0 ? "+" : "" }${dayDiff}d`;
+                }
+            }
+            return time;
         }
         const d = new Date(timeStr);
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });

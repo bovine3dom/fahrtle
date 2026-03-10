@@ -358,7 +358,8 @@ export default function DepartureBoard() {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
           const stopNames = res.data.map((r: any) => r.stop_name);
-          const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time));
+          const baseDate = new Date(new Date(res.data[0].arrival_time).setHours(0, 0, 0, 0));
+          const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time, true, baseDate));
           const routePreview = { coords: coords as [number, number][], stopNames, stopTimes, row };
           $previewRoute.set(routePreview);
         }
