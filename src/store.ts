@@ -252,7 +252,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
     const wsUri = import.meta.env.PROD
       ? import.meta.env.VITE_FAHRTLE_WS_URI
       : 'ws://localhost:8080';
-    ws = new WebSocket(wsUri) as any;
+    ws = new WebSocket(wsUri || '') as any;
   }
 
   if (!ws) return;
