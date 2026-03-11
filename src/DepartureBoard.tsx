@@ -353,13 +353,6 @@ export default function DepartureBoard() {
           LIMIT 100
         `;
 
-    const shape_pls = chQuery(`select shape_id from transitous_everything_20260218_trips where trip_id = '${row.trip_id}' and source = '${row.source}' limit 1`).then(res => {
-      if (res.data.length == 0) return { data: [] };
-      return chQuery(`
-        select shape_pt_lat lat, shape_pt_lon lon from transitous_everything_20260218_shapes where shape_id = '${res.data[0].shape_id}'
-     `)
-    });
-    shape_pls.then(console.log);
     chQuery(query)
       .then(async res => {
         if (res && res.data && res.data.length > 0) {
@@ -368,7 +361,6 @@ export default function DepartureBoard() {
           const baseDate = new Date(new Date(res.data[0].arrival_time).setHours(0, 0, 0, 0));
           const stopTimes = res.data.map((r: any) => formatRowTime(r.arrival_time, true, baseDate));
           const routePreview = { coords: coords as [number, number][], stopNames, stopTimes, row };
-          augmentWithShape(res.data.map((p: any) => ({lon: p.stop_lon, lat: p.stop_lat, hello: "world"})), (await shape_pls).data).then(console.log);
           $previewRoute.set(routePreview);
         }
       })
@@ -395,12 +387,15 @@ export default function DepartureBoard() {
       LIMIT 100
     `;
 
-    const shape_pls = chQuery(`select shape_id from transitous_everything_20260218_trips where trip_id = '${row.trip_id}' and source = '${row.source}' limit 1`).then(res => {
-      if (res.data.length == 0) return { data: [] };
-      return chQuery(`
-        select shape_pt_lat lat, shape_pt_lon lon from transitous_everything_20260218_shapes where shape_id = '${res.data[0].shape_id}'
-     `)
-    });
+    const shape_pls = chQuery(`
+      WITH trip_shape AS (
+        SELECT shape_id FROM transitous_everything_20260218_trips
+        WHERE trip_id = '${row.trip_id}' AND source = '${row.source}'
+      )
+      SELECT shape_pt_lat as lat, shape_pt_lon as lon
+      FROM transitous_everything_20260218_shapes
+      WHERE shape_id IN (SELECT shape_id FROM trip_shape)
+    `);
     chQuery(query)
       .then(async res => {
         if (res && res.data && res.data.length > 0) {
@@ -463,27 +458,16 @@ export default function DepartureBoard() {
               });
             }
           });
-          augmentWithShape(points.map((p: any) => ({lon: p.lng, ...p})), (await shape_pls).data).then(console.log);
-          const emoji = getRouteEmoji(row.route_type);
-          if (emoji === '🚆') {
-            augmentWithRailRoute(points).then(finalPoints => {
-              submitWaypointsBatch(finalPoints);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            }).catch(err => {
-              console.error("[RailRoute] Full fallback due to error:", err);
-              submitWaypointsBatch(points);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            });
-          } else {
-            submitWaypointsBatch(points);
+          const shape_data = (await shape_pls).data;
+          const augmentor = shape_data.length > (points.length * 1.5) ? (ps: any) => augmentWithShape(ps.map((p: any) => ({lon: p.lng, ...p})), shape_data) :
+            getRouteEmoji(row.route_type) === '🚆' ? augmentWithRailRoute
+              : async (ps: any) => ps;
+          augmentor(points).then(finalPoints => {
+            submitWaypointsBatch(finalPoints);
             $playerSettings.get().autoFollow && $isFollowing.set(true);
             close();
             setLoadingTripKey(null);
-          }
+          })
         } else {
           setLoadingTripKey(null);
         }
