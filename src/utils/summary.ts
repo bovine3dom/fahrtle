@@ -5,8 +5,9 @@ import { haversineDist } from './geo';
 import { createClosestCity, cityDbPromise } from './tiny-cities';
 import { formatDuration } from './time';
 import { $currentDailyRaceIndex } from '../store';
-import { routeTypeEmissions, emojiToRouteType } from '../getRouteEmoji';
+import { routeTypeEmissions } from '../getRouteEmoji';
 import { getTimeZone } from '../timezone';
+import { calculateCO2Emissions } from './co2';
 
 type SummaryEntry = {
     type: 'transport' | 'walk' | 'wait';
@@ -137,28 +138,6 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
     return summary;
 }
 
-const calculateCO2Emissions = (player: Player): number => {
-    let totalCO2 = 0;
-    const waypoints = player.waypoints;
-
-    for (let i = 1; i < waypoints.length; i++) {
-        const wp = waypoints[i];
-        const prevWp = waypoints[i - 1];
-
-        const dist = haversineDist({ lat: prevWp.y, lon: prevWp.x }, { lat: wp.y, lon: wp.x });
-        if (!dist || dist === 0) continue;
-
-        const emoji = wp.isWalk ? '🐾' : (wp.emoji || '👽');
-        const routeType = emojiToRouteType[emoji] ?? 'misc';
-        const emissionFactor = routeTypeEmissions[routeType] ?? routeTypeEmissions.misc;
-
-        totalCO2 += dist * emissionFactor;
-    }
-
-    return totalCO2 / 1000;
-};
-
-
 /* convert object to a human readable string for sharing on socials */
 export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false, targetTime?: number) => {
     await cityDbPromise;
@@ -212,7 +191,7 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
     const dayPrefix = isDaily ? ` daily #${$currentDailyRaceIndex.get() ?? await getDailyRaceIndex()}!` : '';
 
     const totalDistance = haversineDist(gameBounds.start ? { lat: gameBounds.start[0], lon: gameBounds.start[1] } : null, gameBounds.finish ? { lat: gameBounds.finish[0], lon: gameBounds.finish[1] } : null) || 0;
-    const totalCO2 = calculateCO2Emissions(player);
+    const totalCO2 = calculateCO2Emissions(player.waypoints);
     const airCO2 = totalDistance * routeTypeEmissions.air / 1000;
     const CO2diff = 100 - 100 * totalCO2/airCO2;
 
