@@ -2,10 +2,44 @@ import { decode } from "@googlemaps/polyline-codec";
 import { haversineDist } from "./geo";
 import simplify from 'simplify-js';
 
+interface PointWithCoords {
+    lng: number;
+    lat: number;
+    time?: number;
+    timeStr?: string;
+    stopName?: string;
+    isWalk?: boolean;
+    [key: string]: any;
+}
+
+interface RoutePoint extends PointWithCoords {
+    isInterstop?: boolean;
+}
+
+function computeDistancesAndTimes(
+    simplifiedPoints: [number, number][],
+    startWp: PointWithCoords,
+    endWp: PointWithCoords
+): { pointDistances: number[]; totalLegDist: number; timeDiff: number } {
+    const pointDistances: number[] = [0];
+    let totalLegDist = 0;
+    for (let j = 1; j < simplifiedPoints.length; j++) {
+        const d = haversineDist(
+            { lon: simplifiedPoints[j - 1][0], lat: simplifiedPoints[j - 1][1] },
+            { lon: simplifiedPoints[j][0], lat: simplifiedPoints[j][1] }
+        ) || 0;
+        totalLegDist += d;
+        pointDistances.push(totalLegDist);
+    }
+
+    const timeDiff = (endWp.time || 0) - (startWp.time || 0);
+
+    return { pointDistances, totalLegDist, timeDiff };
+}
+
 export async function augmentWithShape(stops: any[], shapePoints: any[]) {
     if (stops.length === 0) return stops;
     if (shapePoints.length < 2) return stops;
-    // todo: if fewer than 1.5x shape, route with signal
 
     // dedup
     const cleanShape = [shapePoints[0]];
@@ -14,10 +48,15 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
             cleanShape.push(shapePoints[i]);
         }
     }
+    const simplifiedShape = simplify(
+        cleanShape.map(c => ({ x: c.lon, y: c.lat })),
+        0.0025, // units in degrees
+        true
+    ).map(p => {return {lon: p.x, lat: p.y}})
 
     // locally euclidean
-    const refLat = cleanShape[0].lat * Math.PI / 180;
-    const R = 6371000; // we're using this in a few places so we should probably factor it out in case we need to change it
+    const refLat = simplifiedShape[0].lat * Math.PI / 180;
+    const R = 6371000;
     function toCartesian(pt: { lon: number, lat: number }) {
         return {
             x: (pt.lon * Math.PI / 180) * Math.cos(refLat) * R,
@@ -25,11 +64,11 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
             original: pt
         };
     }
-    const shapeCart = cleanShape.map(toCartesian);
+    const shapeCart = simplifiedShape.map(toCartesian);
     const stopsCart = stops.map(toCartesian);
 
     // dot product projection
-    function projectPointToSegment(p, v, w) {
+    function projectPointToSegment(p: { x: number, y: number }, v: { x: number, y: number }, w: { x: number, y: number }) {
         const l2 = Math.pow(w.x - v.x, 2) + Math.pow(w.y - v.y, 2);
         if (l2 === 0) return { t: 0, distSq: Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2) };
         let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
@@ -41,7 +80,7 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
     }
 
     let currentSegmentStart = 0;
-    const mappedStops =[];
+    const mappedStops: { stopData: any; segmentIndex: number; t: number }[] = [];
     for (let i = 0; i < stopsCart.length; i++) {
         const stop = stopsCart[i];
         let bestSegment = currentSegmentStart;
@@ -70,18 +109,41 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
         return a.segmentIndex - b.segmentIndex;
     });
 
-    const finalPath =[];
-    finalPath.push(mappedStops[0].stopData);
+    const finalPath: RoutePoint[] =[];
+    finalPath.push({ ...mappedStops[0].stopData, isInterstop: false });
     let currentShapeIndex = mappedStops[0].segmentIndex + 1;
+
+    // Compute distances and times for the entire shape path
+    const shapeCoords: [number, number][] = simplifiedShape.map(p => [p.lon, p.lat]);
+    const { pointDistances, totalLegDist } = computeDistancesAndTimes(
+        shapeCoords,
+        mappedStops[0].stopData,
+        mappedStops[mappedStops.length - 1].stopData
+    );
+
     for (let i = 1; i < mappedStops.length; i++) {
+        const startStop = mappedStops[i - 1].stopData;
+        const endStop = mappedStops[i].stopData;
+        const legStartDist = pointDistances[mappedStops[i - 1].segmentIndex + 1] || 0;
+        const legEndDist = pointDistances[mappedStops[i].segmentIndex + 1] || totalLegDist;
+        const legDist = legEndDist - legStartDist;
+        const legTimeDiff = (endStop.time || 0) - (startStop.time || 0);
+
         while (currentShapeIndex <= mappedStops[i].segmentIndex) {
-            finalPath.push(cleanShape[currentShapeIndex]);
+            const segmentDistRatio = legDist === 0 ? 0 : (pointDistances[currentShapeIndex] - legStartDist) / legDist;
+            const pointTime = startStop.time + segmentDistRatio * legTimeDiff;
+
+            finalPath.push({
+                lng: simplifiedShape[currentShapeIndex].lon,
+                lat: simplifiedShape[currentShapeIndex].lat,
+                time: pointTime,
+                isInterstop: true,
+            });
             currentShapeIndex++;
         }
-        finalPath.push(mappedStops[i].stopData);
+        finalPath.push({ ...mappedStops[i].stopData, isInterstop: false });
     }
 
-    // TODO: refactor augmentWithRailRoute and reuse the interstop, interpolation, compression logic here too
     return finalPath;
 }
 
@@ -134,16 +196,11 @@ export async function augmentWithRailRoute(points: any[]) {
                 continue;
             }
 
-            const pointDistances: number[] = [0];
-            let totalLegDist = 0;
-            for (let j = 1; j < simplifiedPoints.length; j++) {
-                const d = haversineDist(
-                    { lon: simplifiedPoints[j - 1][0], lat: simplifiedPoints[j - 1][1] },
-                    { lon: simplifiedPoints[j][0], lat: simplifiedPoints[j][1] }
-                ) || 0;
-                totalLegDist += d;
-                pointDistances.push(totalLegDist);
-            }
+            const { pointDistances, totalLegDist, timeDiff } = computeDistancesAndTimes(
+                simplifiedPoints,
+                startWp,
+                endWp
+            );
 
             const straightLineDist = haversineDist(
                 { lon: startWp.lng, lat: startWp.lat },
@@ -164,8 +221,6 @@ export async function augmentWithRailRoute(points: any[]) {
                 }
                 continue;
             }
-
-            const timeDiff = endWp.time - startWp.time;
 
             for (let j = 0; j < simplifiedPoints.length; j++) {
                 if (i < route.legs.length - 1 && j === simplifiedPoints.length - 1) {
