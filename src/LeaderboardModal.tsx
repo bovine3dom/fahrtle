@@ -3,6 +3,7 @@ import { colours } from './colours';
 import { formatDuration } from './utils/time';
 import { getRaceByIndex } from './utils/daily';
 import { cityDbPromise, getClosestCityObject } from './utils/tiny-cities';
+import { sensibleNumber } from './utils/format';
 
 const s: Record<string, any> = {
   overlay: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', 'z-index': 1000, display: 'flex', 'justify-content': 'center', 'align-items': 'center', 'backdrop-filter': 'blur(4px)' },
@@ -23,6 +24,7 @@ interface LeaderboardEntry {
   playerName: string;
   raceIndex: string;
   finishTime: number;
+  kgCO2e: number;
 }
 
 interface LeaderboardModalProps {
@@ -167,6 +169,7 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
                   <th style={{ ...s.th, ...s.rank }}>#</th>
                   <th style={s.th}>Player</th>
                   <th style={{ ...s.th, ...s.time }}>Time</th>
+                  <th style={{ ...s.th, ...s.time}}>kgCO₂e</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,6 +181,7 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
                       </td>
                       <td style={s.td}>{entry.playerName}</td>
                       <td style={{ ...s.td, ...s.time }}>{formatDuration(entry.finishTime)}</td>
+                      <td style={{ ...s.td, ...s.time}}>{sensibleNumber(entry.kgCO2e)}</td>
                     </tr>
                   )}
                 </For>
