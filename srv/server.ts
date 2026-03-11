@@ -8,6 +8,7 @@ import {
   handleIncomingMessage,
   handleGameClose
 } from "../src/shared/gameLogic";
+import { calculateCO2Emissions } from "../src/utils/co2";
 
 function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
@@ -47,20 +48,21 @@ db.run(`
     waypoints TEXT,
     finishTime REAL,
     submittedAt INTEGER,
+    kgCO2e REAL,
     PRIMARY KEY(raceIndex, playerId, version)
   )
 `);
 
 const getGhostsQuery = db.prepare("SELECT * FROM ghosts WHERE raceIndex = ?");
 const getLeaderboardQuery = db.prepare(`
-  SELECT playerName, raceIndex, finishTime
+  SELECT playerName, raceIndex, finishTime, kgCO2e
   FROM ghosts
   WHERE version = $version
   ORDER BY raceIndex ASC, finishTime ASC
 `);
 const upsertGhostQuery = db.prepare(`
-  INSERT INTO ghosts (raceIndex, playerId, playerName, color, waypoints, finishTime, submittedAt)
-  VALUES ($raceIndex, $playerId, $playerName, $color, $waypoints, $finishTime, $submittedAt)
+  INSERT INTO ghosts (raceIndex, playerId, playerName, color, waypoints, finishTime, submittedAt, kgCO2e)
+  VALUES ($raceIndex, $playerId, $playerName, $color, $waypoints, $finishTime, $submittedAt, $kgCO2e)
   ON CONFLICT(raceIndex, playerId, version) DO UPDATE SET
     playerName = $playerName,
     color = $color,
@@ -107,7 +109,8 @@ const server = serve<WSData>({
               $color: color ?? null,
               $waypoints: JSON.stringify(waypoints),
               $finishTime: finishTime,
-              $submittedAt: Date.now()
+              $submittedAt: Date.now(),
+              $kgCO2e: calculateCO2Emissions(waypoints)
             });
           })();
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
