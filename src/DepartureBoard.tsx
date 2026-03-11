@@ -10,7 +10,7 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime, sensibleNumber } from './utils/format';
 import { memoize } from 'micro-memoize';
-import { augmentWithRailRoute } from './utils/railRoute';
+import { augmentWithRailRoute, augmentWithShape } from './utils/railRoute';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -354,7 +354,7 @@ export default function DepartureBoard() {
         `;
 
     chQuery(query)
-      .then(res => {
+      .then(async res => {
         if (res && res.data && res.data.length > 0) {
           const coords = res.data.map((r: any) => [r.stop_lon, r.stop_lat]);
           const stopNames = res.data.map((r: any) => r.stop_name);
@@ -387,8 +387,17 @@ export default function DepartureBoard() {
       LIMIT 100
     `;
 
+    const shape_pls = chQuery(`
+      WITH trip_shape AS (
+        SELECT shape_id FROM transitous_everything_20260218_trips
+        WHERE trip_id = '${row.trip_id}' AND source = '${row.source}'
+      )
+      SELECT shape_pt_lat as lat, shape_pt_lon as lon
+      FROM transitous_everything_20260218_shapes
+      WHERE shape_id IN (SELECT shape_id FROM trip_shape)
+    `);
     chQuery(query)
-      .then(res => {
+      .then(async res => {
         if (res && res.data && res.data.length > 0) {
           const rawPoints = res.data.map((r: any, idx: number) => {
             const thisStopZone = getTimeZone(r.stop_lat, r.stop_lon);
@@ -449,27 +458,16 @@ export default function DepartureBoard() {
               });
             }
           });
-
-          const emoji = getRouteEmoji(row.route_type);
-          if (emoji === '🚆') {
-            augmentWithRailRoute(points).then(finalPoints => {
-              submitWaypointsBatch(finalPoints);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            }).catch(err => {
-              console.error("[RailRoute] Full fallback due to error:", err);
-              submitWaypointsBatch(points);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            });
-          } else {
-            submitWaypointsBatch(points);
+          const shape_data = (await shape_pls).data;
+          const augmentor = shape_data.length > (points.length * 1.5) ? (ps: any) => augmentWithShape(ps.map((p: any) => ({lon: p.lng, ...p})), shape_data) :
+            getRouteEmoji(row.route_type) === '🚆' ? augmentWithRailRoute
+              : async (ps: any) => ps;
+          augmentor(points).then(finalPoints => {
+            submitWaypointsBatch(finalPoints);
             $playerSettings.get().autoFollow && $isFollowing.set(true);
             close();
             setLoadingTripKey(null);
-          }
+          })
         } else {
           setLoadingTripKey(null);
         }
