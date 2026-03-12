@@ -1,7 +1,7 @@
 // ==> src/App.tsx <==
 import { Suspense, lazy, For, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $players, $myPlayerId, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, $clock, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats, $isRerun } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $roomState, $countdownEnd, toggleReady, $playerSpeeds, $playerDistances, toggleSnooze, forceRealtime, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, updateSetting, stopImmediately, raceAgain, type Difficulty, $isSinglePlayer, $isDaily, $playerStats, updatePlayerStats, $isRerun } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import Clock from './Clock';
@@ -19,6 +19,7 @@ import { getTravelSummary } from './utils/summary';
 import WinModal from './WinModal';
 import SettingsModal from './SettingsModal';
 import TutorialModal from './TutorialModal';
+import { players, myId, time, currentWpIndex, nextWaypoint } from './utils/memos';
 
 function getSpeedMode(desiredRate: number | undefined, forceRealtime: boolean | undefined): 'auto' | 'snooze' | 'realtime' {
   if (forceRealtime) return 'realtime';
@@ -29,14 +30,11 @@ function getSpeedMode(desiredRate: number | undefined, forceRealtime: boolean | 
 function App() {
   const room = useStore($currentRoom);
   const rate = useStore($globalRate);
-  const players = useStore($players);
-  const myId = useStore($myPlayerId);
   const roomState = useStore($roomState);
   const isRerun = useStore($isRerun);
   const countdownEnd = useStore($countdownEnd);
   const speeds = useStore($playerSpeeds);
   const distances = useStore($playerDistances);
-  const time = useStore($clock);
   const bounds = useStore($gameBounds);
   const pickerMode = useStore($pickerMode);
   const pickedPoint = useStore($pickedPoint);
@@ -293,13 +291,6 @@ function App() {
     });
   });
 
-  const currentWpIndex = createMemo(() => {
-    const p = players()[myId()!];
-    if (!p) return -1;
-    const t = time();
-    return p.waypoints.findIndex((wp) => wp.arrivalTime > t);
-  });
-
   const [lastTrackedWpIndex, setLastTrackedWpIndex] = createSignal(-1);
   const [lastTrackedRoomState, setLastTrackedRoomState] = createSignal(roomState() ?? 'JOINING');
 
@@ -341,14 +332,6 @@ function App() {
     if (idx >= 0) {
       setLastTrackedWpIndex(idx);
     }
-  });
-
-  const nextWaypoint = createMemo(() => {
-    const p = players()[myId()!];
-    const idx = currentWpIndex();
-    if (!p || idx === -1) return undefined;
-    const nextReal = p.waypoints.map((wp, i) => ({ ...wp, originalIndex: i })).slice(idx).find(wp => !wp.isInterstop);
-    return nextReal; // || p.waypoints[idx];
   });
 
   const allStations = createMemo(() => {

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/solid';
-import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore } from './store';
+import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, stopImmediately } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
 import { haversineDist, bearingToCardinal, type Coords } from './utils/geo';
@@ -11,6 +11,7 @@ import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime, sensibleNumber } from './utils/format';
 import { memoize } from 'micro-memoize';
 import { augmentWithRailRoute } from './utils/railRoute';
+import { nextWaypoint } from './utils/memos';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -222,6 +223,12 @@ export default function DepartureBoard() {
     }
   });
 
+  const globalBlock = createMemo(() => {
+    if (nextWaypoint() == undefined) return false;
+    if (nextWaypoint()?.isWait || nextWaypoint()?.isWalk) return false;
+    return "⚠️ You cannot board until you disembark from your current trip";
+  });
+
   const blockingStatusMap = createMemo(() => {
     const map = new Map<string, string | null>();
     const rows = deduplicatedResults();
@@ -368,12 +375,13 @@ export default function DepartureBoard() {
   };
 
   const handleTripDoubleClick = (row: DepartureResult) => {
-    if (blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)) {
+    if (globalBlock() || blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)) {
       setFlashError(false);
       setTimeout(() => setFlashError(true), 0);
       setTimeout(() => setFlashError(false), 500);
       return;
     }
+    nextWaypoint() && stopImmediately();
     const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
     setLoadingTripKey(key);
     const query = `
@@ -601,13 +609,13 @@ export default function DepartureBoard() {
           </div>
 
           <Show when={!isMinimized()}>
-            <Show when={blockingStatusMap().globalError}>
+            <Show when={globalBlock() || blockingStatusMap().globalError}>
               <div
                 class="banner banner-error"
                 classList={{ 'flash-animation': flashError() }}
                 style={{ opacity: flashError() ? 1 : 0.9 }}
               >
-                {blockingStatusMap().globalError}
+                {globalBlock() || blockingStatusMap().globalError}
               </div>
             </Show>
 
@@ -664,7 +672,7 @@ export default function DepartureBoard() {
               <For each={displayResults()}>
                 {(row) => {
                   const uniqueKey = `${row.source}-${row.trip_id}`;
-                  const blockReason = createMemo(() => blockingStatusMap().map.get(uniqueKey));
+                  const blockReason = createMemo(() => (blockingStatusMap().map.get(uniqueKey) || globalBlock()));
                   const isTomorrow = createMemo(() => {
                     const localSeconds = currentLocalSeconds();
                     const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
@@ -744,9 +752,9 @@ export default function DepartureBoard() {
                               icon="🛂"
                               title={blockReason() || "Board"}
                               onClick={handleBoardClick}
-                              disabled={loadingTripKey() !== null}
+                              disabled={(loadingTripKey() !== null) || !!blockReason()}
                               loading={isLoading()}
-                              dimmed={!!blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)}
+                              dimmed={!!blockReason()}
                             />
                           </div>
                         </Show>
@@ -801,10 +809,10 @@ export default function DepartureBoard() {
                                 icon="🛂"
                                 title={blockReason() || "Board"}
                                 onClick={handleBoardClick}
-                                disabled={loadingTripKey() !== null}
+                                disabled={(loadingTripKey() !== null) || !!blockReason()}
                                 loading={isLoading()}
+                                dimmed={!!blockReason()}
                                 spinnerStyle={{ "border-top-color": "#000" }}
-                                dimmed={!!blockingStatusMap().map.get(`${row.source}-${row.trip_id}`)}
                               />
                             </Show>
                             <Show when={($gameBounds.get().difficulty === 'Transport nerd') || $playerSettings.get().debug}>
