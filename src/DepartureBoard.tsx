@@ -87,6 +87,7 @@ export default function DepartureBoard() {
 
   const [filterType, setFilterType] = createSignal<string | null>(null);
   const [distFilter, setDistFilter] = createSignal<number | null>(null);
+  const [searchQuery, setSearchQuery] = createSignal('');
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   const [flashError, setFlashError] = createSignal(false);
@@ -328,15 +329,36 @@ export default function DepartureBoard() {
     if (currentStopName !== prevStopName) {
       setFilterType(null);
       setDistFilter(null);
+      setSearchQuery('');
     }
     return currentStopName;
   }, null);
 
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
+    const query = searchQuery().toLowerCase().trim();
     const emojiFilter = ((r: DepartureResult) => (filterType() === null) || getRouteEmoji(r.route_type) === filterType());
     const distFilterLogic = ((r: DepartureResult) => (distFilter() === null) || (r.dist || 0) >= (distFilter() as number));
-    return rows.filter(emojiFilter).filter(distFilterLogic);
+    const searchFilter = ((r: DepartureResult) => {
+      if (!query) return true;
+      
+      const invert = query.startsWith('!');
+      const searchQuery = invert ? query.slice(1) : query;
+      if (!searchQuery) return !invert;
+      
+      const destText = r.trip_headsign || r.route_long_name || '';
+      const routeText = r.route_long_name || '';
+      const finalText = mode() === 'departures' 
+        ? (r.final_name || '') + ", " + (createClosestCity(() => ({ lat: r.final_lat, lon: r.final_lon }))() || '')
+        : (r.initial_name || '') + ", " + (createClosestCity(() => ({ lat: r.initial_lat, lon: r.initial_lon }))() || '');
+      
+      const matches = destText.toLowerCase().includes(searchQuery) || 
+                      routeText.toLowerCase().includes(searchQuery) || 
+                      finalText.toLowerCase().includes(searchQuery);
+      
+      return invert ? !matches : matches;
+    });
+    return rows.filter(emojiFilter).filter(distFilterLogic).filter(searchFilter);
   });
 
   const close = () => {
@@ -345,6 +367,7 @@ export default function DepartureBoard() {
     $boardMinimized.set(false);
     setFilterType(null);
     setDistFilter(null);
+    setSearchQuery('');
     $previewRoute.set(null);
   };
 
@@ -655,6 +678,13 @@ export default function DepartureBoard() {
                 )}
               </For>
             </Show>
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search destination..."
+              value={searchQuery()}
+              onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            />
           </div>
 
           <div class="table-container">
@@ -1244,6 +1274,8 @@ export default function DepartureBoard() {
           overflow-x: auto;
           flex-shrink: 0;
           scrollbar-width: none;
+          align-items: center;
+          flex-wrap: wrap;
         }
 
         .type-filter-toolbar::-webkit-scrollbar {
@@ -1252,6 +1284,52 @@ export default function DepartureBoard() {
 
         .departure-board.minimized .type-filter-toolbar {
           display: none;
+        }
+
+        .search-input {
+          margin-left: auto;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+          padding: 4px 10px;
+          color: #fff;
+          font-size: 0.9rem;
+          outline: none;
+          min-width: 150px;
+          flex: 1 1 150px;
+          max-width: 250px;
+          transition: all 0.2s ease;
+        }
+
+        .search-input::placeholder {
+          color: rgba(255, 255, 255, 0.5);
+        }
+
+        .search-input:focus {
+          background: rgba(255, 255, 255, 0.2);
+          border-color: var(--db-accent-yellow);
+        }
+
+        @media (max-width: 768px) {
+          .search-input {
+            min-width: 80px;
+            flex: 1 1 80px;
+            max-width: none;
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            background: rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            color: #333;
+          }
+
+          .search-input::placeholder {
+            color: rgba(0, 0, 0, 0.4);
+          }
+
+          .search-input:focus {
+            background: rgba(0, 0, 0, 0.15);
+            border-color: #c1121c;
+          }
         }
 
         .filter-btn {
