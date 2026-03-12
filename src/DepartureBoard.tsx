@@ -336,25 +336,30 @@ export default function DepartureBoard() {
 
   const displayResults = createMemo(() => {
     const rows = deduplicatedResults();
-    const query = searchQuery().toLowerCase().trim();
+    const query = searchQuery().trim();
     const emojiFilter = ((r: DepartureResult) => (filterType() === null) || getRouteEmoji(r.route_type) === filterType());
     const distFilterLogic = ((r: DepartureResult) => (distFilter() === null) || (r.dist || 0) >= (distFilter() as number));
     const searchFilter = ((r: DepartureResult) => {
       if (!query) return true;
+      const maybeLowerCase = query.toLowerCase() == query ? (x: string) => x.toLowerCase() : (x: string) => x;
       
       const invert = query.startsWith('!');
       const searchQuery = invert ? query.slice(1) : query;
       if (!searchQuery) return !invert;
       
-      const destText = r.trip_headsign || r.route_long_name || '';
-      const routeText = r.route_long_name || '';
       const finalText = mode() === 'departures' 
         ? (r.final_name || '') + ", " + (createClosestCity(() => ({ lat: r.final_lat, lon: r.final_lon }))() || '')
         : (r.initial_name || '') + ", " + (createClosestCity(() => ({ lat: r.initial_lat, lon: r.initial_lon }))() || '');
-      
-      const matches = destText.toLowerCase().includes(searchQuery) || 
-                      routeText.toLowerCase().includes(searchQuery) || 
-                      finalText.toLowerCase().includes(searchQuery);
+
+      const useful = {
+        route_short_name: r.route_short_name,
+        route_long_name: r.route_long_name,
+        final_name: r.final_name,
+        initial_name: r.initial_name,
+        trip_headsign: r.trip_headsign,
+      };
+      const matches = maybeLowerCase(JSON.stringify(useful)).includes(searchQuery) || 
+                      maybeLowerCase(finalText).includes(searchQuery);
       
       return invert ? !matches : matches;
     });
