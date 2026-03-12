@@ -849,7 +849,7 @@ export default function MapView() {
         id: 'routes-labels',
         type: 'symbol',
         source: 'routes',
-        filter: ['==', '$type', 'Point'],
+        filter: ['all', ['==', '$type', 'Point'], ['!=', 'stop_name', 'Stopped']],
         layout: {
           'text-field': ['concat', ['get', 'stop_name'], ' (', ['get', 'arrival_time'], ')'],
           'text-size': 14,
