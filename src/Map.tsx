@@ -956,20 +956,19 @@ export default function MapView() {
         !import.meta.env.PROD && getCountry({lat: e.lngLat.lat, lon: e.lngLat.lng}).then((c) => console.log(countryToFlag(c || '')));
 
         if (clickTimeout) clearTimeout(clickTimeout);
+        const mode = $pickerMode.get();
+        if (mode) {
+          $pickedPoint.set({ lat: e.lngLat.lat, lng: e.lngLat.lng, target: mode });
+          $pickerMode.set(null);
+          return;
+        }
         if ($playerSettings.get().walkConfirm) {
           setClickPopupPos({ lat: e.lngLat.lat, lng: e.lngLat.lng });
           return;
         }
 
         clickTimeout = setTimeout(() => {
-          const mode = $pickerMode.get();
-          if (mode) {
-            $pickedPoint.set({ lat: e.lngLat.lat, lng: e.lngLat.lng, target: mode });
-            $pickerMode.set(null);
-            return;
-          }
           handleMapClickForDepartures(e.lngLat.lat, e.lngLat.lng, e.originalEvent.shiftKey);
-
           clickTimeout = null;
         }, 300);
       });
