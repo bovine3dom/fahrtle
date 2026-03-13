@@ -18,6 +18,7 @@ const ideal_hierarchy: string[] = [
   "routes-line", // player tracks
   "course-markers-icon", // start and finish icons
   "course-markers-label", // start and finish text labels
+  "pings",
   "basemap-label",
   "basemap-place",
   "routes-labels",

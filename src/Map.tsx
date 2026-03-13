@@ -3,7 +3,7 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, $boardMode } from './store';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, $boardMode, $pings, sendPing } from './store';
 import { getServerTime } from './time-sync';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
@@ -392,6 +392,7 @@ export default function MapView() {
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
+  const [pingPointers, setPingPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
   const playerMarkers = new Map<string, maplibregl.Marker>();
 
   onMount(() => {
@@ -892,6 +893,23 @@ export default function MapView() {
         }
       }, getBeforeId("stops-layer", mapInstance));
 
+      mapInstance.addSource('pings', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      mapInstance.addLayer({
+        id: 'pings',
+        type: 'circle',
+        source: 'pings',
+        paint: {
+          'circle-radius': 30,
+          'circle-color': '#ff6600',
+          'circle-opacity': 1,
+          'circle-blur': 1
+        }
+      }, getBeforeId("pings", mapInstance));
+
       let clickTimeout: any = null;
 
       const throttledUpdate = throttle(1000, () => {
@@ -920,12 +938,16 @@ export default function MapView() {
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
-      // middle click to teleport in dev mode
-      !import.meta.env.PROD && mapInstance.on('mousedown', (e) => {
+      // middle click to send ping, shift+middle to teleport (dev only)
+      mapInstance.on('mousedown', (e) => {
         if (e.originalEvent.button === 1) {
-          submitWaypointsBatch([
-            { lat: e.lngLat.lat, lng: e.lngLat.lng, time: $clock.get() },
-          ], { isTeleport: true })
+          if (e.originalEvent.shiftKey && !import.meta.env.PROD) {
+            submitWaypointsBatch([
+              { lat: e.lngLat.lat, lng: e.lngLat.lng, time: $clock.get() },
+            ], { isTeleport: true });
+          } else {
+            sendPing(e.lngLat.lat, e.lngLat.lng);
+          }
         }
       });
 
@@ -1470,6 +1492,7 @@ export default function MapView() {
 
       updateMarkers();
 
+      const PING_DURATION = 10000;
       if (frameCount % 10 === 0) {
         $playerSpeeds.set(currentSpeeds);
         $playerDistances.set(currentDists);
@@ -1487,6 +1510,32 @@ export default function MapView() {
         });
         const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
         setPlayerPointers(reconcile(validPointers, { key: 'pid' }));
+
+        const now = Date.now();
+        const allPings = $pings.get();
+        const pingFeatures = [];
+        for (const pid in allPings) {
+          const ping = allPings[pid];
+          if (now - ping.timestamp < PING_DURATION) {
+            pingFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [ping.lon, ping.lat] },
+              properties: {}
+            });
+          }
+        }
+        const pingSource = mapInstance.getSource('pings') as maplibregl.GeoJSONSource;
+        if (pingSource) {
+          pingSource.setData({ type: 'FeatureCollection', features: pingFeatures as any });
+        }
+        const pingPointerData = Object.entries(allPings)
+          .filter(([_, ping]) => now - ping.timestamp < PING_DURATION)
+          .map(([pid, ping]) => {
+            const pointer = getPointer(ping.lat, ping.lon);
+            return { pid, pointer };
+          })
+          .filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
+        setPingPointers(pingPointerData);
       }
 
       if (isFollowing() && mapInstance) {
@@ -1709,6 +1758,46 @@ export default function MapView() {
               }}
             >
               {p.pid} {sensibleNumber(p.pointer.distance)} km
+            </div>
+          </div>
+        )}
+      </For>
+
+      <For each={pingPointers()}>
+        {(p) => (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${p.pointer.x}px`,
+              top: `${p.pointer.y}px`,
+              transform: `translate(-50%, -50%)`,
+              display: 'flex',
+              'align-items': 'center',
+              gap: '4px',
+              "pointer-events": 'none',
+              "z-index": 100,
+            }}
+          >
+            <div
+              style={{
+                transform: `rotate(${p.pointer.bearing}deg)`,
+                color: '#ff6600',
+                "font-size": '24px',
+                "text-shadow": '0 0 2px #000',
+              }}
+            >
+              ▲
+            </div>
+            <div
+              style={{
+                color: '#ff6600',
+                "font-size": '14px',
+                "font-weight": 'bold',
+                "text-shadow": '0 0 1px #000',
+                "white-space": 'nowrap'
+              }}
+            >
+              {p.pid}'s ping {sensibleNumber(p.pointer.distance)} km
             </div>
           </div>
         )}

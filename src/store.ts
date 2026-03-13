@@ -152,6 +152,8 @@ export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | '
 export const $gameStartTime = atom<number | null>(null);
 export const $mapZoom = atom(14);
 export const $isRerun = atom(false);
+type Ping = { lat: number, lon: number, timestamp: number };
+export const $pings = map<Record<string, Ping>>({});
 
 import { loadStats, saveStats, type PlayerStats } from './utils/stats';
 let $playerStatsInstance: PlayerStats;
@@ -437,6 +439,10 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
         const updatedPlayer = processPlayer({ ...p, waypoints: msg.waypoints, viewingStopName: null });
         $players.setKey(msg.playerId, updatedPlayer);
       }
+    }
+
+    if (msg.type === 'RECV_PING') {
+      $pings.setKey(msg.playerId, { lat: msg.lat, lon: msg.lon, timestamp: msg.timestamp });
     }
   };
 
@@ -751,6 +757,11 @@ export function forceRealtime() {
 export function stopImmediately(destinationWpIndex?: number) {
   if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
   ws.send(JSON.stringify({ type: 'STOP_IMMEDIATELY', destinationWpIndex }));
+}
+
+export function sendPing(lat: number, lon: number) {
+  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
+  ws.send(JSON.stringify({ type: 'SEND_PING', lat, lon }));
 }
 
 function processPlayer(raw: Player): RenderablePlayer {

@@ -909,6 +909,24 @@ export function handleIncomingMessage(
         checkCountdownLogic(room, hooks);
         hooks.broadcastRoomState(room);
     }
+
+    // --- PING ---
+    if (message.type === 'SEND_PING') {
+        if (!wsData.roomId || !wsData.playerId) return;
+        const room = rooms.get(wsData.roomId);
+        if (!room) return;
+
+        const { lat, lon } = message;
+        if (typeof lat !== 'number' || typeof lon !== 'number') return;
+
+        hooks.publish(wsData.roomId, {
+            type: 'RECV_PING',
+            playerId: wsData.playerId,
+            lat,
+            lon,
+            timestamp: Date.now()
+        });
+    }
 }
 
 function checkCountdownLogic(room: Room, hooks: GameHooks) {
