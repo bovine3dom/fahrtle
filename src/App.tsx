@@ -12,6 +12,7 @@ import { parseCoords, sensibleNumber } from './utils/format';
 import { createClosestCity } from './utils/tiny-cities';
 import { getTimeZone } from './timezone';
 import { colours } from './colours';
+import { calculateCO2Emissions } from './utils/co2';
 const MapView = lazy(() => import('./Map'));
 
 import confetti from 'canvas-confetti';
@@ -901,7 +902,7 @@ function App() {
                                 </div>
                                 <Show when={isFinished()}>
                                   <div style={{ 'font-size': '0.75em', 'color': colours.successDark, 'font-weight': 'bold' }}>
-                                    Finished in {formatDuration(p().finishTime!)}
+                                    Finished in {formatDuration(p().finishTime!)}, {sensibleNumber(calculateCO2Emissions(p().waypoints))} kgCO₂e
                                   </div>
                                 </Show>
                                 <Show when={!isFinished()}>
