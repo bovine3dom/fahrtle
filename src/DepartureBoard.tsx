@@ -595,12 +595,14 @@ export default function DepartureBoard() {
             </Show>
             <div class="header-controls">
               <Show when={mode() === 'departures' ? preview() : null}>
-                {(p) => (
-                  <ActionButton
+                {(p) => {
+                  const uniqueKey = `${p().row.source}-${p().row.trip_id}`;
+                  const blockReason = createMemo(() => (blockingStatusMap().map.get(uniqueKey) || globalBlock()));
+                  return <ActionButton
                     icon="🛂"
-                    title={blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`) || "Board"}
+                    title={blockReason() || "Board"}
                     onClick={() => {
-                      if (blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`)) {
+                      if (blockReason()) {
                         setFlashError(false);
                         setTimeout(() => setFlashError(true), 500);
                         setTimeout(() => setFlashError(false), 1000);
@@ -609,12 +611,12 @@ export default function DepartureBoard() {
                       }
                       handleTripDoubleClick(p().row);
                     }}
-                    disabled={loadingTripKey() !== null}
+                    disabled={(loadingTripKey() !== null || !!blockReason())}
                     loading={loadingTripKey() === `${p().row.source}-${p().row.trip_id}-${p().row.departure_time}`}
                     class="control-btn board-control-btn"
-                    dimmed={!!blockingStatusMap().map.get(`${p().row.source}-${p().row.trip_id}`)}
+                    dimmed={!!blockReason()}
                   />
-                )}
+                }}
               </Show>
               <button
                 class="control-btn minimize-btn"
