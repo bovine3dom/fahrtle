@@ -20,6 +20,24 @@ import { give_me_more_trains } from './utils/i_bloody_love_trains';
 import { getCountry, countryToFlag } from "./utils/tiny-countries";
 import { NightLayer } from 'maplibre-gl-nightlayer';
 
+const PointerArrow = (props: { color: string; size?: number }) => (
+  <svg
+    width={props.size || 24}
+    height={props.size || 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 2L6 20h12L12 2z"
+      fill={props.color}
+      stroke={props.color}
+      stroke-width="1"
+      stroke-linejoin="round"
+    />
+  </svg>
+);
+
 let mapInstance: maplibregl.Map;
 
 const NIGHT_LAYER = new NightLayer({opacity: 0.5});
@@ -1700,12 +1718,9 @@ export default function MapView() {
             <div
               style={{
                 transform: `rotate(${p().bearing}deg)`,
-                color: '#10b981',
-                "font-size": '32px',
-                "text-shadow": '0 0 2px #000',
               }}
             >
-              ▲
+              <PointerArrow color="#10b981" size={28} />
             </div>
             <div
               style={{
@@ -1740,12 +1755,9 @@ export default function MapView() {
             <div
               style={{
                 transform: `rotate(${p.pointer.bearing}deg)`,
-                color: players()[p.pid]?.color || '#fff',
-                "font-size": '24px',
-                "text-shadow": '0 0 1px #000',
               }}
             >
-              ▲
+              <PointerArrow color={players()[p.pid]?.color || '#fff'} />
             </div>
             <div
               style={{
@@ -1780,12 +1792,9 @@ export default function MapView() {
             <div
               style={{
                 transform: `rotate(${p.pointer.bearing}deg)`,
-                color: '#ff6600',
-                "font-size": '24px',
-                "text-shadow": '0 0 2px #000',
               }}
             >
-              ▲
+              <PointerArrow color="#ff6600" />
             </div>
             <div
               style={{
