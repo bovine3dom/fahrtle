@@ -68,7 +68,8 @@ const upsertGhostQuery = db.prepare(`
     color = $color,
     waypoints = $waypoints,
     finishTime = $finishTime,
-    submittedAt = $submittedAt
+    submittedAt = $submittedAt,
+    kgCO2e = $kgCO2e
   WHERE $finishTime < ghosts.finishTime
 `);
 
