@@ -12,6 +12,7 @@ import { formatRowTime, sensibleNumber } from './utils/format';
 import { memoize } from 'micro-memoize';
 import { augmentWithRailRoute } from './utils/railRoute';
 import { nextWaypoint } from './utils/memos';
+import { getServerTime } from './time-sync';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -73,7 +74,6 @@ const ActionButton = (props: {
 
 export default function DepartureBoard() {
   const allResults = useStore($departureBoardResults);
-  const currentTime = useStore($clock);
   const roomState = useStore($roomState);
   const mode = useStore($boardMode);
 
@@ -91,6 +91,12 @@ export default function DepartureBoard() {
   const [loadingTripKey, setLoadingTripKey] = createSignal<string | null>(null);
 
   const [flashError, setFlashError] = createSignal(false);
+
+  const [boardTick, setBoardTick] = createSignal(0);
+  onMount(() => {
+    const id = setInterval(() => setBoardTick(t => t + 1), 500);
+    onCleanup(() => clearInterval(id));
+  });
 
   createEffect(() => {
     const res = results();
@@ -138,7 +144,8 @@ export default function DepartureBoard() {
   });
 
   const currentLocalSeconds = createMemo(() => {
-    const now = currentTime();
+    boardTick();
+    const now = getServerTime();
     const zone = stopZone();
     if (!zone) return 0;
 
@@ -516,19 +523,21 @@ export default function DepartureBoard() {
       });
   };
 
-  const formatClockTime = (time: string | number, showSeconds = false) => {
-    if (!time) return '--:--';
-    const date = new Date(time);
-    const timestamp = date.getTime();
-    if (isNaN(timestamp)) return '--:--';
-    try {
-      return formatInTimeZone(timestamp, stopZone() || 'UTC', showSeconds);
-    } catch (e) {
-      return date.toLocaleTimeString([], {
-        hour: '2-digit', minute: '2-digit', second: showSeconds ? '2-digit' : undefined
-      });
-    }
-  };
+  let clockRef: HTMLDivElement | undefined;
+  onMount(() => {
+    let lastTimeString = '';
+    let frameId: number;
+    const update = () => {
+      const timeString = formatInTimeZone(getServerTime(), stopZone() || 'UTC', true);
+      if (clockRef && timeString !== lastTimeString) {
+        clockRef.innerText = timeString;
+        lastTimeString = timeString;
+      }
+      frameId = requestAnimationFrame(update);
+    };
+    frameId = requestAnimationFrame(update);
+    onCleanup(() => cancelAnimationFrame(frameId));
+  });
 
   return (
     <Show when={allResults().departures.length > 0 || allResults().arrivals.length > 0}>
@@ -633,7 +642,7 @@ export default function DepartureBoard() {
               <button class="control-btn close-btn" onClick={close} title="Close Board">✕</button>
             </div>
             <div class="header-clock" style={{ "--clock-bg": getTimeZoneColor(stopZone()) }}>
-              <div class="clock-time">{formatClockTime(currentTime(), true)}</div>
+              <div ref={clockRef} class="clock-time">--:--:--</div>
               <div class="clock-zone">{stopZone()}</div>
             </div>
           </div>
