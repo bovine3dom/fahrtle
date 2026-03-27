@@ -13,6 +13,7 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { interpolateSpectral, hsl } from 'd3';
 import { haversineDist, lerp, getBearing, type Coords } from './utils/geo';
 import { sensibleNumber } from './utils/format';
+import { getWallSeconds } from './utils/time';
 import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
 import { map_update_lock } from './utils/map_lock';
@@ -104,11 +105,9 @@ export function handleMapClickForDepartures(lat: number, lng: number, shiftKey: 
   const stopZone = getTimeZone(lat, lng);
   $stopTimeZone.set(stopZone);
 
-  const simTime = $clock.get();
-  const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
-  const localDate = new Date(localDateStr);
-  const hour = localDate.getHours();
-  const minute = localDate.getMinutes();
+  const wallSecs = getWallSeconds($clock.get(), stopZone);
+  const hour = Math.floor(wallSecs / 3600);
+  const minute = Math.floor((wallSecs % 3600) / 60);
 
   const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
   const targetMinutes = hour * 60 + minute;

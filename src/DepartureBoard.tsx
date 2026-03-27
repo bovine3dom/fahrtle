@@ -150,17 +150,17 @@ export default function DepartureBoard() {
     if (!zone) return 0;
 
     try {
-      const localDateStr = new Date(now).toLocaleString('en-US', { timeZone: zone });
-      const localDate = new Date(localDateStr);
-      return localDate.getHours() * 3600 + localDate.getMinutes() * 60 + localDate.getSeconds();
+      return getWallSeconds(now, zone);
     } catch (e) {
       return 0;
     }
   });
 
   const getRowSeconds = (departureTime: string) => {
-    const depDate = new Date(departureTime);
-    return depDate.getHours() * 3600 + depDate.getMinutes() * 60 + depDate.getSeconds();
+    const zone = stopZone();
+    if (!zone) return 0;
+    const epoch = parseDBTime(departureTime, zone);
+    return getWallSeconds(epoch, zone);
   };
 
   const [myPos, setMyPos] = createSignal<Coords | null>(null);
