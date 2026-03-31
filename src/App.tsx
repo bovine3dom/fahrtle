@@ -42,6 +42,12 @@ function App() {
   const startTime = useStore($gameStartTime);
   const isDaily = useStore($isDaily);
 
+  // league is often here
+  createEffect(() => {
+    const b = bounds();
+    console.log(b);
+  });
+
   const [minimized, setMinimized] = createSignal(false);
   const [startStr, setStartStr] = createSignal("");
   const [startTimeStr, setStartTimeStr] = createSignal("");

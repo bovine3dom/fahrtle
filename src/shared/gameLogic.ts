@@ -2,6 +2,7 @@
 import simplify from 'simplify-js';
 import { haversineDist } from '../utils/geo';
 import { generatePilotName } from '../names';
+export const CURRENT_LEAGUE = "20260218";
 
 const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
 
@@ -65,6 +66,7 @@ export type Room = {
     ghosts?: boolean;
 
     isRerun: boolean;
+    league: string;
 };
 
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
@@ -361,6 +363,7 @@ export function handleIncomingMessage(
                 playbackRate: 1.0,
                 initialStartTime: now,
                 isRerun: false,
+                league: CURRENT_LEAGUE,
                 difficulty: 'Easy'
             };
             rooms.set(roomId, room);
@@ -626,6 +629,7 @@ export function handleIncomingMessage(
         room.difficulty = message.difficulty || 'Normal';
         room.computerDriver = !!message.computerDriver;
         room.ghosts = !!message.ghosts;
+        room.league = message.league;
 
         if (message.startTime) {
             room.virtualTime = message.startTime;

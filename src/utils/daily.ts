@@ -1,4 +1,4 @@
-import races_url from '../assets/races_weighted_pop.json?url';
+import races_url from '../assets/races_weighted_pop_leagues.jsonl?url';
 
 const INSANE_JS_MONTH_MODIFIER = 1;
 const BASE_DATE = [2026, 2 - INSANE_JS_MONTH_MODIFIER, 18]; // NB: JS months, but not days, are zero-based (really)
@@ -10,7 +10,7 @@ let racesPromise: Promise<any[]> | null = null;
 
 export async function getRaces(): Promise<any[]> {
     if (!racesPromise) {
-        racesPromise = fetch(races_url).then(res => res.json());
+        racesPromise = fetch(races_url).then(async res => (await res.text()).trim().split('\n').map(line => JSON.parse(line)))
     }
     return racesPromise;
 }
@@ -49,6 +49,7 @@ export async function getRaceByIndex(index: number, races?: any[]) {
     return {
         start: [start[0], start[1]] as [number, number],
         finish: [finish[0], finish[1]] as [number, number],
+        league: race.league,
         time
     };
 }

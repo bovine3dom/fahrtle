@@ -200,7 +200,7 @@ const updateStops = async (map: maplibregl.Map) => {
       stop_lon,
       stop_name,
       route_type
-    FROM transitous_everything_20260218_stop_statistics_unmerged3
+    FROM transitous_everything_${$gameBounds.get().league}_stop_statistics_unmerged3
     WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
       AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
     ORDER BY crow_km desc
@@ -1023,7 +1023,7 @@ export default function MapView() {
         SELECT * FROM (
           SELECT * FROM (
             SELECT *, ((toHour(${timeField}) * 60 + toMinute(${timeField})) - ${ctx.targetMinutes} + 1440) % 1440 sort_time
-            FROM transitous_everything_20260218_edgelist_fahrtle2
+            FROM transitous_everything_${$gameBounds.get().league}_edgelist_fahrtle2
             WHERE ${h3Field} IN (${ctx.h3Conditions})
             ORDER by sort_time ASC, travel_time ASC
             ${limByInner}
@@ -1174,6 +1174,11 @@ export default function MapView() {
   });
 
   const bounds = useStore($gameBounds);
+  // league disappears here
+  createEffect(() => {
+    const b = bounds();
+    console.log(b);
+  });
   const roomState = useStore($roomState);
   createEffect((prevState) => {
     const currentState = roomState();

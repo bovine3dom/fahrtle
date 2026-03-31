@@ -6,6 +6,7 @@ import { getDailyRace, getRaceByIndex, getRaces, getDailyRaceIndex } from './uti
 import { createClosestCity, cityDbPromise } from './utils/tiny-cities';
 import { around } from 'geokdbush';
 import { sharedFakeServer } from './fakeServer';
+import { CURRENT_LEAGUE } from './shared/gameLogic';
 import { generatePilotName } from './names';
 import { TODAYS_DATE, BASE_DATE } from './utils/daily';
 import { colours } from './colours';
@@ -13,6 +14,7 @@ import bgImage from './assets/h3_hero.webp';
 import favicon from '../public/favicon.svg';
 import { RaceCalendar } from './RaceCalendar';
 import LeaderboardModal from './LeaderboardModal';
+
 
 export default function Lobby() {
   const generateRandomRoom = () => {
@@ -105,6 +107,7 @@ export default function Lobby() {
         const finishParam = url.searchParams.get('f');
         const timeParam = url.searchParams.get('t');
         const difficultyParam = url.searchParams.get('d') as Difficulty;
+        const leagueParam = url.searchParams.get('l');
 
         if (startParam || finishParam || timeParam || difficultyParam) {
           const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
@@ -112,7 +115,8 @@ export default function Lobby() {
             start: parse(startParam),
             finish: parse(finishParam),
             time: decodeURIComponent(timeParam || ''),
-            difficulty: difficultyParam || difficulty()
+            difficulty: difficultyParam || difficulty(),
+            league: leagueParam || CURRENT_LEAGUE,
           };
         }
 
@@ -130,6 +134,7 @@ export default function Lobby() {
             difficulty: initialBounds?.difficulty || difficulty(),
             dailyRaceIndex: dailyIdx,
             ghosts: true,
+            league: race.league,
           };
         }
       }
