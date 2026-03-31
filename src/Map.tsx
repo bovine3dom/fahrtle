@@ -1329,7 +1329,7 @@ export default function MapView() {
   });
 
   const myId = useStore($myPlayerId);
-  const isFinished = createMemo(() => players()[myId() || ''].finishTime != null);
+  const isFinished = createMemo(() => players()[myId() || '']?.finishTime != null);
   createEffect(async () => {
     const finished = isFinished(); // ... i really don't understand why this is necessary
     await ensureMapLoaded(mapInstance);
