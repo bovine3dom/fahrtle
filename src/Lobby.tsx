@@ -16,6 +16,52 @@ import { RaceCalendar } from './RaceCalendar';
 import LeaderboardModal from './LeaderboardModal';
 
 
+function parseBoundsFromUrl(url: URL, difficulty: () => Difficulty) {
+  const startParam = url.searchParams.get('s');
+  const finishParam = url.searchParams.get('f');
+  const timeParam = url.searchParams.get('t');
+  const difficultyParam = url.searchParams.get('d') as Difficulty;
+  const leagueParam = url.searchParams.get('l');
+  if (!startParam && !finishParam && !timeParam && !difficultyParam) return null;
+  const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
+  return {
+    start: parse(startParam), finish: parse(finishParam),
+    time: decodeURIComponent(timeParam || ''), difficulty: difficultyParam || difficulty(),
+    league: leagueParam || CURRENT_LEAGUE,
+  };
+}
+
+async function getDailyBounds(selectedRaceIndex: () => number | null, difficulty: () => Difficulty, existing?: any) {
+  const raceIndex = selectedRaceIndex();
+  const race = raceIndex !== null ? await getRaceByIndex(raceIndex) : await getDailyRace();
+  const dailyIdx = raceIndex !== null ? raceIndex : await getDailyRaceIndex();
+  return {
+    ...existing, start: race.start, finish: race.finish, time: race.time,
+    difficulty: existing?.difficulty || difficulty(), dailyRaceIndex: dailyIdx,
+    ghosts: true, league: race.league,
+  };
+}
+
+function ModeToggle(props: { isSinglePlayer: () => boolean, isDaily: () => boolean }) {
+  const modes = [
+    { label: 'Multi', active: () => !props.isSinglePlayer(), onClick: () => { $isSinglePlayer.set(false); $isDaily.set(false); } },
+    { label: 'Solo', active: () => props.isSinglePlayer() && !props.isDaily(), onClick: () => { $isSinglePlayer.set(true); $isDaily.set(false); } },
+    { label: 'Daily', active: () => props.isDaily(), onClick: () => { $isSinglePlayer.set(true); $isDaily.set(true); } },
+  ];
+  return (
+    <div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.4)', padding: '4px', 'border-radius': '8px', 'margin-bottom': '8px' }}>
+      {modes.map(m => (
+        <button type="button" onClick={m.onClick} style={{
+          flex: 1, padding: '8px', border: 'none', 'border-radius': '6px',
+          background: m.active() ? colours.primary : 'transparent', color: 'white',
+          cursor: 'pointer', transition: 'all 0.2s', 'font-weight': m.active() ? 'bold' : 'normal',
+          'font-family': 'inherit', 'font-size': '0.8rem'
+        }}>{m.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export default function Lobby() {
   const generateRandomRoom = () => {
     const randomId = Math.random().toString(36).substring(2, 10) +
@@ -92,50 +138,17 @@ export default function Lobby() {
       updateSetting('name', currentUser);
       updateSetting('color', color());
 
-      if (currentRoom) {
-        localStorage.setItem('fahrtle_room', currentRoom);
-      }
+      if (currentRoom) localStorage.setItem('fahrtle_room', currentRoom);
       localStorage.setItem('fahrtle_singleplayer', String(isSinglePlayer()));
       localStorage.setItem('fahrtle_daily', String(isDaily()));
 
       const url = new URL(window.location.href);
-
       let initialBounds = boundsOverride;
 
       if (!initialBounds) {
-        const startParam = url.searchParams.get('s');
-        const finishParam = url.searchParams.get('f');
-        const timeParam = url.searchParams.get('t');
-        const difficultyParam = url.searchParams.get('d') as Difficulty;
-        const leagueParam = url.searchParams.get('l');
-
-        if (startParam || finishParam || timeParam || difficultyParam) {
-          const parse = (s: string | null) => s ? s.split(',').map(Number) as [number, number] : null;
-          initialBounds = {
-            start: parse(startParam),
-            finish: parse(finishParam),
-            time: decodeURIComponent(timeParam || ''),
-            difficulty: difficultyParam || difficulty(),
-            league: leagueParam || CURRENT_LEAGUE,
-          };
-        }
-
+        initialBounds = parseBoundsFromUrl(url, difficulty);
         if (isDaily()) {
-          const raceIndex = selectedRaceIndex();
-          const race = raceIndex !== null 
-            ? await getRaceByIndex(raceIndex)
-            : await getDailyRace();
-          const dailyIdx = raceIndex !== null ? raceIndex : await getDailyRaceIndex();
-          initialBounds = {
-            ...initialBounds,
-            start: race.start,
-            finish: race.finish,
-            time: race.time,
-            difficulty: initialBounds?.difficulty || difficulty(),
-            dailyRaceIndex: dailyIdx,
-            ghosts: true,
-            league: race.league,
-          };
+          initialBounds = await getDailyBounds(selectedRaceIndex, difficulty, initialBounds);
         }
       }
 
@@ -151,18 +164,9 @@ export default function Lobby() {
         url.searchParams.set('room', currentRoom);
       }
 
-      const state = {
-        room: isSinglePlayer() ? null : currentRoom,
-        isSolo: isSinglePlayer(),
-        isDaily: isDaily(),
-        initialBounds
-      };
-
-      if (isAuto) {
-        window.history.replaceState(state, '', url);
-      } else {
-        window.history.pushState(state, '', url);
-      }
+      const state = { room: isSinglePlayer() ? null : currentRoom, isSolo: isSinglePlayer(), isDaily: isDaily(), initialBounds };
+      if (isAuto) window.history.replaceState(state, '', url);
+      else window.history.pushState(state, '', url);
       connectAndJoin(isSinglePlayer() ? null : currentRoom, currentUser, color(), initialBounds);
     }
   };
@@ -273,80 +277,7 @@ export default function Lobby() {
           </h2>
         </div>
 
-        <div style={{
-          display: 'flex',
-          'background': 'rgba(15, 23, 42, 0.4)',
-          'padding': '4px',
-          'border-radius': '8px',
-          'margin-bottom': '8px'
-        }}>
-          <button
-            type="button"
-            onClick={() => {
-              $isSinglePlayer.set(false);
-              $isDaily.set(false);
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              border: 'none',
-              'border-radius': '6px',
-              background: !isSinglePlayer() ? colours.primary : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              'font-weight': !isSinglePlayer() ? 'bold' : 'normal',
-              'font-family': 'inherit',
-              'font-size': '0.8rem'
-            }}
-          >
-            Multi
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              $isSinglePlayer.set(true);
-              $isDaily.set(false);
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              border: 'none',
-              'border-radius': '6px',
-              background: (isSinglePlayer() && !isDaily()) ? colours.primary : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              'font-weight': (isSinglePlayer() && !isDaily()) ? 'bold' : 'normal',
-              'font-family': 'inherit',
-              'font-size': '0.8rem'
-            }}
-          >
-            Solo
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              $isSinglePlayer.set(true);
-              $isDaily.set(true);
-            }}
-            style={{
-              flex: 1,
-              padding: '8px',
-              border: 'none',
-              'border-radius': '6px',
-              background: isDaily() ? colours.primary : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              'font-weight': isDaily() ? 'bold' : 'normal',
-              'font-family': 'inherit',
-              'font-size': '0.8rem'
-            }}
-          >
-            Daily
-          </button>
-        </div>
+        <ModeToggle isSinglePlayer={isSinglePlayer} isDaily={isDaily} />
 
         <Show when={!isSinglePlayer()}>
           <div style={{ opacity: isSinglePlayer() ? 0.5 : 1 }}>

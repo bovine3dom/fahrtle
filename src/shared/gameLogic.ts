@@ -348,6 +348,239 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
     }
 }
 
+function requireRoomAndPlayer(
+    wsData: { roomId: string | null, playerId: string | null },
+    rooms: Map<string, Room>,
+    opts: { requireRunning?: boolean } = {}
+): { room: Room; player: Player } | null {
+    if (!wsData.roomId || !wsData.playerId) return null;
+    const room = rooms.get(wsData.roomId);
+    if (!room) return null;
+    if (opts.requireRunning && room.state !== 'RUNNING') return null;
+    const player = room.players[wsData.playerId];
+    if (!player) return null;
+    return { room, player };
+}
+
+function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHooks) {
+    const now = Date.now();
+    const targetRoomId = message.roomId;
+    let serverTime = now;
+    let rate = 1.0;
+
+    if (targetRoomId && rooms.has(targetRoomId)) {
+        const r = rooms.get(targetRoomId)!;
+        const elapsed = now - r.lastRealTime;
+        serverTime = r.state === 'RUNNING' ? r.virtualTime + (elapsed * r.playbackRate) : r.virtualTime;
+        rate = r.playbackRate;
+    }
+
+    hooks.sendToSender({
+        type: 'SYNC_RESPONSE',
+        clientSendTime: message.clientSendTime,
+        serverTime,
+        realTime: now,
+        rate: (targetRoomId && rooms.get(targetRoomId)?.state === 'RUNNING') ? rate : 0
+    });
+}
+
+function handleJoinRoom(
+    message: any,
+    rooms: Map<string, Room>,
+    wsData: { roomId: string | null, playerId: string | null },
+    hooks: GameHooks,
+    triggerUpdate: (rid: string) => void
+) {
+    const now = Date.now();
+    const { roomId, playerId, color } = message;
+
+    let room = rooms.get(roomId);
+    if (!room) {
+        room = {
+            id: roomId, players: {}, state: 'JOINING', countdownEnd: null,
+            startPos: [55.9533, -3.1883], finishPos: [43.7101, 7.2660],
+            emptySince: null, gameStartTime: null, virtualTime: now,
+            lastRealTime: now, playbackRate: 1.0, initialStartTime: now,
+            isRerun: false, league: CURRENT_LEAGUE, difficulty: 'Easy'
+        };
+        rooms.set(roomId, room);
+    }
+
+    room.emptySince = null;
+
+    if (!room.players[playerId]) {
+        const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
+        room.players[playerId] = {
+            id: playerId,
+            color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
+            isReady: room.state === 'RUNNING',
+            waypoints: [{ x: spawn.x, y: spawn.y, startTime: 0, arrivalTime: 0, speedFactor: 1 }],
+            desiredRate: 1, forceRealtime: false, finishTime: null,
+            disconnectedAt: null, viewingStopName: null, isGhost: false
+        };
+    } else {
+        const player = room.players[playerId];
+        if (player) {
+            player.disconnectedAt = null;
+            if (player.desiredRate === 500.0) player.desiredRate = 1.0;
+        }
+    }
+
+    wsData.roomId = roomId;
+    wsData.playerId = playerId;
+
+    hooks.subscribeToRoom(roomId);
+    stepClock(room);
+
+    hooks.sendToSender({
+        type: 'ROOM_STATE', state: room.state, countdownEnd: room.countdownEnd,
+        gameStartTime: room.gameStartTime, serverTime: room.virtualTime,
+        ...boundsToWire(getRoomBounds(room)), isRerun: room.isRerun,
+        realTime: now, rate: room.state === 'RUNNING' ? room.playbackRate : 0,
+        players: room.players
+    });
+
+    hooks.publish(roomId, { type: 'PLAYER_JOINED', player: room.players[playerId] });
+    triggerUpdate(roomId);
+}
+
+function handleRaceAgain(
+    message: any,
+    wsData: { roomId: string | null, playerId: string | null },
+    result: { room: Room; player: Player },
+    hooks: GameHooks,
+    triggerUpdate: (rid: string) => void
+) {
+    const { room, player } = result;
+    const ghostId = `👻-${generatePilotName()}`;
+    const hue = Math.floor(Math.random() * 360);
+    const ghost: Player = {
+        id: ghostId, color: `hsl(${hue}, 30%, 50%)`, isReady: true,
+        waypoints: message.waypoints, desiredRate: 1e9, forceRealtime: false,
+        finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
+    };
+
+    room.players[ghostId] = ghost;
+
+    const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
+    player.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
+    player.isReady = false;
+    player.finishTime = null;
+
+    hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: null });
+    room.state = 'JOINING';
+    room.virtualTime = room.initialStartTime;
+    room.gameStartTime = null;
+    room.isRerun = true;
+
+    hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
+    hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
+    hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: false });
+    hooks.broadcastRoomState(room);
+    triggerUpdate(wsData.roomId!);
+}
+
+function handleSetGameBounds(
+    message: any,
+    wsData: { roomId: string | null, playerId: string | null },
+    room: Room,
+    hooks: GameHooks,
+    triggerUpdate: (rid: string) => void
+) {
+    if (room.state !== 'JOINING') return;
+
+    const prevStart = room.startPos;
+    room.startPos = message.startPos;
+    room.finishPos = message.finishPos;
+    room.difficulty = message.difficulty || 'Normal';
+    room.computerDriver = !!message.computerDriver;
+    room.ghosts = !!message.ghosts;
+    room.league = message.league;
+
+    if (message.startTime) {
+        room.virtualTime = message.startTime;
+        room.initialStartTime = message.startTime;
+    }
+
+    if (room.startPos) {
+        const [newLat, newLng] = room.startPos;
+        const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+        const timeChanged = message.startTime !== undefined;
+
+        if (posChanged || timeChanged) {
+            for (const pid of Object.keys(room.players)) {
+                if (room.players[pid].isGhost) { delete room.players[pid]; continue; }
+                const p = room.players[pid];
+                const spawn = getSpawnPoint(newLat, newLng);
+                p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
+                hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
+            }
+        }
+    }
+    hooks.broadcastRoomState(room);
+    triggerUpdate(wsData.roomId!);
+}
+
+function handleStopImmediately(
+    message: any,
+    wsData: { roomId: string | null, playerId: string | null },
+    result: { room: Room; player: Player },
+    hooks: GameHooks,
+    triggerUpdate: (rid: string) => void
+) {
+    const { room, player } = result;
+    stepClock(room);
+    const vTime = room.virtualTime;
+
+    if (message.destinationWpIndex !== undefined) {
+        const idx = message.destinationWpIndex;
+        if (idx >= 0 && idx < player.waypoints.length) {
+            player.waypoints = player.waypoints.slice(0, idx + 1);
+            hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
+            triggerUpdate(wsData.roomId!);
+            return;
+        }
+    }
+
+    let currentPos = { x: player.waypoints[0].x, y: player.waypoints[0].y };
+    const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
+
+    if (nextWpIndex !== -1) {
+        const nextWp = player.waypoints[nextWpIndex];
+        const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
+        const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
+        const duration = nextWp.arrivalTime - segStartTime;
+        if (duration > 0 && vTime > segStartTime) {
+            const t = (vTime - segStartTime) / duration;
+            currentPos.x = lerp(prevWp.x, nextWp.x, t);
+            currentPos.y = lerp(prevWp.y, nextWp.y, t);
+        } else if (vTime >= nextWp.arrivalTime) {
+            currentPos = { x: nextWp.x, y: nextWp.y };
+        } else {
+            currentPos = { x: prevWp.x, y: prevWp.y };
+        }
+    } else {
+        const last = player.waypoints[player.waypoints.length - 1];
+        currentPos = { x: last.x, y: last.y };
+    }
+
+    if (nextWpIndex !== -1) {
+        const nextWp = player.waypoints[nextWpIndex];
+        const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
+        const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
+        player.waypoints = [
+            ...player.waypoints.slice(0, nextWpIndex),
+            { x: currentPos.x, y: currentPos.y, startTime: segStartTime, arrivalTime: vTime, speedFactor: 1, stopName: 'Stopped' }
+        ];
+    } else {
+        const last = player.waypoints[player.waypoints.length - 1];
+        if (last) { last.stopName = 'Stopped'; last.arrivalTime = Math.min(last.arrivalTime, vTime); }
+    }
+
+    hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
+    triggerUpdate(wsData.roomId!);
+}
+
 export function handleIncomingMessage(
     message: any,
     rooms: Map<string, Room>,
@@ -355,622 +588,184 @@ export function handleIncomingMessage(
     hooks: GameHooks,
     updateRoomCallback: (roomId: string) => void
 ) {
-    const now = Date.now();
-
     const triggerUpdate = (rid: string) => {
         const r = rooms.get(rid);
-        if (r) {
-            updateRoomLogic(r, hooks, updateRoomCallback);
-        }
+        if (r) updateRoomLogic(r, hooks, updateRoomCallback);
     };
 
-    // --- SYNC ---
-    if (message.type === 'SYNC_REQUEST') {
-        const targetRoomId = message.roomId || wsData.roomId;
-        let serverTime = now;
-        let rate = 1.0;
+    if (message.type === 'SYNC_REQUEST') { handleSyncRequest(message, rooms, hooks); return; }
+    if (message.type === 'JOIN_ROOM') { handleJoinRoom(message, rooms, wsData, hooks, triggerUpdate); return; }
 
-        if (targetRoomId && rooms.has(targetRoomId)) {
-            const r = rooms.get(targetRoomId)!;
-            const elapsed = now - r.lastRealTime;
-            const vTime = r.state === 'RUNNING' ? r.virtualTime + (elapsed * r.playbackRate) : r.virtualTime;
-            serverTime = vTime;
-            rate = r.playbackRate;
-        }
-
-        hooks.sendToSender({
-            type: 'SYNC_RESPONSE',
-            clientSendTime: message.clientSendTime,
-            serverTime: serverTime,
-            realTime: now,
-            rate: (targetRoomId && rooms.get(targetRoomId)?.state === 'RUNNING') ? rate : 0
-        });
+    if (message.type === 'TOGGLE_READY') {
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        r.player.isReady = !r.player.isReady;
+        hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: r.player.isReady });
+        checkCountdownLogic(r.room, hooks);
+        triggerUpdate(wsData.roomId!);
         return;
     }
 
-    // --- JOIN ---
-    if (message.type === 'JOIN_ROOM') {
-        const { roomId, playerId, color } = message;
-
-        let room = rooms.get(roomId);
-        if (!room) {
-            room = {
-                id: roomId,
-                players: {},
-                state: 'JOINING',
-                countdownEnd: null,
-                startPos: [55.9533, -3.1883], // Edinburgh, Scotland
-                finishPos: [43.7101, 7.2660], // Nice, France
-                emptySince: null,
-                gameStartTime: null,
-                virtualTime: now,
-                lastRealTime: now,
-                playbackRate: 1.0,
-                initialStartTime: now,
-                isRerun: false,
-                league: CURRENT_LEAGUE,
-                difficulty: 'Easy'
-            };
-            rooms.set(roomId, room);
-        }
-
-        room.emptySince = null;
-
-        if (!room.players[playerId]) {
-            const centerLat = room.startPos[0];
-            const centerLng = room.startPos[1];
-            const spawn = getSpawnPoint(centerLat, centerLng);
-
-            room.players[playerId] = {
-                id: playerId,
-                color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
-                isReady: room.state === 'RUNNING',
-                waypoints: [{
-                    x: spawn.x,
-                    y: spawn.y,
-                    startTime: 0,
-                    arrivalTime: 0,
-                    speedFactor: 1
-                }],
-                desiredRate: 1,
-                forceRealtime: false,
-                finishTime: null,
-                disconnectedAt: null,
-                viewingStopName: null,
-                isGhost: false
-            };
-        } else {
-            const player = room.players[playerId];
-            if (player) {
-                player.disconnectedAt = null;
-                if (player.desiredRate === 500.0) {
-                    player.desiredRate = 1.0;
-                }
-            }
-        }
-
-        wsData.roomId = roomId;
-        wsData.playerId = playerId;
-
-        hooks.subscribeToRoom(roomId);
-
-        stepClock(room);
-
-        hooks.sendToSender({
-            type: 'ROOM_STATE',
-            state: room.state,
-            countdownEnd: room.countdownEnd,
-            gameStartTime: room.gameStartTime,
-            serverTime: room.virtualTime,
-            ...boundsToWire(getRoomBounds(room)),
-            isRerun: room.isRerun,
-            realTime: now,
-            rate: room.state === 'RUNNING' ? room.playbackRate : 0,
-            players: room.players
-        });
-
-        hooks.publish(roomId, {
-            type: 'PLAYER_JOINED',
-            player: room.players[playerId]
-        });
-
-        triggerUpdate(roomId);
-    }
-
-    // --- TOGGLE READY ---
-    if (message.type === 'TOGGLE_READY') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        const player = room?.players[wsData.playerId];
-        if (!room || !player) return;
-
-        player.isReady = !player.isReady;
-
-        hooks.publish(wsData.roomId, {
-            type: 'READY_UPDATE',
-            playerId: wsData.playerId,
-            isReady: player.isReady
-        });
-
-        checkCountdownLogic(room, hooks);
-        triggerUpdate(wsData.roomId);
-    }
-
-    // --- RACE AGAIN ---
     if (message.type === 'RACE_AGAIN') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        const player = room?.players[wsData.playerId];
-        if (!room || !player) return;
-
-        const ghostId = `👻-${generatePilotName()}`;
-        const hue = Math.floor(Math.random() * 360);
-        const ghost: Player = {
-            id: ghostId,
-            color: `hsl(${hue}, 30%, 50%)`,
-            isReady: true,
-            waypoints: message.waypoints,
-            desiredRate: 1e9,
-            forceRealtime: false,
-            finishTime: null,
-            disconnectedAt: null,
-            viewingStopName: null,
-            isGhost: true
-        };
-
-        room.players[ghostId] = ghost;
-
-        const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
-        player.waypoints = [{
-            x: spawn.x,
-            y: spawn.y,
-            startTime: room.initialStartTime,
-            arrivalTime: room.initialStartTime,
-            speedFactor: 1
-        }];
-        player.isReady = false;
-        player.finishTime = null;
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_FINISH_UPDATE',
-            playerId: wsData.playerId,
-            finishTime: null
-        });
-
-        room.state = 'JOINING';
-        room.virtualTime = room.initialStartTime;
-        room.gameStartTime = null;
-        room.isRerun = true;
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_JOINED',
-            playerId: ghostId,
-            player: ghost
-        });
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_WAYPOINTS_UPDATE',
-            playerId: wsData.playerId,
-            waypoints: player.waypoints
-        });
-
-        hooks.publish(wsData.roomId, {
-            type: 'READY_UPDATE',
-            playerId: wsData.playerId,
-            isReady: false
-        });
-
-        hooks.broadcastRoomState(room);
-        triggerUpdate(wsData.roomId);
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        handleRaceAgain(message, wsData, r, hooks, triggerUpdate);
+        return;
     }
 
-    // --- ADD GHOSTS ---
     if (message.type === 'ADD_GHOSTS') {
         if (!wsData.roomId) return;
         const room = rooms.get(wsData.roomId);
         if (!room) return;
-
         const { ghosts } = message;
         if (!Array.isArray(ghosts)) return;
-
         for (const ghostData of ghosts) {
             const { playerName, waypoints, color } = ghostData;
             const ghostId = `👻-${playerName}`;
-            
             const ghost: Player = {
-                id: ghostId,
-                color: color || `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
-                isReady: true,
-                waypoints: waypoints,
-                desiredRate: 1e9,
-                forceRealtime: false,
-                finishTime: null,
-                disconnectedAt: null,
-                viewingStopName: null,
-                isGhost: true
+                id: ghostId, color: color || `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
+                isReady: true, waypoints, desiredRate: 1e9, forceRealtime: false,
+                finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
             };
-
             room.players[ghostId] = ghost;
-
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_JOINED',
-                playerId: ghostId,
-                player: ghost
-            });
+            hooks.publish(wsData.roomId, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
         }
-
         hooks.broadcastRoomState(room);
+        return;
     }
 
     if (message.type === 'UPDATE_PLAYER_COLOR') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (player) {
-            player.color = message.color;
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_COLOR_UPDATE',
-                playerId: wsData.playerId,
-                color: player.color
-            });
-        }
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        r.player.color = message.color;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_COLOR_UPDATE', playerId: wsData.playerId, color: r.player.color });
+        return;
     }
 
     if (message.type === 'TOGGLE_SNOOZE') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (player) {
-            player.forceRealtime = false;
-            player.desiredRate = player.desiredRate > 1.0 ? 1.0 : 500.0;
-
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_SNOOZE_UPDATE',
-                playerId: wsData.playerId,
-                desiredRate: player.desiredRate,
-                forceRealtime: player.forceRealtime
-            });
-
-            triggerUpdate(wsData.roomId);
-        }
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        r.player.forceRealtime = false;
+        r.player.desiredRate = r.player.desiredRate > 1.0 ? 1.0 : 500.0;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
+        triggerUpdate(wsData.roomId!);
+        return;
     }
 
     if (message.type === 'FORCE_REALTIME') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (player) {
-            player.forceRealtime = !player.forceRealtime;
-            if (player.forceRealtime) {
-                player.desiredRate = 1.0;
-            }
-
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_SNOOZE_UPDATE',
-                playerId: wsData.playerId,
-                desiredRate: player.desiredRate,
-                forceRealtime: player.forceRealtime
-            });
-
-            triggerUpdate(wsData.roomId);
-        }
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        r.player.forceRealtime = !r.player.forceRealtime;
+        if (r.player.forceRealtime) r.player.desiredRate = 1.0;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
+        triggerUpdate(wsData.roomId!);
+        return;
     }
 
     if (message.type === 'SET_GAME_BOUNDS') {
         if (!wsData.roomId) return;
         const room = rooms.get(wsData.roomId);
-        if (!room || room.state !== 'JOINING') return;
-
-        const prevStart = room.startPos;
-        room.startPos = message.startPos;
-        room.finishPos = message.finishPos;
-        room.difficulty = message.difficulty || 'Normal';
-        room.computerDriver = !!message.computerDriver;
-        room.ghosts = !!message.ghosts;
-        room.league = message.league;
-
-        if (message.startTime) {
-            room.virtualTime = message.startTime;
-            room.initialStartTime = message.startTime;
-        }
-
-        if (room.startPos) {
-            const [newLat, newLng] = room.startPos;
-
-            const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
-            const timeChanged = message.startTime !== undefined;
-
-            if (posChanged || timeChanged) {
-                const pids = Object.keys(room.players);
-                for (const pid of pids) {
-                    if (room.players[pid].isGhost) {
-                        delete room.players[pid];
-                        continue;
-                    }
-                    const p = room.players[pid];
-                    const spawn = getSpawnPoint(newLat, newLng);
-                    p.waypoints = [{
-                        x: spawn.x,
-                        y: spawn.y,
-                        startTime: room.virtualTime,
-                        arrivalTime: room.virtualTime,
-                        speedFactor: 1
-                    }];
-
-                    hooks.publish(wsData.roomId, {
-                        type: 'PLAYER_WAYPOINTS_UPDATE',
-                        playerId: pid,
-                        waypoints: p.waypoints
-                    });
-                }
-            }
-        }
-        hooks.broadcastRoomState(room);
-        triggerUpdate(wsData.roomId);
+        if (!room) return;
+        handleSetGameBounds(message, wsData, room, hooks, triggerUpdate);
+        return;
     }
 
     if (message.type === 'SET_VIEWING_STOP') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (player) {
-            player.viewingStopName = message.stopName;
-            hooks.publish(wsData.roomId, {
-                type: 'PLAYER_VIEW_UPDATE',
-                playerId: wsData.playerId,
-                viewingStopName: player.viewingStopName
-            });
-        }
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        r.player.viewingStopName = message.stopName;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: wsData.playerId, viewingStopName: r.player.viewingStopName });
+        return;
     }
 
-    // --- ADD WAYPOINTS BATCH ---
     if (message.type === 'ADD_WAYPOINTS_BATCH') {
-        if (!wsData.roomId || !wsData.playerId) return;
-
-        const room = rooms.get(wsData.roomId);
-        if (!room || room.state !== 'RUNNING') return;
-        const player = room.players[wsData.playerId];
-        if (!player) return;
-
-        stepClock(room);
-        player.viewingStopName = null;
-
+        const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
+        if (!r) return;
+        stepClock(r.room);
+        r.player.viewingStopName = null;
         const { waypoints } = message;
         if (!Array.isArray(waypoints) || waypoints.length === 0) return;
-
         for (const wp of waypoints) {
-            const lastPoint = player.waypoints[player.waypoints.length - 1];
-            let start = lastPoint.arrivalTime;
-            if (start < room.virtualTime) {
-                start = room.virtualTime;
-            }
-
+            const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
+            let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
             let finalArrival = wp.arrivalTime;
             if (finalArrival === undefined) {
                 const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
-                const duration = distance / BASE_SPEED;
-                finalArrival = start + duration;
+                finalArrival = start + distance / BASE_SPEED;
             }
-
-            player.waypoints.push({
-                x: wp.x,
-                y: wp.y,
-                startTime: start,
-                arrivalTime: finalArrival,
-                speedFactor: wp.speedFactor,
-                stopName: wp.stopName,
-                isWalk: wp.isWalk || false,
-                isWait: wp.isWait || false,
-                isInterstop: wp.isInterstop || false,
-                route_color: wp.route_color,
-                route_short_name: wp.route_short_name,
-                display_name: wp.display_name,
-                emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
-                route_departure_time: wp.route_departure_time,
-                timeStr: wp.timeStr
+            r.player.waypoints.push({
+                x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
+                speedFactor: wp.speedFactor, stopName: wp.stopName,
+                isWalk: wp.isWalk || false, isWait: wp.isWait || false, isInterstop: wp.isInterstop || false,
+                route_color: wp.route_color, route_short_name: wp.route_short_name,
+                display_name: wp.display_name, emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
+                route_departure_time: wp.route_departure_time, timeStr: wp.timeStr
             });
         }
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_WAYPOINTS_UPDATE',
-            playerId: wsData.playerId,
-            waypoints: player.waypoints
-        });
-
-        triggerUpdate(wsData.roomId);
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: r.player.waypoints });
+        triggerUpdate(wsData.roomId!);
+        return;
     }
 
-    // --- ADD WAYPOINT ---
     if (message.type === 'ADD_WAYPOINT') {
-        if (!wsData.roomId || !wsData.playerId) return;
-
-        const room = rooms.get(wsData.roomId);
-        if (!room || room.state !== 'RUNNING') return;
-        const player = room.players[wsData.playerId];
-        if (!player) return;
-
-        stepClock(room);
-
+        const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
+        if (!r) return;
+        stepClock(r.room);
         const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
-        const lastPoint = player.waypoints[player.waypoints.length - 1];
-
-        let start = lastPoint.arrivalTime;
-        if (start < room.virtualTime) {
-            start = room.virtualTime;
-        }
-
+        const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
+        let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
         let finalArrival = arrivalTime;
         if (finalArrival === undefined) {
             const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: y, lon: x }) || 0;
-            const duration = distance / BASE_SPEED;
-            finalArrival = start + duration;
+            finalArrival = start + distance / BASE_SPEED;
         }
-
-        player.viewingStopName = null;
-
+        r.player.viewingStopName = null;
         const newWaypoint: Waypoint = {
-            x, y,
-            startTime: start,
-            arrivalTime: finalArrival,
-            speedFactor: speedFactor,
-            stopName: stopName || undefined,
-            isWalk: isWalk || false,
-            isWait: isWait || false,
-            isInterstop: isInterstop || false,
-            route_color,
-            route_short_name,
-            display_name,
-            emoji: isWalk ? '🐾' : (isWait ? '⏳' : emoji),
-            route_departure_time,
-            timeStr
+            x, y, startTime: start, arrivalTime: finalArrival, speedFactor,
+            stopName: stopName || undefined, isWalk: isWalk || false, isWait: isWait || false, isInterstop: isInterstop || false,
+            route_color, route_short_name, display_name, emoji: isWalk ? '🐾' : (isWait ? '⏳' : emoji),
+            route_departure_time, timeStr
         };
-
-        player.waypoints.push(newWaypoint);
-
-        hooks.publish(wsData.roomId, {
-            type: 'WAYPOINT_ADDED',
-            playerId: wsData.playerId,
-            waypoint: newWaypoint
-        });
-
-        triggerUpdate(wsData.roomId);
+        r.player.waypoints.push(newWaypoint);
+        hooks.publish(wsData.roomId!, { type: 'WAYPOINT_ADDED', playerId: wsData.playerId, waypoint: newWaypoint });
+        triggerUpdate(wsData.roomId!);
+        return;
     }
 
     if (message.type === 'STOP_IMMEDIATELY') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-        const player = room.players[wsData.playerId];
-        if (!player) return;
-
-        stepClock(room);
-        const vTime = room.virtualTime;
-
-        if (message.destinationWpIndex !== undefined) {
-            const idx = message.destinationWpIndex;
-            if (idx >= 0 && idx < player.waypoints.length) {
-                player.waypoints = player.waypoints.slice(0, idx + 1);
-                hooks.publish(wsData.roomId, {
-                    type: 'PLAYER_WAYPOINTS_UPDATE',
-                    playerId: wsData.playerId,
-                    waypoints: player.waypoints
-                });
-                triggerUpdate(wsData.roomId);
-                return;
-            }
-        }
-
-        let currentPos = { x: player.waypoints[0].x, y: player.waypoints[0].y };
-        const nextWpIndex = player.waypoints.findIndex(wp => wp.arrivalTime > vTime);
-
-        if (nextWpIndex !== -1) {
-            const nextWp = player.waypoints[nextWpIndex];
-            const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
-            const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
-            const duration = nextWp.arrivalTime - segStartTime;
-            if (duration > 0 && vTime > segStartTime) {
-                const t = (vTime - segStartTime) / duration;
-                currentPos.x = lerp(prevWp.x, nextWp.x, t);
-                currentPos.y = lerp(prevWp.y, nextWp.y, t);
-            } else if (vTime >= nextWp.arrivalTime) {
-                currentPos.x = nextWp.x;
-                currentPos.y = nextWp.y;
-            } else {
-                currentPos.x = prevWp.x;
-                currentPos.y = prevWp.y;
-            }
-        } else {
-            const last = player.waypoints[player.waypoints.length - 1];
-            currentPos.x = last.x;
-            currentPos.y = last.y;
-        }
-
-        if (nextWpIndex !== -1) {
-            const nextWp = player.waypoints[nextWpIndex];
-            const prevWp = player.waypoints[nextWpIndex - 1] || player.waypoints[0];
-            const segStartTime = Math.max(prevWp.arrivalTime, nextWp.startTime);
-
-            player.waypoints = [
-                ...player.waypoints.slice(0, nextWpIndex),
-                {
-                    x: currentPos.x,
-                    y: currentPos.y,
-                    startTime: segStartTime,
-                    arrivalTime: vTime,
-                    speedFactor: 1,
-                    stopName: 'Stopped',
-                }
-            ];
-        } else {
-            const last = player.waypoints[player.waypoints.length - 1];
-            if (last) {
-                last.stopName = 'Stopped';
-                last.arrivalTime = Math.min(last.arrivalTime, vTime);
-            }
-        }
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_WAYPOINTS_UPDATE',
-            playerId: wsData.playerId,
-            waypoints: player.waypoints
-        });
-        triggerUpdate(wsData.roomId);
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
+        handleStopImmediately(message, wsData, r, hooks, triggerUpdate);
+        return;
     }
 
     if (message.type === 'PLAYER_FINISHED') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room || room.state !== 'RUNNING') return;
-
-        const player = room.players[wsData.playerId];
-        if (!player || player.finishTime) return;
-        player.finishTime = message.finishTime;
-
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_FINISH_UPDATE',
-            playerId: wsData.playerId,
-            finishTime: player.finishTime
-        });
+        const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
+        if (!r || r.player.finishTime) return;
+        r.player.finishTime = message.finishTime;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
+        return;
     }
 
-    // --- PLAYER KICK ---
     if (message.type === 'PLAYER_KICK') {
         if (!wsData.roomId) return;
         const room = rooms.get(wsData.roomId);
         if (!room) return;
-
         const { playerId } = message;
         if (!playerId || !room.players[playerId]) return;
-
         delete room.players[playerId];
-        hooks.publish(wsData.roomId, {
-            type: 'PLAYER_LEFT',
-            playerId: playerId
-        });
+        hooks.publish(wsData.roomId, { type: 'PLAYER_LEFT', playerId });
         checkCountdownLogic(room, hooks);
         hooks.broadcastRoomState(room);
+        return;
     }
 
-    // --- PING ---
     if (message.type === 'SEND_PING') {
-        if (!wsData.roomId || !wsData.playerId) return;
-        const room = rooms.get(wsData.roomId);
-        if (!room) return;
-
+        const r = requireRoomAndPlayer(wsData, rooms);
+        if (!r) return;
         const { lat, lon } = message;
         if (typeof lat !== 'number' || typeof lon !== 'number') return;
-
-        hooks.publish(wsData.roomId, {
-            type: 'RECV_PING',
-            playerId: wsData.playerId,
-            lat,
-            lon,
-            timestamp: Date.now()
-        });
+        hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: Date.now() });
     }
 }
 
