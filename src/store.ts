@@ -245,6 +245,149 @@ interface GenericWebSocket {
 
 let ws: GenericWebSocket | null = null;
 
+function handleRoomState(msg: any) {
+  const renderables: Record<string, RenderablePlayer> = {};
+  for (const pid in msg.players) {
+    renderables[pid] = processPlayer(msg.players[pid]);
+    if (pid === $myPlayerId.get()) {
+      const p = msg.players[pid];
+      if (p.waypoints.length > 0) {
+        const spawn = p.waypoints[0];
+        $playerTimeZone.set(getTimeZone(spawn.y, spawn.x));
+        if (p.waypoints.some((wp: any) => wp.arrivalTime > msg.serverTime) && msg.state === 'RUNNING') {
+          $isFollowing.set(true);
+        }
+      }
+    }
+  }
+  $players.set(renderables);
+  $roomState.set(msg.state);
+  $countdownEnd.set(msg.countdownEnd);
+  const previousGhosts = $gameBounds.get().ghosts;
+  $gameBounds.set(wireToGameBounds(msg));
+  $gameStartTime.set(msg.gameStartTime);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  handleGhostFlags(previousGhosts, msg.ghosts);
+}
+
+function handleRoomStateUpdate(msg: any) {
+  $roomState.set(msg.state);
+  $countdownEnd.set(msg.countdownEnd);
+  const prevGhosts = $gameBounds.get().ghosts;
+  $gameBounds.set(wireToGameBounds(msg));
+  $gameStartTime.set(msg.gameStartTime);
+  $isRerun.set(msg.isRerun);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  handleGhostFlags(prevGhosts, msg.ghosts);
+}
+
+function handleGhostFlags(previousGhosts: boolean | undefined, currentGhosts: any) {
+  if (previousGhosts && !currentGhosts) {
+    removeGhosts();
+  } else if (currentGhosts && $isDaily.get()) {
+    const idx = $currentDailyRaceIndex.get();
+    if (idx !== null) fetchAndAddGhosts(idx);
+  }
+}
+
+function updatePlayerField(playerId: string, updates: (p: RenderablePlayer) => Partial<RenderablePlayer>) {
+  const p = $players.get()[playerId];
+  if (p) $players.setKey(playerId, { ...p, ...updates(p) });
+}
+
+function handleWsMessage(event: any) {
+  const msg = JSON.parse(event.data);
+
+  if (msg.type === 'SYNC_RESPONSE') {
+    const now = Date.now();
+    syncClock(msg.serverTime, msg.realTime || now, msg.rate, (now - msg.clientSendTime) / 2);
+    $globalRate.set(msg.rate);
+    return;
+  }
+
+  if (msg.type === 'CLOCK_UPDATE') {
+    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+    $globalRate.set(msg.rate);
+    return;
+  }
+
+  if (msg.type === 'ROOM_STATE') { handleRoomState(msg); return; }
+  if (msg.type === 'ROOM_STATE_UPDATE') { handleRoomStateUpdate(msg); return; }
+
+  if (msg.type === 'READY_UPDATE') { updatePlayerField(msg.playerId, () => ({ isReady: msg.isReady })); return; }
+  if (msg.type === 'PLAYER_JOINED') { $players.setKey(msg.player.id, processPlayer(msg.player)); return; }
+
+  if (msg.type === 'PLAYER_LEFT') {
+    const current = { ...$players.get() };
+    delete current[msg.playerId];
+    $players.set(current);
+    return;
+  }
+
+  if (msg.type === 'WAYPOINT_ADDED') {
+    const p = $players.get()[msg.playerId];
+    if (p) $players.setKey(msg.playerId, processPlayer({ ...p, waypoints: [...p.waypoints, msg.waypoint], viewingStopName: null }));
+    return;
+  }
+
+  if (msg.type === 'PLAYER_COLOR_UPDATE') { updatePlayerField(msg.playerId, () => ({ color: msg.color })); return; }
+  if (msg.type === 'PLAYER_SNOOZE_UPDATE') { updatePlayerField(msg.playerId, () => ({ desiredRate: msg.desiredRate, forceRealtime: msg.forceRealtime })); return; }
+  if (msg.type === 'PLAYER_VIEW_UPDATE') { updatePlayerField(msg.playerId, () => ({ viewingStopName: msg.viewingStopName })); return; }
+  if (msg.type === 'PLAYER_FINISH_UPDATE') { updatePlayerField(msg.playerId, () => ({ finishTime: msg.finishTime })); return; }
+
+  if (msg.type === 'PLAYER_WAYPOINTS_UPDATE') {
+    const p = $players.get()[msg.playerId];
+    if (p) $players.setKey(msg.playerId, processPlayer({ ...p, waypoints: msg.waypoints, viewingStopName: null }));
+    return;
+  }
+
+  if (msg.type === 'RECV_PING') {
+    $pings.setKey(msg.playerId, { lat: msg.lat, lon: msg.lon, timestamp: msg.timestamp });
+  }
+}
+
+function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRaceIndex?: number }) {
+  let startTime: number | undefined;
+  const startPos = initialBounds.start || [51, 0];
+  if (startPos && initialBounds.time) {
+    const tz = getTimeZone(startPos[0], startPos[1]);
+    const parsed = parseUserTime(initialBounds.time, tz);
+    if (parsed !== null) startTime = parsed;
+  }
+
+  ws?.send(JSON.stringify({
+    type: 'SET_GAME_BOUNDS',
+    ...boundsToWire({
+      start: initialBounds.start,
+      finish: initialBounds.finish,
+      time: startTime,
+      difficulty: initialBounds.difficulty || 'Normal',
+      computerDriver: initialBounds.computerDriver || false,
+      ghosts: initialBounds.ghosts || false,
+      league: initialBounds.league,
+    }),
+  }));
+
+  if (initialBounds.dailyRaceIndex !== undefined) {
+    if (initialBounds.ghosts) fetchAndAddGhosts(initialBounds.dailyRaceIndex);
+    else removeGhosts();
+  }
+
+  $gameBounds.set({
+    start: initialBounds.start,
+    finish: initialBounds.finish,
+    time: startTime,
+    difficulty: initialBounds.difficulty || 'Normal',
+    computerDriver: initialBounds.computerDriver || false,
+    ghosts: initialBounds.ghosts || false,
+    league: initialBounds.league,
+  });
+
+  if (initialBounds.dailyRaceIndex !== undefined) {
+    $currentDailyRaceIndex.set(initialBounds.dailyRaceIndex);
+  }
+}
+
 export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: GameBounds & { time?: string, dailyRaceIndex?: number }) {
   if (ws) ws.close();
 
@@ -259,196 +402,18 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
 
   if (!ws) return;
 
+  const effectiveRoomId = roomId || ($isDaily.get() ? 'daily' : 'solo');
+
   ws.onopen = () => {
     $connected.set(true);
-
-    ws?.send(JSON.stringify({
-      type: 'SYNC_REQUEST',
-      clientSendTime: Date.now(),
-      roomId: roomId || ($isDaily.get() ? 'daily' : 'solo')
-    }));
-
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: roomId || ($isDaily.get() ? 'daily' : 'solo'), playerId, color }));
-
-    if (initialBounds) {
-      let startTime: number | undefined;
-
-      const startPos = initialBounds.start || [51, 0] // gmt
-      if (startPos && initialBounds.time) {
-        const tz = getTimeZone(startPos[0], startPos[1]);
-        const parsed = parseUserTime(initialBounds.time, tz);
-        if (parsed !== null) startTime = parsed;
-      }
-
-      ws?.send(JSON.stringify({
-        type: 'SET_GAME_BOUNDS',
-        ...boundsToWire({
-          start: initialBounds.start,
-          finish: initialBounds.finish,
-          time: startTime,
-          difficulty: initialBounds.difficulty || 'Normal',
-          computerDriver: initialBounds.computerDriver || false,
-          ghosts: initialBounds.ghosts || false,
-          league: initialBounds.league,
-        }),
-      }));
-
-      if (initialBounds.dailyRaceIndex !== undefined) {
-        if (initialBounds.ghosts) {
-          fetchAndAddGhosts(initialBounds.dailyRaceIndex);
-        } else {
-          removeGhosts();
-        }
-      }
-
-      $gameBounds.set({
-        start: initialBounds.start,
-        finish: initialBounds.finish,
-        time: startTime,
-        difficulty: initialBounds.difficulty || 'Normal',
-        computerDriver: initialBounds.computerDriver || false,
-        ghosts: initialBounds.ghosts || false,
-        league: initialBounds.league,
-      });
-
-      if (initialBounds.dailyRaceIndex !== undefined) {
-        $currentDailyRaceIndex.set(initialBounds.dailyRaceIndex);
-      }
-    }
-
-    $currentRoom.set(roomId || ($isDaily.get() ? 'daily' : 'solo'));
+    ws?.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: Date.now(), roomId: effectiveRoomId }));
+    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
+    if (initialBounds) sendInitialBounds(initialBounds);
+    $currentRoom.set(effectiveRoomId);
     $myPlayerId.set(playerId);
   };
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-
-    if (msg.type === 'SYNC_RESPONSE') {
-      const now = Date.now();
-      const latency = (now - msg.clientSendTime) / 2;
-      syncClock(msg.serverTime, msg.realTime || now, msg.rate, latency);
-      $globalRate.set(msg.rate);
-    }
-
-    if (msg.type === 'CLOCK_UPDATE') {
-      syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
-      $globalRate.set(msg.rate);
-    }
-
-    if (msg.type === 'ROOM_STATE') {
-      const renderables: Record<string, RenderablePlayer> = {};
-      for (const pid in msg.players) {
-        renderables[pid] = processPlayer(msg.players[pid]);
-
-        if (pid === $myPlayerId.get()) {
-          const p = msg.players[pid];
-          if (p.waypoints.length > 0) {
-            const spawn = p.waypoints[0];
-            $playerTimeZone.set(getTimeZone(spawn.y, spawn.x));
-
-            const isMoving = p.waypoints.some((wp: any) => wp.arrivalTime > msg.serverTime);
-            if (isMoving && msg.state === 'RUNNING') {
-              $isFollowing.set(true);
-            }
-          }
-        }
-      }
-      $players.set(renderables);
-      $roomState.set(msg.state);
-      $countdownEnd.set(msg.countdownEnd);
-      const previousGhosts = $gameBounds.get().ghosts;
-      $gameBounds.set(wireToGameBounds(msg));
-      $gameStartTime.set(msg.gameStartTime);
-      syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
-
-      if (previousGhosts && !msg.ghosts) {
-        removeGhosts();
-      } else if (msg.ghosts && $isDaily.get()) {
-        const idx = $currentDailyRaceIndex.get();
-        if (idx !== null) {
-          fetchAndAddGhosts(idx);
-        }
-      }
-    }
-
-    if (msg.type === 'ROOM_STATE_UPDATE') {
-      $roomState.set(msg.state);
-      $countdownEnd.set(msg.countdownEnd);
-      const prevGhosts = $gameBounds.get().ghosts;
-      $gameBounds.set(wireToGameBounds(msg));
-      $gameStartTime.set(msg.gameStartTime);
-      $isRerun.set(msg.isRerun);
-      syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
-
-      if (prevGhosts && !msg.ghosts) {
-        removeGhosts();
-      } else if (msg.ghosts && $isDaily.get()) {
-        const idx = $currentDailyRaceIndex.get();
-        if (idx !== null) {
-          fetchAndAddGhosts(idx);
-        }
-      }
-    }
-
-    if (msg.type === 'READY_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) {
-        $players.setKey(msg.playerId, { ...p, isReady: msg.isReady });
-      }
-    }
-
-    if (msg.type === 'PLAYER_JOINED') {
-      $players.setKey(msg.player.id, processPlayer(msg.player));
-    }
-
-    if (msg.type === 'PLAYER_LEFT') {
-      const current = { ...$players.get() };
-      delete current[msg.playerId];
-      $players.set(current);
-    }
-
-    if (msg.type === 'WAYPOINT_ADDED') {
-      const all = $players.get();
-      const p = all[msg.playerId];
-      if (p) {
-        const updatedWaypoints = [...p.waypoints, msg.waypoint];
-        const updatedPlayer = processPlayer({ ...p, waypoints: updatedWaypoints, viewingStopName: null });
-        $players.setKey(msg.playerId, updatedPlayer);
-      }
-    }
-
-    if (msg.type === 'PLAYER_COLOR_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) $players.setKey(msg.playerId, { ...p, color: msg.color });
-    }
-
-    if (msg.type === 'PLAYER_SNOOZE_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) $players.setKey(msg.playerId, { ...p, desiredRate: msg.desiredRate, forceRealtime: msg.forceRealtime });
-    }
-
-    if (msg.type === 'PLAYER_VIEW_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) $players.setKey(msg.playerId, { ...p, viewingStopName: msg.viewingStopName });
-    }
-
-    if (msg.type === 'PLAYER_FINISH_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) $players.setKey(msg.playerId, { ...p, finishTime: msg.finishTime });
-    }
-
-    if (msg.type === 'PLAYER_WAYPOINTS_UPDATE') {
-      const p = $players.get()[msg.playerId];
-      if (p) {
-        const updatedPlayer = processPlayer({ ...p, waypoints: msg.waypoints, viewingStopName: null });
-        $players.setKey(msg.playerId, updatedPlayer);
-      }
-    }
-
-    if (msg.type === 'RECV_PING') {
-      $pings.setKey(msg.playerId, { lat: msg.lat, lon: msg.lon, timestamp: msg.timestamp });
-    }
-  };
+  ws.onmessage = handleWsMessage;
 
   ws.onclose = () => {
     $connected.set(false);
@@ -565,6 +530,17 @@ export function submitWaypoint(lat: number, lng: number) {
   }));
 }
 
+function buildWaypoint(p: any, arrivalTime: number, speedFactor: number, overrides: Partial<any> = {}) {
+  return {
+    x: p.lng, y: p.lat, arrivalTime, speedFactor,
+    stopName: p.stopName, isInterstop: p.isInterstop,
+    route_color: p.route_color, route_short_name: p.route_short_name,
+    display_name: p.display_name, emoji: p.emoji,
+    route_departure_time: p.route_departure_time, timeStr: p.timeStr,
+    ...overrides,
+  };
+}
+
 export function submitWaypointsBatch(points: {
   lng: number,
   lat: number,
@@ -577,18 +553,17 @@ export function submitWaypointsBatch(points: {
   route_departure_time?: string | null,
   timeStr?: string,
   isInterstop?: boolean,
-}[],
-  options: { isTeleport?: boolean } = {}
-) {
-  const { isTeleport = false } = options;
-  if (!ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
+}[], opts: { isTeleport?: boolean } = {}) {
+  if (points.length === 0 || !ws || ws.readyState !== 1 /* WebSocket.OPEN */) return;
 
-  const player = $players.get()[$myPlayerId.get() ?? ''];
-  if (!player || points.length === 0) return;
+  const myId = $myPlayerId.get();
+  const player = myId ? $players.get()[myId] : null;
+  if (!player) return;
 
   const clockTime = $clock.get();
+  const isTeleport = opts.isTeleport ?? false;
 
-  const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
+  const BASE_SPEED = 5 / (60 * 60 * 1000);
 
   const lastWaypoint = player.waypoints.length > 0 ? player.waypoints[player.waypoints.length - 1] : null;
   const startX = lastWaypoint?.x ?? points[0].lng;
@@ -597,7 +572,7 @@ export function submitWaypointsBatch(points: {
   const walkingDuration = distance / BASE_SPEED;
   const walkingArrival = clockTime + walkingDuration;
   const departureTime = points[0].time;
-  const waitArrival = departureTime - (1000 * 60); // 1 minute leeway
+  const waitArrival = departureTime - (1000 * 60);
 
   let totalVirtualTime = 0;
   let lastRealTime = clockTime;
@@ -625,7 +600,7 @@ export function submitWaypointsBatch(points: {
 
     const p = points[nextRealIdx];
     const legVirtualTime = p.isInterstop ? (p.time - segmentStartTime) : Math.max(1000, p.time - segmentStartTime);
-    const legSpeedLimit = legVirtualTime / 2000; // min 2 seconds for this leg
+    const legSpeedLimit = legVirtualTime / 2000;
     const legSpeedFactor = Math.max(1.0, Math.min(batchSpeedFactor, legSpeedLimit));
 
     for (let k = segmentStartIdx; k <= nextRealIdx; k++) {
@@ -640,71 +615,20 @@ export function submitWaypointsBatch(points: {
 
   if (isTeleport) {
     for (let i = 0; i < points.length; i++) {
-      waypointsToSubmit.push({
-        x: points[i].lng,
-        y: points[i].lat,
-        arrivalTime: clockTime,
-        speedFactor: 1,
-        stopName: points[i].stopName,
-        isInterstop: points[i].isInterstop,
-        route_color: points[i].route_color,
-        route_short_name: points[i].route_short_name,
-        display_name: points[i].display_name,
-        emoji: points[i].emoji,
-        route_departure_time: points[i].route_departure_time,
-        timeStr: points[i].timeStr
-      });
+      waypointsToSubmit.push(buildWaypoint(points[i], clockTime, 1));
     }
   } else {
-    waypointsToSubmit.push({
-      x: points[0].lng,
-      y: points[0].lat,
-      arrivalTime: walkingArrival,
-      speedFactor: waypointSpeeds[0],
-      stopName: points[0].stopName,
-      isWalk: true,
-      isInterstop: false,
-      route_color: points[0].route_color,
-      route_short_name: points[0].route_short_name,
-      display_name: points[0].display_name,
-      emoji: '🐾',
-      route_departure_time: points[0].route_departure_time,
-      timeStr: points[0].timeStr
-    });
+    waypointsToSubmit.push(buildWaypoint(points[0], walkingArrival, waypointSpeeds[0], { isWalk: true, isInterstop: false, emoji: '🐾' }));
 
     if (waitArrival > walkingArrival) {
-      waypointsToSubmit.push({
-        x: points[0].lng,
-        y: points[0].lat,
-        arrivalTime: waitArrival,
-        speedFactor: waypointSpeeds[0],
+      waypointsToSubmit.push(buildWaypoint(points[0], waitArrival, waypointSpeeds[0], {
+        isWait: true, isInterstop: false, emoji: '⏳',
         stopName: `waiting for ${formatRowTime(points[0].route_departure_time || '')} ${points[0].route_short_name || ''}`.trim(),
-        isWait: true,
-        isInterstop: false,
-        route_color: points[0].route_color,
-        route_short_name: points[0].route_short_name,
-        display_name: points[0].display_name,
-        emoji: '⏳',
-        route_departure_time: points[0].route_departure_time,
-        timeStr: points[0].timeStr
-      });
+      }));
     }
 
     for (let i = 1; i < points.length; i++) {
-      waypointsToSubmit.push({
-        x: points[i].lng,
-        y: points[i].lat,
-        arrivalTime: points[i].time - (points[i].isInterstop ? 0 : (1000 * 60)),
-        speedFactor: waypointSpeeds[i],
-        stopName: points[i].stopName,
-        isInterstop: points[i].isInterstop,
-        route_color: points[i].route_color,
-        route_short_name: points[i].route_short_name,
-        display_name: points[i].display_name,
-        emoji: points[i].emoji,
-        route_departure_time: points[i].route_departure_time,
-        timeStr: points[i].timeStr
-      });
+      waypointsToSubmit.push(buildWaypoint(points[i], points[i].time - (points[i].isInterstop ? 0 : (1000 * 60)), waypointSpeeds[i]));
     }
   }
 

@@ -75,66 +75,53 @@ const upsertGhostQuery = db.prepare(`
   WHERE $finishTime < ghosts.finishTime
 `);
 
+function handleGhostRequest(req: Request, raceIndex: string): Response | Promise<Response> {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+
+  if (req.method === 'GET') {
+    const rows = getGhostsQuery.all(raceIndex) as GhostEntry[];
+    const ghosts = rows.map(g => ({ ...g, waypoints: JSON.parse(g.waypoints) as Waypoint[] }));
+    return new Response(JSON.stringify(ghosts), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  if (req.method === 'POST') {
+    return req.json().then((body) => {
+      const { playerId, playerName, color, waypoints, finishTime } = body;
+      db.transaction(() => {
+        upsertGhostQuery.run({
+          $raceIndex: raceIndex, $playerId: playerId, $playerName: playerName,
+          $color: color ?? null, $waypoints: JSON.stringify(waypoints),
+          $finishTime: finishTime, $submittedAt: Date.now(),
+          $kgCO2e: calculateCO2Emissions(waypoints)
+        });
+      })();
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
+    });
+  }
+
+  return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+}
+
+function handleLeaderboardRequest(req: Request, version: string): Response {
+  if (req.method === 'GET') {
+    const rows = getLeaderboardQuery.all({ $version: parseFloat(version) }) as { playerName: string; raceIndex: string; finishTime: number }[];
+    return new Response(JSON.stringify(rows), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+}
+
 const server = serve<WSData>({
   port: 8080,
   fetch(req: Request, server: any) {
     if (server.upgrade(req)) return;
 
     const url = new URL(req.url);
+
     const pathMatch = url.pathname.match(/^\/api\/ghosts\/(\d+)$/);
-
-    if (pathMatch) {
-      const raceIndex = pathMatch[1];
-
-      if (req.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-      }
-
-      if (req.method === 'GET') {
-        const rows = getGhostsQuery.all(raceIndex) as GhostEntry[];
-        const ghosts = rows.map(g => ({
-          ...g,
-          waypoints: JSON.parse(g.waypoints) as Waypoint[]
-        }));
-        return new Response(JSON.stringify(ghosts), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      if (req.method === 'POST') {
-        return req.json().then((body) => {
-          const { playerId, playerName, color, waypoints, finishTime } = body;
-          db.transaction(() => {
-            upsertGhostQuery.run({
-              $raceIndex: raceIndex,
-              $playerId: playerId,
-              $playerName: playerName,
-              $color: color ?? null,
-              $waypoints: JSON.stringify(waypoints),
-              $finishTime: finishTime,
-              $submittedAt: Date.now(),
-              $kgCO2e: calculateCO2Emissions(waypoints)
-            });
-          })();
-          return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders });
-        });
-      }
-
-
-      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-    }
+    if (pathMatch) return handleGhostRequest(req, pathMatch[1]);
 
     const leaderboardMatch = url.pathname.match(/^\/api\/leaderboard\/(\d+(\.\d+)?)$/);
-    if (leaderboardMatch) {
-      const version = leaderboardMatch[1];
-      if (req.method === 'GET') {
-        const rows = getLeaderboardQuery.all({ $version: parseFloat(version) }) as { playerName: string; raceIndex: string; finishTime: number }[];
-        return new Response(JSON.stringify(rows), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-    }
+    if (leaderboardMatch) return handleLeaderboardRequest(req, leaderboardMatch[1]);
 
     return new Response("WebSocket Game Server", { status: 200 });
   },
