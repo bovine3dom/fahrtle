@@ -25,6 +25,33 @@ type SummaryEntry = {
     y?: number;
 };
 
+function buildTransportEntry(wp: Waypoint) {
+    return {
+        type: 'transport' as const, route_departure_time: wp.route_departure_time, route_short_name: wp.route_short_name,
+        display_name: wp.display_name, stop_name_alight: wp.stopName, arrival_time: wp.timeStr,
+        arrival_ms: wp.arrivalTime, emoji: wp.emoji || '👽',
+    };
+}
+
+function buildShareUrl(gameBounds: GameBounds, isDaily: boolean) {
+    const url = new URL(window.location.origin + window.location.pathname);
+    if (!isDaily) {
+        if (gameBounds.start) url.searchParams.set('s', `${gameBounds.start[0].toFixed(4)},${gameBounds.start[1].toFixed(4)}`);
+        if (gameBounds.finish) url.searchParams.set('f', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
+        if (gameBounds.time && gameBounds.start) {
+            const tz = getTimeZone(gameBounds.start[0], gameBounds.start[1]);
+            url.searchParams.set('t', new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(gameBounds.time)));
+        }
+    } else {
+        url.searchParams.set('daily', "1");
+        const dailyIdx = $currentDailyRaceIndex.get();
+        if (dailyIdx !== null) url.searchParams.set('r', dailyIdx.toString());
+    }
+    if (gameBounds.difficulty) url.searchParams.set('d', gameBounds.difficulty);
+    if (!isDaily && gameBounds.league) url.searchParams.set('l', gameBounds.league);
+    return url.toString();
+}
+
 const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
     const summary: SummaryEntry[] = [];
     const waypoints = player.waypoints;
@@ -98,19 +125,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
             if (wp.route_departure_time) {
                 const currentRoute = `${wp.route_departure_time}-${wp.route_short_name}`;
                 if (lastTransportRoute !== currentRoute) {
-                    if (currentLegEndIdx !== null) {
-                        const lastWpOfLeg = waypoints[currentLegEndIdx];
-                        summary.push({
-                            type: 'transport',
-                            route_departure_time: lastWpOfLeg.route_departure_time,
-                            route_short_name: lastWpOfLeg.route_short_name,
-                            display_name: lastWpOfLeg.display_name,
-                            stop_name_alight: lastWpOfLeg.stopName,
-                            arrival_time: lastWpOfLeg.timeStr,
-                            arrival_ms: lastWpOfLeg.arrivalTime,
-                            emoji: lastWpOfLeg.emoji || '👽',
-                        });
-                    }
+                    if (currentLegEndIdx !== null) summary.push(buildTransportEntry(waypoints[currentLegEndIdx]));
                     currentLegEndIdx = i;
                     lastTransportRoute = currentRoute;
                 } else {
@@ -120,19 +135,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
         }
     }
 
-    if (currentLegEndIdx !== null) {
-        const lastWpOfLeg = waypoints[currentLegEndIdx];
-        summary.push({
-            type: 'transport',
-            route_departure_time: lastWpOfLeg.route_departure_time,
-            route_short_name: lastWpOfLeg.route_short_name,
-            display_name: lastWpOfLeg.display_name,
-            stop_name_alight: lastWpOfLeg.stopName,
-            arrival_time: lastWpOfLeg.timeStr,
-            arrival_ms: lastWpOfLeg.arrivalTime,
-            emoji: lastWpOfLeg.emoji || '👽',
-        });
-    }
+    if (currentLegEndIdx !== null) summary.push(buildTransportEntry(waypoints[currentLegEndIdx]));
 
     pushWalk(waypoints[waypoints.length - 1]);
     summary.sort((a, b) => a.arrival_ms - b.arrival_ms);
@@ -160,39 +163,6 @@ export const getTravelSummary = async (player: Player, gameBounds: GameBounds, s
     ];
     const isDaily = typeof localStorage !== 'undefined' && localStorage.getItem('fahrtle_daily') === 'true';
 
-    const url = new URL(window.location.origin + window.location.pathname);
-    if (!isDaily) {
-        if (gameBounds.start) {
-            url.searchParams.set('s', `${gameBounds.start[0].toFixed(4)},${gameBounds.start[1].toFixed(4)}`);
-        }
-        if (gameBounds.finish) {
-            url.searchParams.set('f', `${gameBounds.finish[0].toFixed(4)},${gameBounds.finish[1].toFixed(4)}`);
-        }
-        if (gameBounds.time && gameBounds.start) {
-            const tz = getTimeZone(gameBounds.start[0], gameBounds.start[1]);
-            const timeStr = new Intl.DateTimeFormat('en-GB', {
-
-                timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
-            }).format(new Date(gameBounds.time));
-            url.searchParams.set('t', timeStr);
-        }
-    } else {
-        url.searchParams.set('daily', "1");
-        const dailyIdx = $currentDailyRaceIndex.get();
-        if (dailyIdx !== null) {
-            url.searchParams.set('r', dailyIdx.toString());
-        }
-    }
-
-    if (gameBounds.difficulty) {
-        url.searchParams.set('d', gameBounds.difficulty);
-    }
-
-    if (!isDaily && gameBounds.league) {
-        url.searchParams.set('l', gameBounds.league);
-    }
-
-
     const dayPrefix = isDaily ? ` daily #${$currentDailyRaceIndex.get() ?? await getDailyRaceIndex()}!` : '';
 
     const totalDistance = haversineDist(gameBounds.start ? { lat: gameBounds.start[0], lon: gameBounds.start[1] } : null, gameBounds.finish ? { lat: gameBounds.finish[0], lon: gameBounds.finish[1] } : null) || 0;
@@ -210,5 +180,5 @@ export const getTravelSummary = async (player: Player, gameBounds: GameBounds, s
         travel += `\n🌍 ${sensibleNumber(totalCO2, 1)} kgCO2e, ${sensibleNumber(Math.abs(CO2diff))}% ${CO2diff > 0 ? 'better' : 'worse'} than a direct flight`
         travel += `\n🎉 Finished in ${formatDuration(player.finishTime)}!`;
     }
-    return `${travel}\nCan you beat me? ${url.toString()}`;
+    return `${travel}\nCan you beat me? ${buildShareUrl(gameBounds, isDaily)}`;
 }

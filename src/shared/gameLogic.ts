@@ -193,23 +193,88 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
     }, delay);
 }
 
+function processRouteSteps(steps: any[], coords: number[][], startTime: number) {
+    const allTimedPoints: any[] = [];
+    let runningTime = startTime;
+
+    for (const step of steps) {
+        const [startIdx, endIdx] = step.way_points;
+        const stepDurationMs = step.duration * 1000;
+        const stepPoints = coords.slice(startIdx, endIdx + 1);
+
+        const stepDistances = [0];
+        let totalStepDist = 0;
+        for (let j = 1; j < stepPoints.length; j++) {
+            totalStepDist += haversineDist({ lon: stepPoints[j - 1][0], lat: stepPoints[j - 1][1] }, { lon: stepPoints[j][0], lat: stepPoints[j][1] }) || 0;
+            stepDistances.push(totalStepDist);
+        }
+
+        for (let j = 0; j < stepPoints.length; j++) {
+            if (j === 0 && allTimedPoints.length > 0) continue;
+            const ratio = totalStepDist === 0 ? 0 : stepDistances[j] / totalStepDist;
+            allTimedPoints.push({ x: stepPoints[j][0], y: stepPoints[j][1], arrivalTime: runningTime + (ratio * stepDurationMs), instruction: step.instruction });
+        }
+        runningTime += stepDurationMs;
+    }
+    return allTimedPoints;
+}
+
+function buildDrivingWaypoints(simplifiedPoints: { x: number, y: number, arrivalTime: number, instruction: string }[], startTime: number): Waypoint[] {
+    const REST_STOP_INTERVAL = 2 * 60 * 60 * 1000;
+    const REST_STOP_DURATION = 15 * 60 * 1000;
+    const SLEEP_INTERVAL = 16 * 60 * 60 * 1000;
+    const SLEEP_DURATION = 8 * 60 * 60 * 1000;
+
+    const waypoints: Waypoint[] = [];
+    let driveTimeSinceLastRest = 0;
+    let driveTimeSinceLastSleep = 0;
+    let totalDelay = 0;
+
+    for (let i = 0; i < simplifiedPoints.length; i++) {
+        const curr = simplifiedPoints[i];
+        const prev = i > 0 ? simplifiedPoints[i - 1] : null;
+        const segmentDriveTime = prev ? (curr.arrivalTime - prev.arrivalTime) : 0;
+        driveTimeSinceLastRest += segmentDriveTime;
+        driveTimeSinceLastSleep += segmentDriveTime;
+
+        const isStart = i === 0;
+        const isEnd = i === simplifiedPoints.length - 1;
+        waypoints.push({
+            x: curr.x, y: curr.y,
+            startTime: isStart ? startTime : waypoints[waypoints.length - 1].arrivalTime,
+            arrivalTime: curr.arrivalTime + totalDelay,
+            speedFactor: 1.0,
+            stopName: isStart ? 'Starting' : (isEnd ? 'Destination' : curr.instruction),
+            emoji: '🚗'
+        });
+
+        if (driveTimeSinceLastSleep >= SLEEP_INTERVAL) {
+            const sleepStart = curr.arrivalTime + totalDelay;
+            waypoints.push({ x: curr.x, y: curr.y, startTime: sleepStart, arrivalTime: sleepStart + SLEEP_DURATION, speedFactor: 1.0, stopName: 'sleeping', emoji: '😴' });
+            totalDelay += SLEEP_DURATION;
+            driveTimeSinceLastSleep = 0;
+            driveTimeSinceLastRest = 0;
+        } else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
+            const restStart = curr.arrivalTime + totalDelay;
+            waypoints.push({ x: curr.x, y: curr.y, startTime: restStart, arrivalTime: restStart + REST_STOP_DURATION, speedFactor: 1.0, stopName: 'taking a break', emoji: '☕' });
+            totalDelay += REST_STOP_DURATION;
+            driveTimeSinceLastRest = 0;
+        }
+    }
+    return waypoints;
+}
+
 async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
     if (!room.startPos || !room.finishPos) return;
 
     try {
         const body = JSON.stringify({
-            coordinates: [
-                [room.startPos[1], room.startPos[0]],
-                [room.finishPos[1], room.finishPos[0]]
-            ]
+            coordinates: [[room.startPos[1], room.startPos[0]], [room.finishPos[1], room.finishPos[0]]]
         });
 
         const response = await fetch("https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 'Content-Type': 'application/json' },
             body
         });
 
@@ -223,125 +288,17 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
         const steps = feature.properties.segments[0].steps;
         const startTime = room.gameStartTime || room.virtualTime;
 
-        let allTimedPoints: any[] = [];
-        let runningTime = startTime;
-
-        // calculate times and distances before simplification
-        for (const step of steps) {
-            const [startIdx, endIdx] = step.way_points;
-            const stepDurationMs = step.duration * 1000;
-            const stepPoints = coords.slice(startIdx, endIdx + 1);
-
-            let stepDistances = [0];
-            let totalStepDist = 0;
-            for (let j = 1; j < stepPoints.length; j++) {
-                const d = haversineDist({ lon: stepPoints[j - 1][0], lat: stepPoints[j - 1][1] }, { lon: stepPoints[j][0], lat: stepPoints[j][1] }) || 0;
-                totalStepDist += d;
-                stepDistances.push(totalStepDist);
-            }
-
-            for (let j = 0; j < stepPoints.length; j++) {
-                if (j === 0 && allTimedPoints.length > 0) continue;
-
-                const ratio = totalStepDist === 0 ? 0 : stepDistances[j] / totalStepDist;
-                const arrivalTime = runningTime + (ratio * stepDurationMs);
-
-                allTimedPoints.push({
-                    x: stepPoints[j][0],
-                    y: stepPoints[j][1],
-                    arrivalTime: arrivalTime,
-                    instruction: step.instruction
-                });
-            }
-            runningTime += stepDurationMs;
-        }
-
-        // dump ~90% of the waypoints
-        const simplifiedDrivingPoints = simplify(allTimedPoints, 0.0005, true) as {
-            x: number, y: number, arrivalTime: number, instruction: string  // simplify passes through extra props but ts whines
-        }[];
-
-        const finalWaypoints: Waypoint[] = [];
-        let driveTimeSinceLastRest = 0;
-        let driveTimeSinceLastSleep = 0;
-
-        const REST_STOP_INTERVAL = 2 * 60 * 60 * 1000;
-        const REST_STOP_DURATION = 15 * 60 * 1000;
-        const SLEEP_INTERVAL = 16 * 60 * 60 * 1000;
-        const SLEEP_DURATION = 8 * 60 * 60 * 1000;
-
-        let totalDelay = 0;
-
-        for (let i = 0; i < simplifiedDrivingPoints.length; i++) {
-            const curr = simplifiedDrivingPoints[i];
-            const prev = i > 0 ? simplifiedDrivingPoints[i - 1] : null;
-
-            const segmentDriveTime = prev ? (curr.arrivalTime - prev.arrivalTime) : 0;
-
-            driveTimeSinceLastRest += segmentDriveTime;
-            driveTimeSinceLastSleep += segmentDriveTime;
-
-            const isStart = i === 0;
-            const isEnd = i === simplifiedDrivingPoints.length - 1;
-
-            finalWaypoints.push({
-                x: curr.x,
-                y: curr.y,
-                startTime: isStart ? startTime : finalWaypoints[finalWaypoints.length - 1].arrivalTime,
-                arrivalTime: curr.arrivalTime + totalDelay,
-                speedFactor: 1.0,
-                stopName: isStart ? 'Starting' : (isEnd ? 'Destination' : curr.instruction),
-                emoji: '🚗'
-            });
-
-            if (driveTimeSinceLastSleep >= SLEEP_INTERVAL) {
-                const sleepStart = curr.arrivalTime + totalDelay;
-                const sleepEnd = sleepStart + SLEEP_DURATION;
-                finalWaypoints.push({
-                    x: curr.x, y: curr.y,
-                    startTime: sleepStart,
-                    arrivalTime: sleepEnd,
-                    speedFactor: 1.0,
-                    stopName: 'sleeping',
-                    emoji: '😴'
-                });
-                totalDelay += SLEEP_DURATION;
-                driveTimeSinceLastSleep = 0;
-                driveTimeSinceLastRest = 0;
-            }
-            else if (driveTimeSinceLastRest >= REST_STOP_INTERVAL) {
-                const restStart = curr.arrivalTime + totalDelay;
-                const restEnd = restStart + REST_STOP_DURATION;
-                finalWaypoints.push({
-                    x: curr.x, y: curr.y,
-                    startTime: restStart,
-                    arrivalTime: restEnd,
-                    speedFactor: 1.0,
-                    stopName: 'taking a break',
-                    emoji: '☕'
-                });
-                totalDelay += REST_STOP_DURATION;
-                driveTimeSinceLastRest = 0;
-            }
-        }
+        const allTimedPoints = processRouteSteps(steps, coords, startTime);
+        const simplified = simplify(allTimedPoints, 0.0005, true) as { x: number, y: number, arrivalTime: number, instruction: string }[];
+        const finalWaypoints = buildDrivingWaypoints(simplified, startTime);
 
         room.players['the-stig-🏎️'] = {
-            id: 'the-stig-🏎️',
-            color: '#000000',
-            isReady: true,
-            waypoints: finalWaypoints,
-            desiredRate: 1e9, // always lower priority than humans
-            forceRealtime: false,
-            finishTime: null,
-            disconnectedAt: null,
-            viewingStopName: null,
-            isGhost: true
+            id: 'the-stig-🏎️', color: '#000000', isReady: true, waypoints: finalWaypoints,
+            desiredRate: 1e9, forceRealtime: false, finishTime: null,
+            disconnectedAt: null, viewingStopName: null, isGhost: true
         };
 
-        hooks.publish(room.id, {
-            type: 'PLAYER_JOINED',
-            player: room.players['the-stig-🏎️']
-        });
+        hooks.publish(room.id, { type: 'PLAYER_JOINED', player: room.players['the-stig-🏎️'] });
 
     } catch (e) {
         console.error("Failed to fetch computer driver route", e);
