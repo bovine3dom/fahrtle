@@ -744,6 +744,41 @@ function checkCountdownLogic(room: Room, hooks: GameHooks) {
     }
 }
 
+function calculatePlaybackRate(room: Room, hooks: GameHooks) {
+    const activeFactors: number[] = [];
+    for (const pid in room.players) {
+        const p = room.players[pid];
+        let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
+        for (const wp of p.waypoints) {
+            if (room.virtualTime >= wp.startTime && room.virtualTime < wp.arrivalTime) {
+                currentFactor = p.forceRealtime ? 1.0 : Math.max(wp.speedFactor, p.desiredRate || 1.0);
+                break;
+            }
+        }
+        activeFactors.push(currentFactor);
+    }
+    const newRate = activeFactors.length > 0 ? Math.max(1.0, Math.min(...activeFactors)) : 1.0;
+    if (Math.abs(room.playbackRate - newRate) > 0.01) {
+        room.playbackRate = newRate;
+        hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: Date.now(), rate: room.playbackRate });
+    }
+}
+
+function checkGhostFinishes(room: Room, hooks: GameHooks) {
+    const ghosts = Object.values(room.players).filter(p => p.isGhost);
+    const playerStart = Object.values(room.players).filter(p => !p.isGhost)[0]?.waypoints[0]?.startTime || 0;
+    for (const ghost of ghosts) {
+        const offset = playerStart - ghost.waypoints[0].startTime;
+        if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
+            const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
+            if (room.virtualTime >= (offset + lastWp.arrivalTime)) {
+                ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
+                hooks.publish(room.id, { type: 'PLAYER_FINISH_UPDATE', playerId: ghost.id, finishTime: ghost.finishTime });
+            }
+        }
+    }
+}
+
 export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (roomId: string) => void) {
     stepClock(room);
 
@@ -799,55 +834,8 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
         return;
     }
 
-    let minSpeed = 1.0;
-    const activeFactors: number[] = [];
-    const vTime = room.virtualTime;
-
-    for (const pid in room.players) {
-        const p = room.players[pid];
-        let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
-
-        for (const wp of p.waypoints) {
-            if (vTime >= wp.startTime && vTime < wp.arrivalTime) {
-                currentFactor = p.forceRealtime ? 1.0 : Math.max(wp.speedFactor, p.desiredRate || 1.0);
-                break;
-            }
-        }
-        activeFactors.push(currentFactor);
-    }
-
-    if (activeFactors.length > 0) {
-        minSpeed = Math.max(1.0, Math.min(...activeFactors));
-    } else {
-        minSpeed = 1.0;
-    }
-
-    if (Math.abs(room.playbackRate - minSpeed) > 0.01) {
-        room.playbackRate = minSpeed;
-        hooks.publish(room.id, {
-            type: 'CLOCK_UPDATE',
-            serverTime: room.virtualTime,
-            realTime: Date.now(),
-            rate: room.playbackRate
-        });
-    }
-
-    const ghosts = Object.values(room.players).filter(p => p.isGhost);
-    const playerStart = Object.values(room.players).filter(p => !p.isGhost)[0]?.waypoints[0]?.startTime || 0;
-    for (const ghost of ghosts) {
-        const offset = playerStart - ghost.waypoints[0].startTime;
-        if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
-            const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
-            if (room.virtualTime >= (offset + lastWp.arrivalTime)) {
-                ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
-                hooks.publish(room.id, {
-                    type: 'PLAYER_FINISH_UPDATE',
-                    playerId: ghost.id,
-                    finishTime: ghost.finishTime
-                });
-            }
-        }
-    }
+    calculatePlaybackRate(room, hooks);
+    checkGhostFinishes(room, hooks);
     scheduleNextTick(room, updateCallback);
 }
 

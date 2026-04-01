@@ -198,6 +198,122 @@ function updatePlayerMarkers(allPlayers: Record<string, any>, playerPositions: R
   });
 }
 
+async function updateBasemap(setting: string) {
+  const unlock = await map_update_lock.lock();
+  try {
+    await ensureMapLoaded(mapInstance);
+    const styleSpec = basemapSettingToStyle(setting);
+    const existingLayers = mapInstance.getStyle()?.layers;
+    const existingSources = mapInstance.getStyle()?.sources;
+    for (const layer of existingLayers) { if (layer.id.startsWith('basemap-')) mapInstance.removeLayer(layer.id); }
+    for (const sourceId in existingSources) { if (sourceId.startsWith('basemap-')) mapInstance.removeSource(sourceId); }
+
+    if (typeof styleSpec === 'string') {
+      try {
+        const response = await fetch(styleSpec);
+        const style = await response.json();
+        give_me_more_trains(style);
+        style.glyphs && mapInstance.setGlyphs(style.glyphs);
+        style.sprite && mapInstance.setSprite(style.sprite);
+        for (const [sourceId, source] of Object.entries(style.sources)) mapInstance.addSource(`basemap-${sourceId}`, source as any);
+        for (const layer of style.layers) {
+          mapInstance.addLayer({ ...layer, id: `basemap-${layer.id}`, source: layer.source ? `basemap-${layer.source}` : undefined }, getBeforeId(`basemap-${layer.id}`, mapInstance));
+        }
+      } catch (err) { console.error('[Map] Failed to fetch basemap style:', err); }
+    } else {
+      const sourceKey = Object.keys(styleSpec.sources)[0];
+      mapInstance.addSource(`basemap-${sourceKey}`, styleSpec.sources[sourceKey] as any);
+      mapInstance.addLayer({ ...styleSpec.layers[0], id: `basemap-${styleSpec.layers[0].id}`, source: `basemap-${sourceKey}` } as any, getBeforeId(`basemap-${styleSpec.layers[0].id}`, mapInstance));
+    }
+  } finally { unlock(); }
+}
+
+async function updateRailwaysLayer(setting: string) {
+  const unlock = await map_update_lock.lock();
+  try {
+    const pathMap: Record<string, string | null> = { 'Infrastructure': '/standard/', 'Speed': '/maxspeed/', 'Electrification': '/electrification/', 'Gauge': '/gauge/', 'Disabled': null };
+    const path = pathMap[setting];
+    const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
+    const sourceExists = !!mapInstance.getSource('openrailwaymap');
+
+    if (path === null) {
+      if (layerExists) mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
+    } else {
+      await ensureMapLoaded(mapInstance);
+      if (layerExists) mapInstance.removeLayer('openrailwaymap-layer');
+      if (sourceExists) mapInstance.removeSource('openrailwaymap');
+      mapInstance.addSource('openrailwaymap', { type: 'raster', tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`], tileSize: 256, attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>' });
+      mapInstance.addLayer({ id: 'openrailwaymap-layer', type: 'raster', source: 'openrailwaymap', paint: { 'raster-opacity': 1 } }, getBeforeId("openrailwaymap-layer", mapInstance));
+    }
+  } finally { unlock(); }
+}
+
+async function updateTransportLayer(setting: string) {
+  const unlock = await map_update_lock.lock();
+  try {
+    const sourceId = 'public-transport';
+    if (!setting) {
+      mapInstance.getStyle().layers.filter(l => l.id.startsWith(`${sourceId}-`)).forEach(l => mapInstance.removeLayer(l.id));
+      if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
+      return;
+    }
+    const style = await fetch('./public_transport.json').then(r => r.json());
+    style.layers.forEach((l: any) => { if (mapInstance.getLayer(`${sourceId}-${l.id}`)) mapInstance.removeLayer(`${sourceId}-${l.id}`); });
+    if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
+    await ensureMapLoaded(mapInstance);
+    mapInstance.addSource(sourceId, style.sources.openmaptiles as any);
+    for (const layer of style.layers) mapInstance.addLayer({ ...layer, id: `${sourceId}-${layer.id}`, source: sourceId }, getBeforeId(`${sourceId}-${layer.id}`, mapInstance));
+  } finally { unlock(); }
+}
+
+async function updateBathymetryLayer(setting: string) {
+  const unlock = await map_update_lock.lock();
+  try {
+    if (mapInstance.getLayer('water-bathymetry')) mapInstance.removeLayer('water-bathymetry');
+    if (mapInstance.getSource('gebco')) mapInstance.removeSource('gebco');
+    if (!setting) return;
+
+    mapInstance.addSource('gebco', { type: 'vector', tiles: [`https://compute.olie.science/versatiles/tiles/bathymetry-vectors/{z}/{x}/{y}`], minzoom: 0, maxzoom: 10, attribution: '<a href="https://download.versatiles.org/" target="_blank">VersaTiles, GEBCO & OpenDEM</a>' });
+    const baseColorValue = (mapInstance.getStyle().layers.find(layer => layer.id === 'basemap-water')?.paint as any)?.['fill-color'] || "#b3dbe6";
+    const colorString: string = Array.isArray(baseColorValue) ? "#b3dbe6" : baseColorValue as any;
+    const isRaster = baseColorValue === '#b3dbe6';
+    const baseHsl = hsl(colorString);
+    const isDark = baseHsl.l < 0.5;
+    const stops = [-9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, -750, -500, -250, -200, -100, -50, -25, 0];
+    const extremeLightness = isDark ? 0.95 : 0.05;
+    const fillColorExpression: any[] = ["step", ["get", "mindepth"], isDark ? "#ffffff" : "#000000"];
+    stops.forEach((depth, index) => {
+      const t = index / (stops.length - 1);
+      let stepHsl = hsl(baseHsl.toString());
+      if (isDark) stepHsl.l = extremeLightness - (extremeLightness - baseHsl.l) * t;
+      else stepHsl.l = 0.95 - (0.95 - baseHsl.l) * t;
+      fillColorExpression.push(depth, stepHsl.formatHex());
+    });
+    mapInstance.addLayer({ id: 'water-bathymetry', type: 'fill', source: 'gebco', 'source-layer': 'bathymetry', paint: { "fill-color": fillColorExpression as any, "fill-opacity": isRaster ? 0.5 : 1 } }, getBeforeId("water-bathymetry", mapInstance));
+  } finally { unlock(); }
+}
+
+async function updateHillShadeLayer(setting: boolean) {
+  const unlock = await map_update_lock.lock();
+  try {
+    await ensureMapLoaded(mapInstance);
+    if (mapInstance.getLayer('mapterhorn-layer')) mapInstance.removeLayer('mapterhorn-layer');
+    if (mapInstance.getSource('mapterhorn')) mapInstance.removeSource('mapterhorn');
+    if (!setting) return;
+    mapInstance.addSource('mapterhorn', { type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json', maxzoom: 15 });
+    mapInstance.addLayer({ id: 'mapterhorn-layer', type: 'hillshade', source: 'mapterhorn', paint: { 'hillshade-shadow-color': '#000', 'hillshade-highlight-color': '#fff', 'hillshade-accent-color': '#fff', 'hillshade-exaggeration': 0.1, 'hillshade-method': 'igor' } }, getBeforeId("mapterhorn-layer", mapInstance));
+  } finally { unlock(); }
+}
+
+async function updateTerrain(setting: boolean) {
+  const unlock = await map_update_lock.lock();
+  try {
+    await ensureMapLoaded(mapInstance);
+    if (!mapInstance.getSource('mapterhorn-3d')) mapInstance.addSource('mapterhorn-3d', { type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json', maxzoom: 15 });
+    mapInstance.setTerrain(setting ? { source: 'mapterhorn-3d', exaggeration: 3 } : null);
+  } finally { unlock(); }
+}
+
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
   if (zoom < 2) {
@@ -482,296 +598,6 @@ export default function MapView() {
     mapInstance.on('error', (e) => {
       console.error('[Map] Internal Map Error:', e);
     });
-
-    const updateBasemap = async (setting: string) => {
-      const unlock = await map_update_lock.lock(); // too many cooks spoil the painter's algorithm
-      try {
-        await ensureMapLoaded(mapInstance);
-
-        const styleSpec = basemapSettingToStyle(setting);
-
-        const existingLayers = mapInstance.getStyle()?.layers;
-        const existingSources = mapInstance.getStyle()?.sources;
-        for (const layer of existingLayers) {
-          if (layer.id.startsWith('basemap-')) {
-            mapInstance.removeLayer(layer.id);
-          }
-        }
-        for (const sourceId in existingSources) {
-          if (sourceId.startsWith('basemap-')) {
-            mapInstance.removeSource(sourceId);
-          }
-        }
-
-        if (typeof styleSpec === 'string') {
-          try {
-            const response = await fetch(styleSpec);
-            const style = await response.json();
-            give_me_more_trains(style);
-            style.glyphs && mapInstance.setGlyphs(style.glyphs);
-            style.sprite && mapInstance.setSprite(style.sprite);
-            for (const [sourceId, source] of Object.entries(style.sources)) {
-              mapInstance.addSource(`basemap-${sourceId}`, source as any);
-            }
-            for (const layer of style.layers) {
-              const newLayer = {
-                ...layer,
-                id: `basemap-${layer.id}`,
-                source: layer.source ? `basemap-${layer.source}` : undefined
-              };
-              mapInstance.addLayer(newLayer, getBeforeId(`basemap-${layer.id}`, mapInstance));
-            }
-          } catch (err) {
-            console.error('[Map] Failed to fetch basemap style:', err);
-          }
-        } else {
-          const sourceKey = Object.keys(styleSpec.sources)[0];
-          const source = styleSpec.sources[sourceKey];
-          const layer = styleSpec.layers[0];
-
-          mapInstance.addSource(`basemap-${sourceKey}`, source as any);
-          mapInstance.addLayer({
-            ...layer,
-            id: `basemap-${layer.id}`,
-            source: `basemap-${sourceKey}`
-          } as any, getBeforeId(`basemap-${layer.id}`, mapInstance));
-        }
-      } finally {
-        unlock();
-      }
-    };
-
-    const updateRailwaysLayer = async (setting: string) => {
-      const unlock = await map_update_lock.lock();
-      try {
-        const pathMap: Record<string, string | null> = {
-          'Infrastructure': '/standard/',
-          'Speed': '/maxspeed/',
-          'Electrification': '/electrification/',
-          'Gauge': '/gauge/',
-          'Disabled': null
-        };
-
-        const path = pathMap[setting];
-        const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
-        const sourceExists = !!mapInstance.getSource('openrailwaymap');
-
-        if (path === null) {
-          if (layerExists) {
-            // don't wait for map load for removal
-            mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
-          }
-        } else {
-          await ensureMapLoaded(mapInstance);
-          if (layerExists) {
-            mapInstance.removeLayer('openrailwaymap-layer');
-          }
-          if (sourceExists) {
-            mapInstance.removeSource('openrailwaymap');
-          }
-
-          mapInstance.addSource('openrailwaymap', {
-            type: 'raster',
-            tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>'
-          });
-
-          mapInstance.addLayer({
-            id: 'openrailwaymap-layer',
-            type: 'raster',
-            source: 'openrailwaymap',
-            paint: { 'raster-opacity': 1 }
-          }, getBeforeId("openrailwaymap-layer", mapInstance));
-        }
-      } finally {
-        unlock();
-      }
-    };
-
-    const updateTransportLayer = async (setting: string) => {
-      const unlock = await map_update_lock.lock();
-      try {
-        const sourceId = 'public-transport';
-        if (!setting) {
-          const existingLayers = mapInstance.getStyle().layers
-          .filter(l => l.id.startsWith(`${sourceId}-`))
-          .map(l => l.id);
-          for (const layerId of existingLayers) {
-            mapInstance.removeLayer(layerId);
-          }
-          if (mapInstance.getSource(sourceId)) {
-            mapInstance.removeSource(sourceId);
-          }
-          return;
-        }
-        const style = await fetch('./public_transport.json').then(r => r.json());
-
-        for (const layer of style.layers) {
-          const fullLayerId = `${sourceId}-${layer.id}`;
-          if (mapInstance.getLayer(fullLayerId)) {
-            mapInstance.removeLayer(fullLayerId);
-          }
-        }
-        if (mapInstance.getSource(sourceId)) {
-          mapInstance.removeSource(sourceId);
-        }
-
-        await ensureMapLoaded(mapInstance);
-
-        mapInstance.addSource(sourceId, style.sources.openmaptiles as any);
-
-        for (const layer of style.layers) {
-          mapInstance.addLayer({
-            ...layer,
-            id: `${sourceId}-${layer.id}`,
-            source: sourceId
-          }, getBeforeId(`${sourceId}-${layer.id}`, mapInstance));
-        }
-      } finally {
-        unlock();
-      }
-    };
-
-    const updateBathymetryLayer = async (setting: string) => {
-      const unlock = await map_update_lock.lock();
-      try {
-        const layerExists = !!mapInstance.getLayer('water-bathymetry');
-        const sourceExists = !!mapInstance.getSource('gebco');
-        if (layerExists) {
-          mapInstance.removeLayer('water-bathymetry');
-        }
-        if (sourceExists) {
-          mapInstance.removeSource('gebco');
-        }
-        if (!setting) {
-          return;
-        }
-        mapInstance.addSource('gebco', {
-          type: 'vector',
-          tiles: [`https://compute.olie.science/versatiles/tiles/bathymetry-vectors/{z}/{x}/{y}`],
-          minzoom: 0,
-          maxzoom: 10,
-          attribution: '<a href="https://download.versatiles.org/" target="_blank">VersaTiles, GEBCO & OpenDEM</a>'
-        });
-
-        const baseColorValue = (mapInstance.getStyle().layers.find(layer => layer.id === 'basemap-water')?.paint as any)?.['fill-color'] || "#b3dbe6"; // approx osm carto
-        const colorString: string = Array.isArray(baseColorValue) ? "#b3dbe6" : baseColorValue as any; // fallback to carto if there's a complex expression
-        const isRaster = baseColorValue === '#b3dbe6'; // this is stupid
-
-        const baseHsl = hsl(colorString);
-        const isDark = baseHsl.l < 0.5;
-
-        // todo: check versatiles uses these and only these (the base gebco layer does iirc)
-        const stops = [
-          -9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000,
-          -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000,
-          -750, -500, -250, -200, -100, -50, -25, 0
-        ];
-
-        const extremeLightness = isDark ? 0.95 : 0.05;
-
-        const fillColorExpression = [
-          "step",
-          ["get", "mindepth"],
-          isDark ? "#ffffff" : "#000000"
-        ];
-
-        stops.forEach((depth, index) => {
-          const t = index / (stops.length - 1);
-          let stepHsl = hsl(baseHsl.toString());
-
-          // much more extreme logic for dark mode
-          if (isDark) {
-            stepHsl.l = extremeLightness - (extremeLightness - baseHsl.l) * t;
-          } else {
-            stepHsl.l = 0.95 - (0.95 - baseHsl.l) * t;
-          }
-
-          fillColorExpression.push(depth as any, stepHsl.formatHex()); // depth has to be a number but typescript disagrees (!)
-        });
-
-        mapInstance.addLayer({
-          id: 'water-bathymetry',
-          type: 'fill',
-          source: 'gebco',
-          'source-layer': 'bathymetry',
-          paint: {
-            "fill-color": fillColorExpression as any,
-            "fill-opacity": isRaster ? 0.5 : 1,
-          },
-        }, getBeforeId("water-bathymetry", mapInstance));
-
-      } finally {
-        unlock();
-      }
-    };
-
-    const updateHillShadeLayer = async (setting: boolean) => {
-      const unlock = await map_update_lock.lock();
-      try {
-        await ensureMapLoaded(mapInstance);
-
-        const layerExists = !!mapInstance.getLayer('mapterhorn-layer');
-        const sourceExists = !!mapInstance.getSource('mapterhorn');
-        if (layerExists) {
-          mapInstance.removeLayer('mapterhorn-layer');
-        }
-        if (sourceExists) {
-          mapInstance.removeSource('mapterhorn');
-        }
-        if (!setting) {
-          return;
-        }
-
-        mapInstance.addSource('mapterhorn', {
-          type: 'raster-dem',
-          url: 'https://tiles.mapterhorn.com/tilejson.json',
-          maxzoom: 15,
-        });
-        mapInstance.addLayer({
-          id: 'mapterhorn-layer',
-          type: 'hillshade',
-          source: 'mapterhorn',
-          paint: {
-            'hillshade-shadow-color': '#000',
-            'hillshade-highlight-color': '#fff',
-            'hillshade-accent-color': '#fff',
-            'hillshade-exaggeration': 0.1,
-            'hillshade-method': 'igor',
-          }
-        }, getBeforeId("mapterhorn-layer", mapInstance));
-      } finally {
-        unlock();
-      }
-    };
-
-    const updateTerrain = async (setting: boolean) => {
-      const unlock = await map_update_lock.lock();
-      try {
-        await ensureMapLoaded(mapInstance);
-
-        const sourceExists = !!mapInstance.getSource('mapterhorn-3d');
-        if (!sourceExists) {
-          mapInstance.addSource('mapterhorn-3d', {
-            type: 'raster-dem',
-            url: 'https://tiles.mapterhorn.com/tilejson.json',
-            maxzoom: 15,
-          });
-        }
-        if (!setting) {
-          mapInstance.setTerrain(null);
-        } else {
-          mapInstance.setTerrain({
-            source: 'mapterhorn-3d',
-            exaggeration: 3,
-          });
-        }
-
-      } finally {
-        unlock();
-      }
-    }
 
     mapInstance.on('load', () => {
       mapInstance.boxZoom.disable(); // give shift back
