@@ -163,6 +163,41 @@ let lastUpdatePos: Coords | null = null;
 let lastUpdateTime = 0;
 let isStopsLayerVisible = false;
 
+function updatePlayerMarkers(allPlayers: Record<string, any>, playerPositions: Record<string, [number, number]>, playerMarkers: Map<string, maplibregl.Marker>) {
+  for (const pid in allPlayers) {
+    const player = allPlayers[pid];
+    const pos = playerPositions[pid];
+    if (!pos) continue;
+
+    let marker = playerMarkers.get(pid);
+    if (!marker) {
+      const el = document.createElement('div');
+      el.className = 'player-marker';
+      el.style.width = '12px';
+      el.style.height = '12px';
+      el.style.borderRadius = '50%';
+      el.style.background = player.color;
+      el.style.border = '2px solid white';
+      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
+
+      marker = new maplibregl.Marker({ element: el })
+        .setLngLat(pos)
+        .addTo(mapInstance);
+      playerMarkers.set(pid, marker);
+    } else {
+      marker.setLngLat(pos);
+      marker.getElement().style.background = player.color;
+    }
+  }
+
+  playerMarkers.forEach((marker, pid) => {
+    if (!allPlayers[pid]) {
+      marker.remove();
+      playerMarkers.delete(pid);
+    }
+  });
+}
+
 const updateStops = async (map: maplibregl.Map) => {
   const zoom = map.getZoom();
   if (zoom < 2) {
@@ -1344,6 +1379,40 @@ export default function MapView() {
     }
   });
 
+  const updateCamera = (myPos: [number, number], mySpeed: number, alpha: number, autoZoomEnabled: boolean) => {
+    if (!isFollowing() || !mapInstance || !myPos) return;
+    const firstPersonFollow = $playerSettings.get().firstPersonFollow;
+    const centre = mapInstance.getCenter();
+    const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
+
+    const REFERENCE_SPEED = 50;
+    const REFERENCE_ZOOM = firstPersonFollow ? 16 : 15;
+    const MIN_ZOOM = firstPersonFollow ? 13 : 5;
+    const MAX_ZOOM = firstPersonFollow ? 18 : 16;
+    const dilation = $globalRate.get() / 20;
+    const safeSpeed = Math.max(1, mySpeed * dilation || 0);
+
+    let nextZoom: number | undefined;
+    if (autoZoomEnabled) {
+      let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
+      targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+      const currentZoom = mapInstance.getZoom();
+      if (Math.abs(currentZoom - targetZoom) > 0.01) {
+        nextZoom = lerp(currentZoom, targetZoom, alpha);
+      }
+    }
+
+    if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || nextZoom !== undefined) {
+      if (firstPersonFollow) {
+        mapInstance.jumpTo({ center: myPos, pitch: 75, bearing: smoothedMyBearing, zoom: nextZoom ?? mapInstance.getZoom() });
+      } else {
+        const jumpOptions: any = { center: myPos };
+        if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
+        mapInstance.jumpTo(jumpOptions);
+      }
+    }
+  };
+
   const startAnimationLoop = () => {
     let lastFrameTime = performance.now();
     let frameCount = 0;
@@ -1472,42 +1541,7 @@ export default function MapView() {
         }
       }
 
-      const updateMarkers = () => {
-        for (const pid in allPlayers) {
-          const player = allPlayers[pid];
-          const pos = playerPositions[pid];
-          if (!pos) continue;
-
-          let marker = playerMarkers.get(pid);
-          if (!marker) {
-            const el = document.createElement('div');
-            el.className = 'player-marker';
-            el.style.width = '12px';
-            el.style.height = '12px';
-            el.style.borderRadius = '50%';
-            el.style.background = player.color;
-            el.style.border = '2px solid white';
-            el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
-
-            marker = new maplibregl.Marker({ element: el })
-              .setLngLat(pos)
-              .addTo(mapInstance);
-            playerMarkers.set(pid, marker);
-          } else {
-            marker.setLngLat(pos);
-            marker.getElement().style.background = player.color;
-          }
-        }
-
-        playerMarkers.forEach((marker, pid) => {
-          if (!allPlayers[pid]) {
-            marker.remove();
-            playerMarkers.delete(pid);
-          }
-        });
-      };
-
-      updateMarkers();
+      updatePlayerMarkers(allPlayers, playerPositions, playerMarkers);
 
       const PING_DURATION = 10000;
       if (frameCount % 10 === 0) {
@@ -1555,52 +1589,7 @@ export default function MapView() {
         setPingPointers(pingPointerData);
       }
 
-      if (isFollowing() && mapInstance) {
-        const firstPersonFollow = $playerSettings.get().firstPersonFollow;
-        const myPos = myTargetPos;
-        const mySpeed = myTargetSpeed;
-        const centre = mapInstance.getCenter();
-        const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
-
-        if (myPos) {
-          const REFERENCE_SPEED = 50; // km/h
-          const REFERENCE_ZOOM = firstPersonFollow ? 16 : 15;  // zoom level at reference speed
-          const MIN_ZOOM = firstPersonFollow ? 13 : 5;
-          const MAX_ZOOM = firstPersonFollow ? 18 : 16;
-          const dilation = $globalRate.get() / 20; // normalise to walking dilation
-          const safeSpeed = Math.max(1, mySpeed * dilation || 0);
-
-          let nextZoom: number | undefined;
-
-          if (autoZoomEnabled) {
-            let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
-            targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
-
-            const currentZoom = mapInstance.getZoom();
-            // Only update zoom if we are far enough from target to avoid micro-jitters
-            if (Math.abs(currentZoom - targetZoom) > 0.01) {
-              nextZoom = lerp(currentZoom, targetZoom, alpha);
-            }
-          }
-
-          if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || nextZoom !== undefined) {
-            if (firstPersonFollow) {
-              const pitch = 75; // high pitch for first person
-
-              mapInstance.jumpTo({
-                center: myPos,
-                pitch: pitch,
-                bearing: smoothedMyBearing,
-                zoom: nextZoom ?? mapInstance.getZoom(),
-              });
-            } else {
-              const jumpOptions: any = { center: myPos };
-              if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
-              mapInstance.jumpTo(jumpOptions);
-            }
-          }
-        }
-      }
+      if (myTargetPos) updateCamera(myTargetPos, myTargetSpeed, alpha, autoZoomEnabled);
     };
     requestAnimationFrame(loop);
   };

@@ -90,6 +90,59 @@ const WinModal = (props: WinModalProps) => {
   );
 };
 
+function computeBreakdownData(byCountry: Record<string, any>, countries: string[], transports: string[]) {
+  let filteredByCountry: Record<string, any> = {};
+  if (countries.length > 0) {
+    for (const c of countries) {
+      if (byCountry[c]) filteredByCountry[c] = byCountry[c];
+    }
+  } else {
+    filteredByCountry = byCountry;
+  }
+
+  const aggregateByTransport = (cs: any, trans: string[]) => {
+    let timeMs = 0;
+    let distanceKm = 0;
+    for (const t of trans) {
+      timeMs += cs.transportTimeMs[t] ?? 0;
+      distanceKm += cs.transportDistanceKm[t] ?? 0;
+    }
+    return { timeMs, distanceKm, isWait: timeMs > 0 && distanceKm === 0 };
+  };
+
+  let breakdown: Record<string, { timeMs: number; distanceKm: number; isWait: boolean }>;
+  let type: 'country' | 'transport';
+
+  if (countries.length > 0) {
+    breakdown = {};
+    for (const cs of Object.values(filteredByCountry)) {
+      const transToUse = transports.length > 0 ? transports : Object.keys(cs.transportTimeMs);
+      for (const t of transToUse) {
+        if (!breakdown[t]) breakdown[t] = { timeMs: 0, distanceKm: 0, isWait: false };
+        breakdown[t].timeMs += cs.transportTimeMs[t] ?? 0;
+        breakdown[t].distanceKm += cs.transportDistanceKm[t] ?? 0;
+      }
+    }
+    for (const t of Object.keys(breakdown)) {
+      breakdown[t].isWait = breakdown[t].timeMs > 0 && breakdown[t].distanceKm === 0;
+    }
+    type = 'transport';
+  } else {
+    breakdown = {};
+    for (const [c, cs] of Object.entries(filteredByCountry)) {
+      const transToUse = transports.length > 0 ? transports : Object.keys(cs.transportTimeMs);
+      breakdown[c] = aggregateByTransport(cs, transToUse);
+    }
+    type = 'country';
+  }
+
+  const filtered = Object.entries(breakdown)
+    .filter(([_, d]) => d.distanceKm > 0 || d.isWait)
+    .sort((a, b) => b[1].timeMs - a[1].timeMs);
+
+  return { breakdown: Object.fromEntries(filtered), type };
+}
+
 const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
   const [selectedCountries, setSelectedCountries] = createSignal<string[]>([]);
   const [selectedTransports, setSelectedTransports] = createSignal<string[]>([]);
@@ -106,69 +159,11 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
   };
 
   const toggleSelection = <T,>(item: T, current: T[], setter: (v: T[]) => void) => {
-    if (current.includes(item)) {
-      setter(current.filter(x => x !== item));
-    } else {
-      setter([...current, item]);
-    }
+    if (current.includes(item)) setter(current.filter(x => x !== item));
+    else setter([...current, item]);
   };
 
-  const breakdownData = createMemo(() => {
-    const countries = selectedCountries();
-    const transports = selectedTransports();
-    const byCountry = props.stats.byCountry;
-
-    let filteredByCountry: Record<string, typeof byCountry[string]> = {};
-    if (countries.length > 0) {
-      for (const c of countries) {
-        if (byCountry[c]) filteredByCountry[c] = byCountry[c];
-      }
-    } else {
-      filteredByCountry = byCountry;
-    }
-
-    const aggregateByTransport = (cs: typeof byCountry[string], trans: string[]) => {
-      let timeMs = 0;
-      let distanceKm = 0;
-      for (const t of trans) {
-        timeMs += cs.transportTimeMs[t] ?? 0;
-        distanceKm += cs.transportDistanceKm[t] ?? 0;
-      }
-      return { timeMs, distanceKm, isWait: timeMs > 0 && distanceKm === 0 };
-    };
-
-    let breakdown: Record<string, { timeMs: number; distanceKm: number; isWait: boolean }>;
-    let type: 'country' | 'transport';
-
-    if (countries.length > 0) {
-      breakdown = {};
-      for (const cs of Object.values(filteredByCountry)) {
-        const transToUse = transports.length > 0 ? transports : Object.keys(cs.transportTimeMs);
-        for (const t of transToUse) {
-          if (!breakdown[t]) breakdown[t] = { timeMs: 0, distanceKm: 0, isWait: false };
-          breakdown[t].timeMs += cs.transportTimeMs[t] ?? 0;
-          breakdown[t].distanceKm += cs.transportDistanceKm[t] ?? 0;
-        }
-      }
-      for (const t of Object.keys(breakdown)) {
-        breakdown[t].isWait = breakdown[t].timeMs > 0 && breakdown[t].distanceKm === 0;
-      }
-      type = 'transport';
-    } else {
-      breakdown = {};
-      for (const [c, cs] of Object.entries(filteredByCountry)) {
-        const transToUse = transports.length > 0 ? transports : Object.keys(cs.transportTimeMs);
-        breakdown[c] = aggregateByTransport(cs, transToUse);
-      }
-      type = 'country';
-    }
-
-    const filtered = Object.entries(breakdown)
-      .filter(([_, d]) => d.distanceKm > 0 || d.isWait)
-      .sort((a, b) => b[1].timeMs - a[1].timeMs);
-
-    return { breakdown: Object.fromEntries(filtered), type };
-  });
+  const breakdownData = createMemo(() => computeBreakdownData(props.stats.byCountry, selectedCountries(), selectedTransports()));
 
   const totals = createMemo(() => {
     const data = breakdownData();
@@ -178,11 +173,7 @@ const StatsTab = (props: { stats: ReturnType<typeof $playerStats.get> }) => {
       totalTimeMs += d.timeMs;
       totalDistanceKm += d.distanceKm;
     }
-    return {
-      totalTimeMs,
-      totalDistanceKm,
-      avgSpeed: totalTimeMs > 0 ? (totalDistanceKm / (totalTimeMs / 3600000)) : 0
-    };
+    return { totalTimeMs, totalDistanceKm, avgSpeed: totalTimeMs > 0 ? (totalDistanceKm / (totalTimeMs / 3600000)) : 0 };
   });
 
   const showByCountry = () => breakdownData().type === 'country';

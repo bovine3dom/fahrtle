@@ -72,6 +72,68 @@ const ActionButton = (props: {
   </button>
 );
 
+function processTripResults(res: any[], row: DepartureResult) {
+  const rawPoints = res.map((r: any, idx: number) => {
+    const thisStopZone = getTimeZone(r.stop_lat, r.stop_lon);
+    const timeStr = idx === 0 ? r.departure_time : r.arrival_time;
+    const absoluteTime = parseDBTime(timeStr, thisStopZone);
+    return {
+      lng: r.stop_lon + Math.random() * 0.0001, lat: r.stop_lat + Math.random() * 0.0001,
+      dbTime: absoluteTime, timeStr: formatRowTime(timeStr), stopName: r.stop_name, timeZone: thisStopZone
+    };
+  });
+
+  const startPt = rawPoints[0];
+  const gameTime = $clock.get();
+  const dbSeconds = getWallSeconds(startPt.dbTime, startPt.timeZone);
+  const gameSeconds = getWallSeconds(gameTime, startPt.timeZone);
+  let diff = dbSeconds - gameSeconds;
+  if (diff < -60) diff += 86400;
+
+  const targetStart = gameTime + (diff * 1000);
+  const timeShift = targetStart - startPt.dbTime;
+  const points = rawPoints.map((p: any, idx: number) => ({
+    lng: p.lng, lat: p.lat, time: p.dbTime + timeShift, stopName: p.stopName,
+    isWalk: idx === 0, route_color: row.route_color, route_short_name: row.route_short_name,
+    display_name: row.trip_headsign || row.route_long_name || row.stop_name,
+    emoji: getRouteEmoji(row.route_type), route_departure_time: row.departure_time, timeStr: p.timeStr,
+  }));
+
+  const timeMap = new Map<number, number[]>();
+  points.forEach((p: { time: number }, idx: number) => {
+    const minuteKey = Math.floor(p.time / 60000) * 60000;
+    if (!timeMap.has(minuteKey)) timeMap.set(minuteKey, []);
+    timeMap.get(minuteKey)!.push(idx);
+  });
+  timeMap.forEach((indices: number[]) => {
+    if (indices.length > 1) {
+      const spacing = 60000 / indices.length;
+      indices.forEach((idx: number, i: number) => { points[idx].time = points[idx].time + Math.round(i * spacing); });
+    }
+  });
+
+  return points;
+}
+
+function submitTripWaypoints(points: any[], row: DepartureResult, close: () => void, setLoading: (v: null) => void) {
+  const emoji = getRouteEmoji(row.route_type);
+  const doSubmit = (pts: any[]) => {
+    submitWaypointsBatch(pts);
+    $playerSettings.get().autoFollow && $isFollowing.set(true);
+    close();
+    setLoading(null);
+  };
+
+  if (emoji === '🚆') {
+    augmentWithRailRoute(points).then(doSubmit).catch(err => {
+      console.error("[RailRoute] Full fallback due to error:", err);
+      doSubmit(points);
+    });
+  } else {
+    doSubmit(points);
+  }
+}
+
 export default function DepartureBoard() {
   const allResults = useStore($departureBoardResults);
   const roomState = useStore($roomState);
@@ -433,86 +495,8 @@ export default function DepartureBoard() {
     chQuery(query)
       .then(res => {
         if (res && res.data && res.data.length > 0) {
-          const rawPoints = res.data.map((r: any, idx: number) => {
-            const thisStopZone = getTimeZone(r.stop_lat, r.stop_lon);
-            const timeStr = idx === 0 ? r.departure_time : r.arrival_time;
-            const absoluteTime = parseDBTime(timeStr, thisStopZone);
-            return {
-              // add small amount of randomness to avoid totally overlapping routes
-              lng: r.stop_lon + Math.random() * 0.0001,
-              lat: r.stop_lat + Math.random() * 0.0001,
-              dbTime: absoluteTime,
-              timeStr: formatRowTime(timeStr),
-              stopName: r.stop_name,
-              timeZone: thisStopZone
-            }
-          });
-
-          const startPt = rawPoints[0];
-          const gameTime = $clock.get();
-
-          const dbSeconds = getWallSeconds(startPt.dbTime, startPt.timeZone);
-          const gameSeconds = getWallSeconds(gameTime, startPt.timeZone);
-
-          let diff = dbSeconds - gameSeconds;
-
-          const TOLERANCE = -60; // 1 minute leeway
-          if (diff < TOLERANCE) {
-            diff += 86400;
-          }
-
-          const targetStart = gameTime + (diff * 1000);
-          const timeShift = targetStart - startPt.dbTime;
-          const points = rawPoints.map((p: any, idx: number) => ({
-            lng: p.lng,
-            lat: p.lat,
-            time: p.dbTime + timeShift,
-            stopName: p.stopName,
-            isWalk: idx === 0,
-            route_color: row.route_color,
-            route_short_name: row.route_short_name,
-            display_name: row.trip_headsign || row.route_long_name || row.stop_name,
-            emoji: getRouteEmoji(row.route_type),
-            route_departure_time: row.departure_time,
-            timeStr: p.timeStr,
-          }));
-
-          // space out stops with identical times
-          const timeMap = new Map<number, number[]>();
-          points.forEach((p: { time: number }, idx: number) => {
-            const minuteKey = Math.floor(p.time / 60000) * 60000;
-            if (!timeMap.has(minuteKey)) timeMap.set(minuteKey, []);
-            timeMap.get(minuteKey)!.push(idx);
-          });
-          timeMap.forEach((indices: number[]) => {
-            if (indices.length > 1) {
-              const spacing = 60000 / indices.length;
-              indices.forEach((idx: number, i: number) => {
-                points[idx].time = points[idx].time + Math.round(i * spacing);
-              });
-            }
-          });
-
-          const emoji = getRouteEmoji(row.route_type);
-          if (emoji === '🚆') {
-            augmentWithRailRoute(points).then(finalPoints => {
-              submitWaypointsBatch(finalPoints);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            }).catch(err => {
-              console.error("[RailRoute] Full fallback due to error:", err);
-              submitWaypointsBatch(points);
-              $playerSettings.get().autoFollow && $isFollowing.set(true);
-              close();
-              setLoadingTripKey(null);
-            });
-          } else {
-            submitWaypointsBatch(points);
-            $playerSettings.get().autoFollow && $isFollowing.set(true);
-            close();
-            setLoadingTripKey(null);
-          }
+          const points = processTripResults(res.data, row);
+          submitTripWaypoints(points, row, close, () => setLoadingTripKey(null));
         } else {
           setLoadingTripKey(null);
         }
