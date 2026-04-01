@@ -6,7 +6,9 @@ import {
   type Waypoint,
   updateRoomLogic,
   handleIncomingMessage,
-  handleGameClose
+  handleGameClose,
+  getRoomBounds,
+  boundsToWire
 } from "../src/shared/gameLogic";
 import { calculateCO2Emissions } from "../src/utils/co2";
 
@@ -183,19 +185,16 @@ function getGameHooks(): GameHooks {
 }
 
 function broadcastRoomState(room: Room) {
+  const bounds = getRoomBounds(room);
   server.publish(room.id, JSON.stringify({
     type: 'ROOM_STATE_UPDATE',
     state: room.state,
     countdownEnd: room.countdownEnd,
     gameStartTime: room.gameStartTime,
-    startPos: room.startPos,
-    finishPos: room.finishPos,
-    difficulty: room.difficulty,
+    ...boundsToWire(bounds),
     serverTime: room.virtualTime,
     realTime: Date.now(),
     isRerun: room.isRerun,
-    computerDriver: room.computerDriver,
-    ghosts: room.ghosts,
     rate: room.state === 'RUNNING' ? room.playbackRate : 0
   }));
 }

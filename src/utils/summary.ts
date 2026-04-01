@@ -1,4 +1,5 @@
-import type { Player, Difficulty, Waypoint } from '../store';
+import type { Player, Waypoint } from '../store';
+import type { GameBounds } from '../shared/gameLogic';
 import { getDailyRaceIndex } from './daily';
 import { formatRowTime, sensibleNumber } from './format';
 import { haversineDist } from './geo';
@@ -139,7 +140,7 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
 }
 
 /* convert object to a human readable string for sharing on socials */
-export const getTravelSummary = async (player: Player, gameBounds: { start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty?: Difficulty }, stealth = false, targetTime?: number) => {
+export const getTravelSummary = async (player: Player, gameBounds: GameBounds, stealth = false, targetTime?: number) => {
     await cityDbPromise;
     const summaryEntries = getTravelSummaryObj(player);
     let travel = stealth ? summaryEntries.map((wp) => { return `${wp.emoji}`; }).join('') : summaryEntries.map((wp) => {
@@ -185,6 +186,10 @@ export const getTravelSummary = async (player: Player, gameBounds: { start: [num
 
     if (gameBounds.difficulty) {
         url.searchParams.set('d', gameBounds.difficulty);
+    }
+
+    if (!isDaily && gameBounds.league) {
+        url.searchParams.set('l', gameBounds.league);
     }
 
 

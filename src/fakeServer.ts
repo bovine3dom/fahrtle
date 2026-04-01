@@ -3,7 +3,9 @@ import {
     type GameHooks,
     updateRoomLogic,
     handleIncomingMessage,
-    handleGameClose
+    handleGameClose,
+    getRoomBounds,
+    boundsToWire
 } from "./shared/gameLogic";
 
 class FakeWebSocket {
@@ -88,18 +90,15 @@ class FakeServer {
     }
 
     private broadcastRoomState(room: Room) {
+        const bounds = getRoomBounds(room);
         this.publish(room.id, {
             type: 'ROOM_STATE_UPDATE',
             state: room.state,
             countdownEnd: room.countdownEnd,
             gameStartTime: room.gameStartTime,
-            startPos: room.startPos,
-            finishPos: room.finishPos,
-            difficulty: room.difficulty,
+            ...boundsToWire(bounds),
             serverTime: room.virtualTime,
             realTime: Date.now(),
-            computerDriver: room.computerDriver,
-            ghosts: room.ghosts,
             isRerun: room.isRerun,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0
         });

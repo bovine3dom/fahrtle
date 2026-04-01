@@ -42,12 +42,6 @@ function App() {
   const startTime = useStore($gameStartTime);
   const isDaily = useStore($isDaily);
 
-  // league is often here
-  createEffect(() => {
-    const b = bounds();
-    console.log(b);
-  });
-
   const [minimized, setMinimized] = createSignal(false);
   const [startStr, setStartStr] = createSignal("");
   const [startTimeStr, setStartTimeStr] = createSignal("");
@@ -98,15 +92,12 @@ function App() {
   createEffect(() => {
     const p = pickedPoint();
     if (p) {
-      const currentStart = untrack(() => parseCoords(startStr()));
-      const currentFinish = untrack(() => parseCoords(finishStr()));
-
       const newPoint: [number, number] = [p.lat, p.lng];
 
       if (p.target === 'start') {
-        setGameBounds(newPoint, currentFinish);
+        setGameBounds({ start: newPoint });
       } else if (p.target === 'finish') {
-        setGameBounds(currentStart, newPoint);
+        setGameBounds({ finish: newPoint });
       }
     }
   });
@@ -190,7 +181,7 @@ function App() {
       if (p) ts = p;
     }
 
-    setGameBounds(s, f, ts, diff(), compDriver(), useGhosts());
+    setGameBounds({ start: s, finish: f, time: ts, difficulty: diff(), computerDriver: compDriver(), ghosts: useGhosts() });
   };
 
   const togglePicker = (mode: 'start' | 'finish') => {

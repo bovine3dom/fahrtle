@@ -8,6 +8,51 @@ const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
 
 export type Difficulty = 'Easy' | 'Normal' | 'Transport nerd';
 
+export type GameBounds = {
+    start: [number, number] | null;
+    finish: [number, number] | null;
+    time?: number;
+    difficulty: Difficulty;
+    computerDriver?: boolean;
+    ghosts?: boolean;
+    league: string;
+};
+
+export function getRoomBounds(room: Room): GameBounds {
+    return {
+        start: room.startPos,
+        finish: room.finishPos,
+        difficulty: room.difficulty,
+        computerDriver: room.computerDriver,
+        ghosts: room.ghosts,
+        league: room.league,
+    };
+}
+
+export function boundsToWire(bounds: GameBounds) {
+    return {
+        startPos: bounds.start,
+        finishPos: bounds.finish,
+        startTime: bounds.time,
+        difficulty: bounds.difficulty,
+        computerDriver: bounds.computerDriver,
+        ghosts: bounds.ghosts,
+        league: bounds.league,
+    };
+}
+
+export function wireToGameBounds(msg: any): GameBounds {
+    return {
+        start: msg.startPos,
+        finish: msg.finishPos,
+        time: msg.serverTime ?? msg.startTime,
+        difficulty: msg.difficulty || 'Normal',
+        computerDriver: msg.computerDriver,
+        ghosts: msg.ghosts,
+        league: msg.league,
+    };
+}
+
 export type Waypoint = {
     x: number;
     y: number;
@@ -417,12 +462,8 @@ export function handleIncomingMessage(
             countdownEnd: room.countdownEnd,
             gameStartTime: room.gameStartTime,
             serverTime: room.virtualTime,
-            startPos: room.startPos,
-            finishPos: room.finishPos,
-            difficulty: room.difficulty,
+            ...boundsToWire(getRoomBounds(room)),
             isRerun: room.isRerun,
-            computerDriver: room.computerDriver,
-            ghosts: room.ghosts,
             realTime: now,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0,
             players: room.players

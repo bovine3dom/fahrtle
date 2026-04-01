@@ -1174,11 +1174,6 @@ export default function MapView() {
   });
 
   const bounds = useStore($gameBounds);
-  // league disappears here
-  createEffect(() => {
-    const b = bounds();
-    console.log(b);
-  });
   const roomState = useStore($roomState);
   createEffect((prevState) => {
     const currentState = roomState();

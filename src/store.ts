@@ -5,7 +5,7 @@ import { getTimeZone } from './timezone';
 import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
 import { sharedFakeServer } from './fakeServer';
-import { type Difficulty, CURRENT_LEAGUE } from './shared/gameLogic';
+import { type Difficulty, type GameBounds, CURRENT_LEAGUE, boundsToWire, wireToGameBounds } from './shared/gameLogic';
 import { haversineDist } from './utils/geo';
 import { formatRowTime } from './utils/format';
 
@@ -146,7 +146,7 @@ export const $boardMinimized = atom(false);
 export const $isFollowing = atom(false);
 export const $playerSpeeds = map<Record<string, number>>({});
 export const $playerDistances = map<Record<string, number | null>>({});
-export const $gameBounds = atom<{ start: [number, number] | null, finish: [number, number] | null, time?: number, difficulty: Difficulty, computerDriver?: boolean, ghosts?: boolean, league: string }>({ start: null, finish: null, time: undefined, difficulty: 'Normal', computerDriver: false, ghosts: false, league: CURRENT_LEAGUE });
+export const $gameBounds = atom<GameBounds>({ start: null, finish: null, time: undefined, difficulty: 'Normal', computerDriver: false, ghosts: false, league: CURRENT_LEAGUE });
 export const $pickerMode = atom<'start' | 'finish' | null>(null);
 export const $pickedPoint = atom<{ lat: number, lng: number, target: 'start' | 'finish' } | null>(null);
 export const $gameStartTime = atom<number | null>(null);
@@ -245,7 +245,7 @@ interface GenericWebSocket {
 
 let ws: GenericWebSocket | null = null;
 
-export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: { start: [number, number] | null, finish: [number, number] | null, time?: string, difficulty?: Difficulty, computerDriver?: boolean, ghosts?: boolean, dailyRaceIndex?: number, league: string }) {
+export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: GameBounds & { time?: string, dailyRaceIndex?: number }) {
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
@@ -282,13 +282,15 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
 
       ws?.send(JSON.stringify({
         type: 'SET_GAME_BOUNDS',
-        startPos: initialBounds.start,
-        finishPos: initialBounds.finish,
-        startTime: startTime,
-        difficulty: initialBounds.difficulty || 'Normal',
-        computerDriver: initialBounds.computerDriver || false,
-        ghosts: initialBounds.ghosts || false,
-        league: initialBounds.league,
+        ...boundsToWire({
+          start: initialBounds.start,
+          finish: initialBounds.finish,
+          time: startTime,
+          difficulty: initialBounds.difficulty || 'Normal',
+          computerDriver: initialBounds.computerDriver || false,
+          ghosts: initialBounds.ghosts || false,
+          league: initialBounds.league,
+        }),
       }));
 
       if (initialBounds.dailyRaceIndex !== undefined) {
@@ -355,7 +357,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
       const previousGhosts = $gameBounds.get().ghosts;
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts, league: msg.league });
+      $gameBounds.set(wireToGameBounds(msg));
       $gameStartTime.set(msg.gameStartTime);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
 
@@ -373,7 +375,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $roomState.set(msg.state);
       $countdownEnd.set(msg.countdownEnd);
       const prevGhosts = $gameBounds.get().ghosts;
-      $gameBounds.set({ start: msg.startPos, finish: msg.finishPos, time: msg.serverTime, difficulty: msg.difficulty || 'Normal', computerDriver: msg.computerDriver, ghosts: msg.ghosts, league: msg.league });
+      $gameBounds.set(wireToGameBounds(msg));
       $gameStartTime.set(msg.gameStartTime);
       $isRerun.set(msg.isRerun);
       syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
@@ -798,25 +800,19 @@ function processPlayer(raw: Player): RenderablePlayer {
   };
 }
 
-export function setGameBounds(start: [number, number] | null, finish: [number, number] | null, startTime?: number, difficulty?: Difficulty, computerDriver?: boolean, ghosts?: boolean, league?: string) {
-  const currentDifficulty = difficulty || $gameBounds.get().difficulty;
-  const currentComputerDriver = computerDriver !== undefined ? computerDriver : $gameBounds.get().computerDriver; // allow false (lol)
-  const previousGhosts = $gameBounds.get().ghosts;
-  const currentGhosts = ghosts !== undefined ? ghosts : previousGhosts;
-  const currentLeague = league || $gameBounds.get().league;
+export function setGameBounds(partial: Partial<GameBounds>) {
+  const current = $gameBounds.get();
+  const merged: GameBounds = {
+    ...current,
+    ...Object.fromEntries(Object.entries(partial).filter(([, v]) => v !== undefined)),
+  } as GameBounds;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'SET_GAME_BOUNDS',
-      startPos: start,
-      finishPos: finish,
-      startTime: startTime,
-      difficulty: currentDifficulty,
-      ghosts: currentGhosts,
-      computerDriver: currentComputerDriver,
-      league: currentLeague
+      ...boundsToWire(merged),
     }));
 
-    if (previousGhosts && !currentGhosts) {
+    if (current.ghosts && !merged.ghosts) {
       removeGhosts();
     }
   }
