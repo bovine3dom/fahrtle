@@ -28,6 +28,145 @@ function getSpeedMode(desiredRate: number | undefined, forceRealtime: boolean | 
   return 'auto';
 }
 
+function SpeedControls(props: { mode: 'auto' | 'snooze' | 'realtime', compact?: boolean }) {
+  const handleAutoClick = () => {
+    if (props.mode === 'snooze') toggleSnooze();
+    else if ((props.mode === 'realtime') || (props.mode === 'auto')) forceRealtime();
+  };
+  const handleSnoozeClick = () => {
+    if (props.mode === 'auto') toggleSnooze();
+    else if (props.mode === 'snooze') toggleSnooze();
+    else if (props.mode === 'realtime') {
+      forceRealtime();
+      setTimeout(() => toggleSnooze(), 0);
+    }
+  };
+  const handleRealtimeClick = () => {
+    if (props.mode === 'realtime') forceRealtime();
+    else forceRealtime();
+  };
+
+  const btnStyle = (active: boolean, activeBg: string, activeBorder: string, radius: string) => ({
+    flex: 1 as const, padding: props.compact ? '6px 8px' : '8px',
+    background: active ? activeBg : colours.bg,
+    color: active ? colours.white : colours.text,
+    border: `1px solid ${active ? activeBorder : colours.border}`,
+    'border-radius': radius,
+    cursor: 'pointer' as const, 'font-size': props.compact ? '1em' : '0.9em',
+    'font-weight': props.compact ? undefined as any : 'bold',
+    'display': 'flex' as const, 'align-items': 'center' as const, 'justify-content': 'center' as const, gap: '4px',
+    'box-shadow': active ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
+    transform: active ? 'translateY(1px)' : 'none',
+  });
+
+  return (
+    <div style={{ display: 'flex', 'flex-shrink': 0 }}>
+      <button onClick={handleRealtimeClick} style={btnStyle(props.mode === 'realtime', colours.success, colours.successDark, '4px 0 0 4px')} title="Realtime (1x forced)">
+        ⏱{!props.compact && ' Realtime'}
+      </button>
+      <button onClick={handleAutoClick} style={{ ...btnStyle(props.mode === 'auto', colours.primary, colours.primaryDark, '0'), 'border-right': 'none', 'border-left': 'none' }} title="Auto">
+        ▶️{!props.compact && ' Auto'}
+      </button>
+      <button onClick={handleSnoozeClick} style={btnStyle(props.mode === 'snooze', colours.primary, colours.primaryDark, '0 4px 4px 0')} title="Snooze (500x)">
+        ⏩{!props.compact && ' Snooze'}
+      </button>
+    </div>
+  );
+}
+
+function GetOffButton(props: { dropdownOpen: boolean, setDropdownOpen: (v: boolean) => void, actionFeedback: () => string | null, setActionFeedback: (v: string | null) => void, futureWaypoints: () => any[], nextWaypoint: () => any, stopImmediately: (idx?: number) => void }) {
+  const isWalking = () => props.nextWaypoint()?.isWalk || props.nextWaypoint()?.isWait;
+  const bg = () => isWalking() ? colours.success : colours.warning;
+  const border = () => isWalking() ? '1px solid colours.successDark' : '1px solid colours.warningDark';
+
+  const handleStop = () => {
+    if (isWalking()) {
+      props.stopImmediately();
+      props.setActionFeedback(props.nextWaypoint()?.isWait ? "Waiting stopped" : "Walking stopped");
+    } else {
+      props.stopImmediately(props.nextWaypoint()?.originalIndex);
+      props.setActionFeedback(`Stopping at ${props.nextWaypoint()?.stopName}`);
+    }
+    setTimeout(() => props.setActionFeedback(null), 3000);
+  };
+
+  const label = () => props.actionFeedback() || (isWalking()
+    ? (props.nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking')
+    : `${props.nextWaypoint()?.stopName || ''}`);
+
+  return (
+    <div style={{ display: 'flex', flex: 1, gap: '2px', position: 'relative', 'min-width': 0 }}>
+      <button
+        onClick={handleStop}
+        style={{
+          flex: 1, padding: '8px', background: bg(), color: '#fff',
+          'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
+          'border-top-right-radius': props.futureWaypoints().length > 1 ? '0' : '4px',
+          'border-bottom-right-radius': props.futureWaypoints().length > 1 ? '0' : '4px',
+          cursor: 'pointer', border: border(),
+          'border-right': props.futureWaypoints().length > 1 ? 'none' : undefined,
+          'font-size': '0.9em', 'font-weight': 'bold',
+          'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
+          'min-width': 0
+        }}
+        title={isWalking() ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
+      >
+        <span style={{ 'flex-shrink': 0 }}>{props.actionFeedback() ? '' : '🛑'}</span>
+        <span style={{ 'white-space': 'nowrap', 'overflow': 'hidden', 'text-overflow': 'ellipsis', 'flex': 1 }}>
+          {label()}
+        </span>
+      </button>
+      <Show when={props.futureWaypoints().length > 1}>
+        <button
+          onClick={(e) => { e.stopPropagation(); props.setDropdownOpen(!props.dropdownOpen); }}
+          style={{
+            padding: '0 4px', background: bg(), color: '#fff',
+            'border-top-left-radius': '0px', 'border-bottom-left-radius': '0px',
+            border: border(), cursor: 'pointer'
+          }}
+        >
+          {props.dropdownOpen ? '▲' : '▼'}
+        </button>
+        <Show when={props.dropdownOpen}>
+          <div
+            ref={(el) => { requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; }); }}
+            style={{
+              position: 'absolute', top: '100%', left: 0, background: '#fff',
+              border: '1px solid #ccc', 'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+              'border-radius': '4px', 'margin-top': '4px', 'min-width': '200px',
+              'z-index': 100, 'max-height': '200px', 'overflow-y': 'auto'
+            }}>
+            <For each={props.futureWaypoints()}>
+              {(wp) => (
+                <div
+                  onClick={() => {
+                    props.stopImmediately(wp.originalIndex);
+                    props.setDropdownOpen(false);
+                    props.setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
+                    setTimeout(() => props.setActionFeedback(null), 3000);
+                  }}
+                  style={{
+                    padding: '8px 12px', cursor: 'pointer', 'font-size': '0.85em',
+                    border: 'none', 'border-bottom': '1px solid #eee',
+                    display: 'flex', 'align-items': 'center', gap: '8px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = colours.bg}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                >
+                  <span>{wp.emoji || '🏳️'}</span>
+                  <span style={{ flex: 1, 'white-space': 'nowrap', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
+                    {wp.timeStr || ''} {wp.stopName || 'Unnamed stop'}
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+      </Show>
+    </div>
+  );
+}
+
 function App() {
   const room = useStore($currentRoom);
   const rate = useStore($globalRate);
@@ -474,184 +613,20 @@ function App() {
                     </button>
                   </Show>
                 }>
-                  <div style={{ display: 'flex', flex: 1, gap: '2px', position: 'relative', 'min-width': 0 }}>
-                    <button
-                      onClick={() => {
-                        if (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) {
-                          stopImmediately();
-                          setActionFeedback(nextWaypoint()?.isWait ? "Waiting stopped" : "Walking stopped");
-                        } else {
-                          stopImmediately(nextWaypoint()?.originalIndex);
-                          setActionFeedback(`Stopping at ${nextWaypoint()?.stopName}`);
-                        }
-                        setTimeout(() => setActionFeedback(null), 3000);
-                      }}
-                      style={{
-                        flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning, color: '#fff',
-                        'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
-                        'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
-                        'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
-                        cursor: 'pointer',
-                        border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
-                        'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
-                        'font-size': '0.9em', 'font-weight': 'bold',
-                        'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px',
-                        'min-width': 0
-                      }}
-                      title={(nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
-                    >
-                      <span style={{ 'flex-shrink': 0 }}>{actionFeedback() ? '' : '🛑'}</span>
-                      <span style={{
-                        'white-space': 'nowrap',
-                        'overflow': 'hidden',
-                        'text-overflow': 'ellipsis',
-                        'flex': 1
-                      }}>
-                        {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `${nextWaypoint()?.stopName || ''}`)}
-                      </span>
-                    </button>
-                    <Show when={futureWaypoints().length > 1}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setGetOffDropdownOpen(!getOffDropdownOpen());
-                        }}
-                        style={{
-                          padding: '0 4px',
-                          background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning,
-                          color: '#fff',
-                          'border-top-left-radius': '0px',
-                          'border-bottom-left-radius': '0px',
-                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {getOffDropdownOpen() ? '▲' : '▼'}
-                      </button>
-                      <Show when={getOffDropdownOpen()}>
-                        <div
-                          ref={(el) => {
-                            requestAnimationFrame(() => {
-                              el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
-                            });
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            background: '#fff',
-                            border: '1px solid #ccc',
-                            'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-                            'border-radius': '4px',
-                            'margin-top': '4px',
-                            'min-width': '200px',
-                            'z-index': 100,
-                            'max-height': '200px',
-                            'overflow-y': 'auto'
-                          }}>
-                          <For each={futureWaypoints()}>
-                            {(wp) => (
-                              <div
-                                onClick={() => {
-                                  stopImmediately(wp.originalIndex)
-                                  setGetOffDropdownOpen(false);
-                                  setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
-                                  setTimeout(() => setActionFeedback(null), 3000);
-                                }}
-                                style={{
-                                  padding: '8px 12px',
-                                  cursor: 'pointer',
-                                  'font-size': '0.85em',
-                                  border: 'none',
-                                  'border-bottom': '1px solid #eee',
-                                  display: 'flex',
-                                  'align-items': 'center',
-                                  gap: '8px'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = colours.bg}
-                                onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
-                              >
-                                <span>{wp.emoji || '🏳️'}</span>
-                                <span style={{ flex: 1, 'white-space': 'nowrap', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
-                                  {wp.timeStr || ''} {wp.stopName || 'Unnamed stop'}
-                                </span>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </Show>
-                  </div>
+                  <GetOffButton
+                    dropdownOpen={getOffDropdownOpen()}
+                    setDropdownOpen={setGetOffDropdownOpen}
+                    actionFeedback={actionFeedback}
+                    setActionFeedback={setActionFeedback}
+                    futureWaypoints={futureWaypoints}
+                    nextWaypoint={nextWaypoint}
+                    stopImmediately={stopImmediately}
+                  />
                 </Show>
 
                 {roomState() === 'RUNNING' && (() => {
                   const me = players()[myId()!];
-                  const mode = getSpeedMode(me?.desiredRate, me?.forceRealtime);
-                  const handleAutoClick = () => {
-                    if (mode === 'snooze') toggleSnooze();
-                    else if ((mode === 'realtime') || (mode === 'auto')) forceRealtime();
-                  };
-                  const handleSnoozeClick = () => {
-                    if (mode === 'auto') toggleSnooze();
-                    else if (mode === 'snooze') toggleSnooze(); // toggle off -> auto
-                    else if (mode === 'realtime') {
-                      forceRealtime();
-                      setTimeout(() => toggleSnooze(), 0);
-                    }
-                  };
-                  const handleRealtimeClick = () => {
-                    if (mode === 'realtime') forceRealtime(); // toggle off -> auto
-                    else forceRealtime();
-                  };
-                  return (
-                    <div style={{ display: 'flex', 'flex-shrink': 0 }}>
-                      <button
-                        onClick={handleRealtimeClick}
-                        style={{
-                          padding: '6px 8px', 'background': mode === 'realtime' ? colours.success : colours.bg,
-                          color: mode === 'realtime' ? colours.white : colours.text,
-                          border: `1px solid ${mode === 'realtime' ? colours.successDark : colours.border}`,
-                          'border-right': 'none', 'border-radius': '4px 0 0 4px',
-                          cursor: 'pointer', 'font-size': '1em',
-                          'box-shadow': mode === 'realtime' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                          transform: mode === 'realtime' ? 'translateY(1px)' : 'none',
-                        }}
-                        title="Realtime (1x forced)"
-                      >
-                        ⏱
-                      </button>
-                      <button
-                        onClick={handleAutoClick}
-                        style={{
-                          padding: '6px 8px', 'background': mode === 'auto' ? colours.primary : colours.bg,
-                          color: mode === 'auto' ? colours.white : colours.text,
-                          border: `1px solid ${mode === 'auto' ? colours.primaryDark : colours.border}`,
-                          'border-right': 'none', 'border-left': 'none', 'border-radius': '0',
-                          cursor: 'pointer', 'font-size': '1em',
-                          'box-shadow': mode === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                          transform: mode === 'auto' ? 'translateY(1px)' : 'none',
-                        }}
-                        title="Auto"
-                      >
-                        ▶️ 
-                      </button>
-                      <button
-                        onClick={handleSnoozeClick}
-                        style={{
-                          padding: '6px 8px', 'background': mode === 'snooze' ? colours.primary : colours.bg,
-                          color: mode === 'snooze' ? colours.white : colours.text,
-                          border: `1px solid ${mode === 'snooze' ? colours.primaryDark : colours.border}`,
-                          'border-left': 'none', 'border-radius': '0 4px 4px 0',
-                          cursor: 'pointer', 'font-size': '1em',
-                          'box-shadow': mode === 'snooze' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                          transform: mode === 'snooze' ? 'translateY(1px)' : 'none',
-                        }}
-                        title="Snooze (500x)"
-                      >
-                        ⏩
-                      </button>
-                    </div>
-                  );
+                  return <SpeedControls mode={getSpeedMode(me?.desiredRate, me?.forceRealtime)} compact />;
                 })()}
               </div>
             </Show>
@@ -978,106 +953,15 @@ function App() {
                       </button>
                     </Show>
                   }>
-                    <div style={{ display: 'flex', gap: '2px', position: 'relative', 'margin-bottom': '8px' }}>
-                      <button
-                        onClick={() => {
-                          if (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) {
-                            stopImmediately();
-                            setActionFeedback(nextWaypoint()?.isWait ? "Waiting stopped" : "Walking stopped");
-                          } else {
-                            stopImmediately(nextWaypoint()?.originalIndex);
-                            setActionFeedback(`Alighting scheduled for ${nextWaypoint()?.stopName}`);
-                          }
-                          setTimeout(() => setActionFeedback(null), 3000);
-                        }}
-                        style={{
-                          flex: 1, padding: '8px', 'background': (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning, color: '#fff',
-                          'border-top-left-radius': '4px', 'border-bottom-left-radius': '4px',
-                          'border-top-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
-                          'border-bottom-right-radius': futureWaypoints().length > 1 ? '0' : '4px',
-                          cursor: 'pointer',
-                          border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
-                          'border-right': futureWaypoints().length > 1 ? 'none' : undefined,
-                          'font-size': '0.9em', 'font-weight': 'bold',
-                          'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
-                        }}
-                        title={(nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? "Stop moving immediately" : "Stops at the next upcoming station and cancels remaining trip"}
-                      >
-                        <span>{actionFeedback() ? '' : '🛑'}</span> {actionFeedback() || ((nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? (nextWaypoint()?.isWait ? 'Stop waiting' : 'Stop walking') : `Get off at ${nextWaypoint()?.stopName || ''}`)}
-                      </button>
-                      <Show when={futureWaypoints().length > 1}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setGetOffDropdownOpen(!getOffDropdownOpen());
-                          }}
-                          style={{
-                            padding: '0 8px',
-                            background: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? colours.success : colours.warning,
-                            color: '#fff',
-                            'border-top-left-radius': '0px',
-                            'border-bottom-left-radius': '0px',
-                            'border-top-right-radius': '4px',
-                            'border-bottom-right-radius': '4px',
-                            border: (nextWaypoint()?.isWalk || nextWaypoint()?.isWait) ? '1px solid colours.successDark' : '1px solid colours.warningDark',
-                            'border-left': '1px solid rgba(255,255,255,0.3)',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {getOffDropdownOpen() ? '▲' : '▼'}
-                        </button>
-                        <Show when={getOffDropdownOpen()}>
-                          <div
-                            ref={(el) => {
-                              requestAnimationFrame(() => {
-                                el.scrollTop = el.scrollHeight; // scroll to bottom once rendered on mount
-                              });
-                            }}
-                            style={{
-                              position: 'absolute',
-                              top: '100%',
-                              left: 0,
-                              background: '#fff',
-                              border: '1px solid #ccc',
-                              'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-                              'border-radius': '4px',
-                              'margin-top': '4px',
-                              'min-width': '200px',
-                              'z-index': 100,
-                              'max-height': '200px',
-                              'overflow-y': 'auto'
-                            }}>
-                            <For each={futureWaypoints()}>
-                              {(wp) => (
-                                <div
-                                  onClick={() => {
-                                    stopImmediately(wp.originalIndex)
-                                    setGetOffDropdownOpen(false);
-                                    setActionFeedback(`Alighting scheduled for ${wp.stopName}`);
-                                    setTimeout(() => setActionFeedback(null), 3000);
-                                  }}
-                                  style={{
-                                    padding: '8px 12px',
-                                    cursor: 'pointer',
-                                    'font-size': '0.9em',
-                                    border: 'none',
-                                    'border-bottom': '1px solid #eee',
-                                    display: 'flex',
-                                    'align-items': 'center',
-                                    gap: '8px'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = colours.bg}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
-                                >
-                                  <span>{wp.emoji || '🏳️'}</span>
-                                  <span style={{ flex: 1 }}>{wp.timeStr || ''} {wp.stopName || 'Unnamed stop'}</span>
-                                </div>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                      </Show>
-                    </div>
+                    <GetOffButton
+                      dropdownOpen={getOffDropdownOpen()}
+                      setDropdownOpen={setGetOffDropdownOpen}
+                      actionFeedback={actionFeedback}
+                      setActionFeedback={setActionFeedback}
+                      futureWaypoints={futureWaypoints}
+                      nextWaypoint={nextWaypoint}
+                      stopImmediately={stopImmediately}
+                    />
                   </Show>
                   {roomState() !== 'RUNNING' && (
                     <button
@@ -1100,73 +984,10 @@ function App() {
                     <Show when={players()[myId()!]}>
                       {(me) => {
                         const mode = createMemo(() => getSpeedMode(me().desiredRate, me().forceRealtime));
-                        const handleAutoClick = () => {
-                          if (mode() === 'snooze') toggleSnooze();
-                          else if ((mode() === 'realtime') || (mode() === 'auto')) forceRealtime();
-                        };
-                        const handleSnoozeClick = () => {
-                          if (mode() === 'auto') toggleSnooze();
-                          else if (mode() === 'snooze') toggleSnooze(); // toggle off -> auto
-                          else if (mode() === 'realtime') {
-                            forceRealtime();
-                            setTimeout(() => toggleSnooze(), 0);
-                          }
-                        };
-                        const handleRealtimeClick = () => {
-                          if (mode() === 'realtime') forceRealtime(); // toggle off -> auto
-                          else forceRealtime();
-                        };
                         return (
                           <>
-                            <div style={{ display: 'flex', 'margin-top': '8px' }}>
-                              <button
-                                onClick={handleRealtimeClick}
-                                style={{
-                                  flex: 1, padding: '8px', 'background': mode() === 'realtime' ? colours.success : colours.bg,
-                                  color: mode() === 'realtime' ? colours.white : colours.text,
-                                  border: `1px solid ${mode() === 'realtime' ? colours.successDark : colours.border}`,
-                                  'border-right': 'none', 'border-radius': '4px 0 0 4px',
-                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
-                                  'box-shadow': mode() === 'realtime' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                                  transform: mode() === 'realtime' ? 'translateY(1px)' : 'none',
-                                }}
-                                title="Realtime (1x forced)"
-                              >
-                                ⏱ Realtime
-                              </button>
-                              <button
-                                onClick={handleAutoClick}
-                                style={{
-                                  flex: 1, padding: '8px', 'background': mode() === 'auto' ? colours.primary : colours.bg,
-                                  color: mode() === 'auto' ? colours.white : colours.text,
-                                  border: `1px solid ${mode() === 'auto' ? colours.primaryDark : colours.border}`,
-                                  'border-right': 'none', 'border-left': 'none', 'border-radius': '0',
-                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
-                                  'box-shadow': mode() === 'auto' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                                  transform: mode() === 'auto' ? 'translateY(1px)' : 'none',
-                                }}
-                                title="Auto"
-                              >
-                                ▶️ Auto
-                              </button>
-                              <button
-                                onClick={handleSnoozeClick}
-                                style={{
-                                  flex: 1, padding: '8px', 'background': mode() === 'snooze' ? colours.primary : colours.bg,
-                                  color: mode() === 'snooze' ? colours.white : colours.text,
-                                  border: `1px solid ${mode() === 'snooze' ? colours.primaryDark : colours.border}`,
-                                  'border-left': 'none', 'border-radius': '0 4px 4px 0',
-                                  cursor: 'pointer', 'font-size': '0.9em', 'font-weight': 'bold',
-                                  'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '4px',
-                                  'box-shadow': mode() === 'snooze' ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'none',
-                                  transform: mode() === 'snooze' ? 'translateY(1px)' : 'none',
-                                }}
-                                title="Snooze (500x)"
-                              >
-                                ⏩ Snooze
-                              </button>
+                            <div style={{ 'margin-top': '8px' }}>
+                              <SpeedControls mode={mode()} />
                             </div>
                             <Show when={me().finishTime}>
                               <button
