@@ -36,8 +36,10 @@ export function PlayerList(props: {
           {(id, index) => {
             const p = () => props.players()[id];
             const isFinished = createMemo(() => p().finishTime != null);
-            const nextWpIndex = createMemo(() => p().segments.findIndex((s: any) => s.startTime > props.time() && !s.isInterstop));
-            const nextWp = createMemo(() => p().waypoints[nextWpIndex()]);
+            const nextWp = createMemo(() => {
+              const t = props.time();
+              return p().waypoints.find((wp: any) => wp.arrivalTime > t && !wp.isInterstop);
+            });
             const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
             const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
