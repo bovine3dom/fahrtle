@@ -1,7 +1,7 @@
 import { toggleSnooze, forceRealtime } from '../store';
 import { colours } from '../colours';
 
-export function SpeedControls(props: { mode: 'auto' | 'snooze' | 'realtime', compact?: boolean }) {
+export function SpeedControls(props: { mode: 'auto' | 'snooze' | 'realtime', compact?: boolean, canSnooze: () => boolean }) {
   const handleAutoClick = () => {
     if (props.mode === 'snooze') toggleSnooze();
     else if ((props.mode === 'realtime') || (props.mode === 'auto')) forceRealtime();
@@ -39,7 +39,15 @@ export function SpeedControls(props: { mode: 'auto' | 'snooze' | 'realtime', com
       <button onClick={handleAutoClick} style={{ ...btnStyle(props.mode === 'auto', colours.primary, colours.primaryDark, '0'), 'border-right': 'none', 'border-left': 'none' }} title="Auto">
         ▶️{!props.compact && ' Auto'}
       </button>
-      <button onClick={handleSnoozeClick} style={btnStyle(props.mode === 'snooze', colours.primary, colours.primaryDark, '0 4px 4px 0')} title="Snooze (500x)">
+      <button
+        onClick={handleSnoozeClick}
+        disabled={!props.canSnooze()}
+        style={{
+          ...btnStyle(props.mode === 'snooze', colours.primary, colours.primaryDark, '0 4px 4px 0'),
+          ...(!props.canSnooze() ? { opacity: 0.4, cursor: 'not-allowed' as const } : {})
+        }}
+        title={props.canSnooze() ? "Snooze (500x)" : "Cannot snooze on final transport leg"}
+      >
         ⏩{!props.compact && ' Snooze'}
       </button>
     </div>

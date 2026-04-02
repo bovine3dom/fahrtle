@@ -175,6 +175,8 @@ function App() {
     return p.waypoints.some((wp: any) => now >= wp.startTime && now < wp.arrivalTime && !wp.isWalk && !wp.isWait);
   });
 
+  const canSnooze = createMemo(() => canCancel() || !isOnTransport());
+
   createEffect(() => {
     if (!canCancel() && isOnTransport()) {
       const me = players()[myId()!];
@@ -346,6 +348,7 @@ function App() {
             pickerMode={pickerMode}
             togglePicker={togglePicker}
             canCancel={canCancel}
+            canSnooze={canSnooze}
             isOnTransport={isOnTransport}
             nextWaypoint={nextWaypoint}
             futureWaypoints={futureWaypoints}

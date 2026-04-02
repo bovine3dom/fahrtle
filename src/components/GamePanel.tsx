@@ -47,6 +47,7 @@ export function GamePanel(props: {
   pickerMode: () => 'start' | 'finish' | null;
   togglePicker: (mode: 'start' | 'finish') => void;
   canCancel: () => boolean;
+  canSnooze: () => boolean;
   isOnTransport: () => boolean;
   nextWaypoint: () => any;
   futureWaypoints: () => any[];
@@ -198,21 +199,23 @@ export function GamePanel(props: {
               </button>
             </Show>
           }>
-              <GetOffButton
-                dropdownOpen={props.getOffDropdownOpen}
-                setDropdownOpen={props.setGetOffDropdownOpen}
-                actionFeedback={props.actionFeedback}
-                setActionFeedback={props.setActionFeedback}
-                futureWaypoints={props.futureWaypoints}
-                nextWaypoint={props.nextWaypoint}
-                stopImmediately={stopImmediately}
-              />
-            </Show>
+            <GetOffButton
+              dropdownOpen={props.getOffDropdownOpen}
+              setDropdownOpen={props.setGetOffDropdownOpen}
+              actionFeedback={props.actionFeedback}
+              setActionFeedback={props.setActionFeedback}
+              futureWaypoints={props.futureWaypoints}
+              nextWaypoint={props.nextWaypoint}
+              stopImmediately={stopImmediately}
+            />
+          </Show>
 
-            {roomState() === 'RUNNING' && (() => {
+          <Show when={roomState() === 'RUNNING'}>
+            {(() => {
               const me = props.players()[props.myId()!];
-              return <SpeedControls mode={getSpeedMode(me?.desiredRate, me?.forceRealtime)} compact />;
+              return <SpeedControls mode={getSpeedMode(me?.desiredRate, me?.forceRealtime)} compact canSnooze={props.canSnooze} />;
             })()}
+          </Show>
         </div>
       </Show>
 
@@ -312,7 +315,7 @@ export function GamePanel(props: {
                   return (
                     <>
                       <div style={{ 'margin-top': '8px' }}>
-                        <SpeedControls mode={mode()} />
+                        <SpeedControls mode={mode()} canSnooze={props.canSnooze} />
                       </div>
                       <Show when={me().finishTime}>
                         <button
