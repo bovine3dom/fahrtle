@@ -13,7 +13,7 @@ import { memoize } from 'micro-memoize';
 import { augmentWithRailRoute } from './utils/railRoute';
 import { nextWaypoint } from './utils/memos';
 import { getServerTime } from './time-sync';
-import { DepartureRow } from './components/DepartureRow';
+import { DepartureRow, ActionButton } from './components/DepartureRow';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -31,34 +31,6 @@ const RoutePill = (props: { row: DepartureResult; class?: string }) => (
   >
     {props.row.route_short_name || '??'}
   </span>
-);
-
-const ActionButton = (props: {
-  icon: any;
-  title?: string;
-  onClick: (e: MouseEvent) => void;
-  disabled?: boolean;
-  dimmed?: boolean;
-  loading?: boolean;
-  spinnerStyle?: any;
-  buttonStyle?: any;
-  class?: string;
-}) => (
-  <button
-    class={`preview-btn ${props.class || ''}`}
-    classList={{ 'btn-dimmed': props.dimmed }}
-    onClick={(e) => {
-      e.stopPropagation();
-      props.onClick(e);
-    }}
-    title={props.title}
-    disabled={props.disabled}
-    style={props.buttonStyle}
-  >
-    <Show when={props.loading} fallback={props.icon}>
-      <span class="spinner-small" style={props.spinnerStyle}></span>
-    </Show>
-  </button>
 );
 
 function processTripResults(res: any[], row: DepartureResult) {

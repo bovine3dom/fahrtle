@@ -35,7 +35,7 @@ const DirectionIcon = (props: { bearing: number; class?: string }) => (
   </svg>
 );
 
-const ActionButton = (props: {
+export function ActionButton(props: {
   icon: any;
   title?: string;
   onClick: (e: MouseEvent) => void;
@@ -45,23 +45,25 @@ const ActionButton = (props: {
   spinnerStyle?: any;
   buttonStyle?: any;
   class?: string;
-}) => (
-  <button
-    class={`preview-btn ${props.class || ''}`}
-    classList={{ 'btn-dimmed': props.dimmed }}
-    onClick={(e) => {
-      e.stopPropagation();
-      props.onClick(e);
-    }}
-    title={props.title}
-    disabled={props.disabled}
-    style={props.buttonStyle}
-  >
-    <Show when={props.loading} fallback={props.icon}>
-      <span class="spinner-small" style={props.spinnerStyle}></span>
-    </Show>
-  </button>
-);
+}) {
+  return (
+    <button
+      class={`preview-btn ${props.class || ''}`}
+      classList={{ 'btn-dimmed': props.dimmed }}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick(e);
+      }}
+      title={props.title}
+      disabled={props.disabled}
+      style={props.buttonStyle}
+    >
+      <Show when={props.loading} fallback={props.icon}>
+        <span class="spinner-small" style={props.spinnerStyle}></span>
+      </Show>
+    </button>
+  );
+}
 
 export function DepartureRow(props: {
   row: DepartureResult;

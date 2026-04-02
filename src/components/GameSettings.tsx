@@ -3,6 +3,65 @@ import { createClosestCity } from '../utils/tiny-cities';
 import { colours } from '../colours';
 import type { Difficulty, GameBounds } from '../shared/gameLogic';
 
+function CoordPicker(props: {
+  label: string;
+  value: string;
+  setValue: (v: string) => void;
+  placeholder: string;
+  pickerMode: 'start' | 'finish' | null;
+  pickerTarget: 'start' | 'finish';
+  togglePicker: (mode: 'start' | 'finish') => void;
+}) {
+  return (
+    <div style={{ 'margin-bottom': '6px' }}>
+      <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>{props.label}</label>
+      <div style={{ display: 'flex', gap: '4px' }}>
+        <input
+          type="text"
+          value={props.value}
+          onInput={(e) => props.setValue(e.currentTarget.value)}
+          placeholder={props.placeholder}
+          style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
+        />
+        <button
+          onClick={() => props.togglePicker(props.pickerTarget)}
+          title="Pick on Map"
+          style={{
+            background: props.pickerMode === props.pickerTarget ? colours.primary : colours.border,
+            color: props.pickerMode === props.pickerTarget ? 'white' : colours.text,
+            border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
+          }}
+        >
+          🧭
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ToggleSwitch(props: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <div style={{ 'margin-bottom': '12px' }}>
+      <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={props.checked}
+          onChange={(e) => props.onChange(e.currentTarget.checked)}
+          style={{ cursor: 'pointer' }}
+        />
+        <label style={{ 'font-size': '0.8rem', 'color': colours.textMuted, 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => props.onChange(!props.checked)}>
+          {props.label}
+        </label>
+      </div>
+    </div>
+  );
+}
+
 export function GameSettings(props: {
   isDaily: boolean;
   bounds: GameBounds;
@@ -46,56 +105,25 @@ export function GameSettings(props: {
             />
           </div>
         </div>
-      </Show>
 
-      <Show when={!props.isDaily}>
-        <div style={{ 'margin-bottom': '6px' }}>
-          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Start (lat, lng, but, seriously, use the picker): </label>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <input
-              type="text"
-              value={props.startStr}
-              onInput={(e) => props.setStartStr(e.currentTarget.value)}
-              placeholder="e.g. 55.953, -3.188"
-              style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-            />
-            <button
-              onClick={() => props.togglePicker('start')}
-              title="Pick on Map"
-              style={{
-                background: props.pickerMode === 'start' ? colours.primary : colours.border,
-                color: props.pickerMode === 'start' ? 'white' : colours.text,
-                border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0,
-              }}
-            >
-              🧭
-            </button>
-          </div>
-        </div>
-
-        <div style={{ 'margin-bottom': '6px' }}>
-          <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Finish (lat, lng)</label>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <input
-              type="text"
-              value={props.finishStr}
-              onInput={(e) => props.setFinishStr(e.currentTarget.value)}
-              placeholder="e.g. 51.507, -0.127"
-              style={{ width: '100%', 'font-size': '0.8em', padding: '4px', 'box-sizing': 'border-box' }}
-            />
-            <button
-              onClick={() => props.togglePicker('finish')}
-              title="Pick on Map"
-              style={{
-                background: props.pickerMode === 'finish' ? colours.primary : colours.border,
-                color: props.pickerMode === 'finish' ? 'white' : colours.text,
-                border: 'none', 'border-radius': '4px', cursor: 'pointer', width: '28px', padding: 0
-              }}
-            >
-              🧭
-            </button>
-          </div>
-        </div>
+        <CoordPicker
+          label="Start (lat, lng, but, seriously, use the picker):"
+          value={props.startStr}
+          setValue={props.setStartStr}
+          placeholder="e.g. 55.953, -3.188"
+          pickerMode={props.pickerMode}
+          pickerTarget="start"
+          togglePicker={props.togglePicker}
+        />
+        <CoordPicker
+          label="Finish (lat, lng)"
+          value={props.finishStr}
+          setValue={props.setFinishStr}
+          placeholder="e.g. 51.507, -0.127"
+          pickerMode={props.pickerMode}
+          pickerTarget="finish"
+          togglePicker={props.togglePicker}
+        />
       </Show>
       <div style={{ 'margin-bottom': '12px' }}>
         <label style={{ 'display': 'block', 'font-size': '0.7em', 'color': 'colours.textMuted' }}>Difficulty: </label>
@@ -123,36 +151,18 @@ export function GameSettings(props: {
         </div>
       </div>
 
-      <div style={{ 'margin-bottom': '12px' }}>
-        <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={props.compDriver}
-            onChange={(e) => props.setCompDriver(e.currentTarget.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          <label style={{ 'font-size': '0.8rem', 'color': colours.textMuted, 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => props.setCompDriver(!props.compDriver)}>
-            Add robot opponent 🤖
-          </label>
-        </div>
-      </div>
+      <ToggleSwitch
+        checked={props.compDriver}
+        onChange={props.setCompDriver}
+        label="Add robot opponent 🤖"
+      />
 
       <Show when={props.isDaily}>
-        <div style={{ 'margin-bottom': '12px' }}>
-          <div style={{ display: 'flex', gap: '8px', 'align-items': 'center' }}>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={props.useGhosts}
-              onChange={(e) => props.setUseGhosts(e.currentTarget.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <label style={{ 'font-size': '0.8rem', 'color': colours.textMuted, 'font-weight': 'bold', cursor: 'pointer' }} onClick={() => props.setUseGhosts(!props.useGhosts)}>
-              Play against ghosts 👻
-            </label>
-          </div>
-        </div>
+        <ToggleSwitch
+          checked={props.useGhosts}
+          onChange={props.setUseGhosts}
+          label="Play against ghosts 👻"
+        />
       </Show>
 
       <button
