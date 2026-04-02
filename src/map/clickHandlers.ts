@@ -1,7 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { getTimeZone } from '../timezone';
-import { $stopTimeZone, $lastClickContext } from '../store';
+import { $stopTimeZone, $lastClickContext, $clock } from '../store';
 
 export function handleMapClickForDepartures(map: maplibregl.Map, lat: number, lng: number, shiftKey: boolean = false) {
   const h3Index = latLngToCell(lat, lng, 11);
@@ -35,7 +35,7 @@ export function handleMapClickForDepartures(map: maplibregl.Map, lat: number, ln
   const stopZone = getTimeZone(lat, lng);
   $stopTimeZone.set(stopZone);
 
-  const simTime = Date.now();
+  const simTime = $clock.get();
   const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
   const localDate = new Date(localDateStr);
   const hour = localDate.getHours();
