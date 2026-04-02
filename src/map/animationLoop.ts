@@ -201,32 +201,32 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
     if (frameCount % 60 === 0) {
       $playerSpeeds.set(currentSpeeds);
       $playerDistances.set(currentDists);
-
-      const finish = $gameBounds.get().finish;
-      if (finish) {
-        config.onFinishPointer(config.getPointer(finish[0], finish[1]));
-      } else {
-        config.onFinishPointer(null);
-      }
-
-      const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
-        const pointer = config.getPointer(pos[1], pos[0]);
-        return { pid, pointer };
-      });
-      const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
-      config.onUpdatePointers(validPointers);
-
-      const nowMs = Date.now();
-      const allPings = $pings.get();
-      const pingPointerData = Object.entries(allPings)
-        .filter(([_, ping]) => nowMs - ping.timestamp < PING_DURATION)
-        .map(([pid, ping]) => {
-          const pointer = config.getPointer(ping.lat, ping.lon);
-          return { pid, pointer };
-        })
-        .filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
-      config.onUpdatePingPointers(pingPointerData);
     }
+
+    const finish = $gameBounds.get().finish;
+    if (finish) {
+      config.onFinishPointer(config.getPointer(finish[0], finish[1]));
+    } else {
+      config.onFinishPointer(null);
+    }
+
+    const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
+      const pointer = config.getPointer(pos[1], pos[0]);
+      return { pid, pointer };
+    });
+    const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
+    config.onUpdatePointers(validPointers);
+
+    const nowMs = Date.now();
+    const allPings = $pings.get();
+    const pingPointerData = Object.entries(allPings)
+      .filter(([_, ping]) => nowMs - ping.timestamp < PING_DURATION)
+      .map(([pid, ping]) => {
+        const pointer = config.getPointer(ping.lat, ping.lon);
+        return { pid, pointer };
+      })
+      .filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
+    config.onUpdatePingPointers(pingPointerData);
 
     if (myTargetPos) {
       smoothedMyBearing = updateCamera(map, myTargetPos, myTargetSpeed, alpha, autoZoomEnabled, smoothedMyBearing);
