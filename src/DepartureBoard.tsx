@@ -2,17 +2,18 @@ import { useStore } from '@nanostores/solid';
 import { $departureBoardResults, submitWaypointsBatch, $clock, $stopTimeZone, $previewRoute, $boardMinimized, $isFollowing, $myPlayerId, $roomState, type DepartureResult, setViewingStop, $gameBounds, /*$mapZoom,*/ $boardMode, $playerSettings, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, stopImmediately } from './store';
 import { Show, For, createEffect, createSignal, createMemo, onMount, onCleanup } from 'solid-js';
 import { playerPositions } from './playerPositions';
-import { haversineDist, bearingToCardinal, type Coords } from './utils/geo';
+import { haversineDist, type Coords } from './utils/geo';
 import { createClosestCity } from './utils/tiny-cities';
 import { chQuery } from './clickhouse';
 import { formatInTimeZone, getTimeZoneColor, getTimeZone, getTimeZoneLanguage, getDepartureLabel, getArrivalLabel } from './timezone';
 import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
-import { formatRowTime, sensibleNumber } from './utils/format';
+import { formatRowTime } from './utils/format';
 import { memoize } from 'micro-memoize';
 import { augmentWithRailRoute } from './utils/railRoute';
 import { nextWaypoint } from './utils/memos';
 import { getServerTime } from './time-sync';
+import { DepartureRow } from './components/DepartureRow';
 
 const StatusDot = (props: { isImminent: boolean; class?: string; style?: any }) => (
   <Show when={props.isImminent}>
@@ -30,18 +31,6 @@ const RoutePill = (props: { row: DepartureResult; class?: string }) => (
   >
     {props.row.route_short_name || '??'}
   </span>
-);
-
-const DirectionIcon = (props: { bearing: number; class?: string }) => (
-  <svg
-    class={`dir-icon ${props.class || ''}`}
-    viewBox="0 0 24 24"
-    style={{
-      transform: `rotate(${props.bearing || 0}deg)`,
-    }}
-  >
-    <path d="M12 2L4.5 20.29C4.24 20.93 4.97 21.5 5.56 21.14L12 17.27L18.44 21.14C19.03 21.5 19.76 20.29 19.5 20.29L12 2Z" />
-  </svg>
 );
 
 const ActionButton = (props: {
@@ -703,28 +692,7 @@ export default function DepartureBoard() {
                 {(row) => {
                   const uniqueKey = `${row.source}-${row.trip_id}`;
                   const blockReason = createMemo(() => (blockingStatusMap().map.get(uniqueKey) || globalBlock()));
-                  const isTomorrow = createMemo(() => {
-                    const localSeconds = currentLocalSeconds();
-                    const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
-                    const depSeconds = getRowSeconds(timeVal || '');
-                    return depSeconds < localSeconds;
-                  });
-
-                  const isImminent = createMemo(() => {
-                    const timeVal = mode() === 'departures' ? row.departure_time : row.next_arrival;
-                    const depSeconds = getRowSeconds(timeVal || '');
-                    const localSeconds = currentLocalSeconds();
-                    const diff = depSeconds - localSeconds;
-                    return diff > 0 && diff <= 120;
-                  });
-
                   const [copied, setCopied] = createSignal(false);
-
-                  const mainDestText = createMemo(() => {
-                    // todo: think about arrivals
-                    return row.trip_headsign || (bearingToCardinal(row.bearing) + " via " + createClosestCity(() => ({ lat: row.next_lat, lon: row.next_lon }))());
-                  });
-                  const finalDestText = createMemo(() => ($boardMode.get() === 'departures' ? row.final_name : row.initial_name) + ", " + createClosestCity(() => ({ lat: $boardMode.get() === 'departures' ? row.final_lat : row.initial_lat, lon: $boardMode.get() === 'departures' ? row.final_lon : row.initial_lon }))());
 
                   const handleBoardClick = () => handleTripDoubleClick(row);
                   const handlePreview = () => handlePreviewClick(row, $boardMode.get() === 'departures' ? 'forwards' : 'backwards');
@@ -734,129 +702,20 @@ export default function DepartureBoard() {
                     setTimeout(() => setCopied(false), 2000);
                   };
 
-                  const isLoading = createMemo(() => loadingTripKey() === `${row.source}-${row.trip_id}-${row.departure_time}`);
-
                   return (
-                    <div
-                      class="table-row"
-                      style={{ cursor: 'pointer' }}
-                      onDblClick={handleBoardClick}
-                    >
-                      {/* Desktop Layout (visible on >768px) */}
-                      <div class="desktop-row-content">
-                        <div class="col-status">
-                          <StatusDot isImminent={isImminent()} />
-                        </div>
-                        <div class="col-time" style={{ "line-height": "1.1" }}>
-                          <div>{formatRowTime((mode() === 'departures' ? row.departure_time : row.next_arrival) || '')}</div>
-                          <Show when={isTomorrow()}>
-                            <div style={{ "font-size": "0.65em", "color": "#ffed02", "opacity": "0.8" }}>
-                              (tmrw.)
-                            </div>
-                          </Show>
-                        </div>
-                        <div class="col-route">
-                          <RoutePill row={row} />
-                        </div>
-                        <div class="col-dest">
-                          <div class="dest-main">{mainDestText()}</div>
-                          <div class="route-long">{row.route_long_name}</div>
-                          <Show when={$gameBounds.get().difficulty === 'Easy'}>
-                            <div style={{ "font-size": "0.5em", "margin-top": "2px", "color": "#ccc", "font-weight": "normal", "text-align": "right" }}>
-                              {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.dist ? `(${sensibleNumber(row.dist)} km)` : ''}
-                            </div>
-                          </Show>
-                        </div>
-
-                        <div class="col-dir">
-                          <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin} />
-                        </div>
-
-                        <div class="col-type">{getRouteEmoji(row.route_type)}</div>
-                        <div class="col-preview">
-                          <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
-                        </div>
-                        <Show when={mode() === 'departures'}>
-                          <div class="col-board">
-                            <ActionButton
-                              icon="🛂"
-                              title={blockReason() || "Board"}
-                              onClick={handleBoardClick}
-                              disabled={(loadingTripKey() !== null) || !!blockReason()}
-                              loading={isLoading()}
-                              dimmed={!!blockReason()}
-                            />
-                          </div>
-                        </Show>
-                        <Show when={($gameBounds.get().difficulty === 'Transport nerd') || $playerSettings.get().debug}>
-                          <div class="col-board">
-                            <ActionButton
-                              icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
-                              title={copied() ? "Copied!" : "Copy raw data to clipboard"}
-                              onClick={handleCopy}
-                            />
-                          </div>
-                        </Show>
-                      </div>
-
-                      {/* Mobile Layout (visible on <=768px) */}
-                      <div class="mobile-row-content">
-                        <div class="mobile-row-top">
-                          <div class="mobile-time">
-                            <div style={{ display: "flex", "align-items": "center" }}>
-                              {formatRowTime((mode() === 'departures' ? row.departure_time : row.next_arrival) || '')}
-                            </div>
-                            <StatusDot isImminent={isImminent()} style={{ "margin-left": "4px" }} />
-                            <Show when={isTomorrow()}>
-                              <div class="mobile-tomorrow">tomorrow</div>
-                            </Show>
-                          </div>
-                          <div class="mobile-route-info">
-                            <span class="mobile-emoji">{getRouteEmoji(row.route_type)}</span>
-                            <RoutePill row={row} />
-                          </div>
-                          <div class="mobile-dest-arrow">→</div>
-                          <div class="mobile-dest-name">
-                            {mainDestText()}
-                            <Show when={$gameBounds.get().difficulty === 'Easy'}>
-                              <div style={{ "font-size": "0.8em", "opacity": "0.8", "font-weight": "normal", "color": "#444" }}>
-                                {finalDestText()} ({formatRowTime((mode() === 'departures' ? row.final_arrival : row.departure_time) || '')}) {row.dist ? `(${sensibleNumber(row.dist)} km)` : ''}
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                        <div class="mobile-row-bottom">
-                          <div class="mobile-secondary-info">
-                            {row.route_long_name}
-                          </div>
-                          <div class="mobile-actions">
-                            <div class="col-dir">
-                              <DirectionIcon bearing={mode() === 'departures' ? row.bearing : row.bearing_origin} />
-                            </div>
-                            <ActionButton icon="🔍" title="Preview Trip Route" onClick={handlePreview} />
-                            <Show when={mode() === 'departures'}>
-                              <ActionButton
-                                icon="🛂"
-                                title={blockReason() || "Board"}
-                                onClick={handleBoardClick}
-                                disabled={(loadingTripKey() !== null) || !!blockReason()}
-                                loading={isLoading()}
-                                dimmed={!!blockReason()}
-                                spinnerStyle={{ "border-top-color": "#000" }}
-                              />
-                            </Show>
-                            <Show when={($gameBounds.get().difficulty === 'Transport nerd') || $playerSettings.get().debug}>
-                              <ActionButton
-                                icon={copied() ? 'Debug data copied to clipboard!' : '💻'}
-                                title={copied() ? "Copied!" : "Copy raw data to clipboard"}
-                                onClick={handleCopy}
-                                buttonStyle={{ "color": "#000" }}
-                              />
-                            </Show>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <DepartureRow
+                      row={row}
+                      mode={mode}
+                      currentLocalSeconds={currentLocalSeconds}
+                      getRowSeconds={getRowSeconds}
+                      blockReason={blockReason}
+                      globalBlock={globalBlock}
+                      loadingTripKey={loadingTripKey}
+                      onBoard={handleBoardClick}
+                      onPreview={handlePreview}
+                      onCopy={handleCopy}
+                      copied={copied}
+                    />
                   );
                 }}
               </For>

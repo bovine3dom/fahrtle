@@ -3,22 +3,21 @@ import { createStore, reconcile } from 'solid-js/store';
 import { useStore } from '@nanostores/solid';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { $players, submitWaypoint, $departureBoardResults, $clock, $stopTimeZone, $playerTimeZone, $myPlayerId, $previewRoute, $boardMinimized, $playerSpeeds, $playerDistances, $pickerMode, $pickedPoint, $gameBounds, $roomState, $gameStartTime, finishRace, $globalRate, $isFollowing, type DepartureResult, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, updatePlayerStats, submitGhostWaypoints, $currentDailyRaceIndex, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, $boardMode, $pings, sendPing } from './store';
-import { getServerTime } from './time-sync';
+import { $players, submitWaypoint, $departureBoardResults, $clock, $previewRoute, $boardMinimized, $pickerMode, $pickedPoint, $gameBounds, $roomState, $isFollowing, submitWaypointsBatch, $mapZoom, $lastClickContext, $playerSettings, $departureBoardPage, $departureBoardLoadingMore, $departureBoardHasMore, $boardMode, sendPing, $myPlayerId, $playerSpeeds } from './store';
 import { playerPositions } from './playerPositions';
 import { latLngToCell, cellToBoundary, gridDisk } from 'h3-js';
 import { chQuery } from './clickhouse';
-import { getTimeZone } from './timezone';
-import { getRouteEmoji } from './getRouteEmoji';
-import { interpolateSpectral, hsl } from 'd3';
-import { haversineDist, lerp, getBearing, type Coords } from './utils/geo';
 import { sensibleNumber } from './utils/format';
 import { throttle } from 'throttle-debounce';
 import { getBeforeId } from './utils/layer_order';
-import { map_update_lock } from './utils/map_lock';
-import { give_me_more_trains } from './utils/i_bloody_love_trains';
-import { getCountry, countryToFlag } from "./utils/tiny-countries";
+import { getBearing, haversineDist } from './utils/geo';
 import { NightLayer } from 'maplibre-gl-nightlayer';
+import { updateBasemap, updateRailwaysLayer, updateTransportLayer, updateBathymetryLayer, updateHillShadeLayer, updateTerrain } from './map/layers';
+import { updateStops } from './map/stops';
+import { getPointer } from './map/pointers';
+import { startAnimationLoop, type AnimationLoopConfig } from './map/animationLoop';
+import { handleMapClickForDepartures } from './map/clickHandlers';
+import type { DepartureResult } from './store';
 
 const PointerArrow = (props: { color: string; size?: number }) => (
   <svg
@@ -40,14 +39,11 @@ const PointerArrow = (props: { color: string; size?: number }) => (
 
 let mapInstance: maplibregl.Map;
 
-const NIGHT_LAYER = new NightLayer({opacity: 0.5});
+export function getMapInstance() {
+  return mapInstance;
+}
 
-const lerpBearing = (a: number, b: number, t: number) => {
-  let diff = b - a;
-  while (diff > 180) diff -= 360;
-  while (diff < -180) diff += 360;
-  return (a + diff * t + 360) % 360;
-};
+const NIGHT_LAYER = new NightLayer({opacity: 0.5});
 
 export function flyToPlayer(playerId: string) {
   const pos = playerPositions[playerId];
@@ -70,61 +66,14 @@ export function getPlayerScreenPosition(playerId: string): { x: number, y: numbe
   };
 }
 
-export function handleMapClickForDepartures(lat: number, lng: number, shiftKey: boolean = false) {
-  const h3Index = latLngToCell(lat, lng, 11);
-  const radius = shiftKey ? 0 : 2;
-  const neighborhood = gridDisk(h3Index, radius);
-
-  const features = neighborhood.map(index => {
-    const boundary = cellToBoundary(index);
-    const coords = boundary.map(p => [p[1], p[0]]);
-    coords.push(coords[0]);
-    return {
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: coords },
-      properties: {}
-    };
-  });
-
-  const source = mapInstance?.getSource('h3-cell') as maplibregl.GeoJSONSource;
-  if (source) {
-    source.setData({
-      type: 'FeatureCollection',
-      features: features as any
-    });
-
-    setTimeout(() => {
-      if (mapInstance) {
-        const s = mapInstance.getSource('h3-cell') as maplibregl.GeoJSONSource;
-        if (s) s.setData({ type: 'FeatureCollection', features: [] });
-      }
-    }, 1000);
-  }
-
-  const stopZone = getTimeZone(lat, lng);
-  $stopTimeZone.set(stopZone);
-
-  const simTime = $clock.get();
-  const localDateStr = new Date(simTime).toLocaleString('en-US', { timeZone: stopZone });
-  const localDate = new Date(localDateStr);
-  const hour = localDate.getHours();
-  const minute = localDate.getMinutes();
-
-  const h3Conditions = neighborhood.map(idx => `reinterpretAsUInt64(reverse(unhex('${idx}')))`).join(', ');
-  const targetMinutes = hour * 60 + minute;
-
-  $lastClickContext.set({ h3Conditions, targetMinutes, stopTimeZone: stopZone, clickTime: Date.now() });
-}
-
 export function fitGameBounds() {
   const bounds = $gameBounds.get();
   if (!mapInstance) return;
 
   if (bounds.start && bounds.finish) {
     const box = new maplibregl.LngLatBounds();
-    box.extend([bounds.start[1], bounds.start[0]]);   // [lng, lat]
-    box.extend([bounds.finish[1], bounds.finish[0]]); // [lng, lat]
-
+    box.extend([bounds.start[1], bounds.start[0]]);
+    box.extend([bounds.finish[1], bounds.finish[0]]);
     mapInstance.fitBounds(box, {
       padding: 200,
       maxZoom: 14,
@@ -154,418 +103,17 @@ export function fitGameBounds() {
   }
 }
 
-const getCrowKmColor = (crowKm: number): string => {
-  const normalized = Math.sqrt(Math.max(crowKm / 200, 0));
-  return interpolateSpectral(normalized);
-};
-
-let lastUpdatePos: Coords | null = null;
-let lastUpdateTime = 0;
-let isStopsLayerVisible = false;
-
-function updatePlayerMarkers(allPlayers: Record<string, any>, playerPositions: Record<string, [number, number]>, playerMarkers: Map<string, maplibregl.Marker>) {
-  for (const pid in allPlayers) {
-    const player = allPlayers[pid];
-    const pos = playerPositions[pid];
-    if (!pos) continue;
-
-    let marker = playerMarkers.get(pid);
-    if (!marker) {
-      const el = document.createElement('div');
-      el.className = 'player-marker';
-      el.style.width = '12px';
-      el.style.height = '12px';
-      el.style.borderRadius = '50%';
-      el.style.background = player.color;
-      el.style.border = '2px solid white';
-      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
-
-      marker = new maplibregl.Marker({ element: el })
-        .setLngLat(pos)
-        .addTo(mapInstance);
-      playerMarkers.set(pid, marker);
-    } else {
-      marker.setLngLat(pos);
-      marker.getElement().style.background = player.color;
-    }
-  }
-
-  playerMarkers.forEach((marker, pid) => {
-    if (!allPlayers[pid]) {
-      marker.remove();
-      playerMarkers.delete(pid);
-    }
-  });
-}
-
-async function updateBasemap(setting: string) {
-  const unlock = await map_update_lock.lock();
-  try {
-    await ensureMapLoaded(mapInstance);
-    const styleSpec = basemapSettingToStyle(setting);
-    const existingLayers = mapInstance.getStyle()?.layers;
-    const existingSources = mapInstance.getStyle()?.sources;
-    for (const layer of existingLayers) { if (layer.id.startsWith('basemap-')) mapInstance.removeLayer(layer.id); }
-    for (const sourceId in existingSources) { if (sourceId.startsWith('basemap-')) mapInstance.removeSource(sourceId); }
-
-    if (typeof styleSpec === 'string') {
-      try {
-        const response = await fetch(styleSpec);
-        const style = await response.json();
-        give_me_more_trains(style);
-        style.glyphs && mapInstance.setGlyphs(style.glyphs);
-        style.sprite && mapInstance.setSprite(style.sprite);
-        for (const [sourceId, source] of Object.entries(style.sources)) mapInstance.addSource(`basemap-${sourceId}`, source as any);
-        for (const layer of style.layers) {
-          mapInstance.addLayer({ ...layer, id: `basemap-${layer.id}`, source: layer.source ? `basemap-${layer.source}` : undefined }, getBeforeId(`basemap-${layer.id}`, mapInstance));
-        }
-      } catch (err) { console.error('[Map] Failed to fetch basemap style:', err); }
-    } else {
-      const sourceKey = Object.keys(styleSpec.sources)[0];
-      mapInstance.addSource(`basemap-${sourceKey}`, styleSpec.sources[sourceKey] as any);
-      mapInstance.addLayer({ ...styleSpec.layers[0], id: `basemap-${styleSpec.layers[0].id}`, source: `basemap-${sourceKey}` } as any, getBeforeId(`basemap-${styleSpec.layers[0].id}`, mapInstance));
-    }
-  } finally { unlock(); }
-}
-
-async function updateRailwaysLayer(setting: string) {
-  const unlock = await map_update_lock.lock();
-  try {
-    const pathMap: Record<string, string | null> = { 'Infrastructure': '/standard/', 'Speed': '/maxspeed/', 'Electrification': '/electrification/', 'Gauge': '/gauge/', 'Disabled': null };
-    const path = pathMap[setting];
-    const layerExists = !!mapInstance.getLayer('openrailwaymap-layer');
-    const sourceExists = !!mapInstance.getSource('openrailwaymap');
-
-    if (path === null) {
-      if (layerExists) mapInstance.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
-    } else {
-      await ensureMapLoaded(mapInstance);
-      if (layerExists) mapInstance.removeLayer('openrailwaymap-layer');
-      if (sourceExists) mapInstance.removeSource('openrailwaymap');
-      mapInstance.addSource('openrailwaymap', { type: 'raster', tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`], tileSize: 256, attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>' });
-      mapInstance.addLayer({ id: 'openrailwaymap-layer', type: 'raster', source: 'openrailwaymap', paint: { 'raster-opacity': 1 } }, getBeforeId("openrailwaymap-layer", mapInstance));
-    }
-  } finally { unlock(); }
-}
-
-async function updateTransportLayer(setting: string) {
-  const unlock = await map_update_lock.lock();
-  try {
-    const sourceId = 'public-transport';
-    if (!setting) {
-      mapInstance.getStyle().layers.filter(l => l.id.startsWith(`${sourceId}-`)).forEach(l => mapInstance.removeLayer(l.id));
-      if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
-      return;
-    }
-    const style = await fetch('./public_transport.json').then(r => r.json());
-    style.layers.forEach((l: any) => { if (mapInstance.getLayer(`${sourceId}-${l.id}`)) mapInstance.removeLayer(`${sourceId}-${l.id}`); });
-    if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
-    await ensureMapLoaded(mapInstance);
-    mapInstance.addSource(sourceId, style.sources.openmaptiles as any);
-    for (const layer of style.layers) mapInstance.addLayer({ ...layer, id: `${sourceId}-${layer.id}`, source: sourceId }, getBeforeId(`${sourceId}-${layer.id}`, mapInstance));
-  } finally { unlock(); }
-}
-
-async function updateBathymetryLayer(setting: string) {
-  const unlock = await map_update_lock.lock();
-  try {
-    if (mapInstance.getLayer('water-bathymetry')) mapInstance.removeLayer('water-bathymetry');
-    if (mapInstance.getSource('gebco')) mapInstance.removeSource('gebco');
-    if (!setting) return;
-
-    mapInstance.addSource('gebco', { type: 'vector', tiles: [`https://compute.olie.science/versatiles/tiles/bathymetry-vectors/{z}/{x}/{y}`], minzoom: 0, maxzoom: 10, attribution: '<a href="https://download.versatiles.org/" target="_blank">VersaTiles, GEBCO & OpenDEM</a>' });
-    const baseColorValue = (mapInstance.getStyle().layers.find(layer => layer.id === 'basemap-water')?.paint as any)?.['fill-color'] || "#b3dbe6";
-    const colorString: string = Array.isArray(baseColorValue) ? "#b3dbe6" : baseColorValue as any;
-    const isRaster = baseColorValue === '#b3dbe6';
-    const baseHsl = hsl(colorString);
-    const isDark = baseHsl.l < 0.5;
-    const stops = [-9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, -750, -500, -250, -200, -100, -50, -25, 0];
-    const extremeLightness = isDark ? 0.95 : 0.05;
-    const fillColorExpression: any[] = ["step", ["get", "mindepth"], isDark ? "#ffffff" : "#000000"];
-    stops.forEach((depth, index) => {
-      const t = index / (stops.length - 1);
-      let stepHsl = hsl(baseHsl.toString());
-      if (isDark) stepHsl.l = extremeLightness - (extremeLightness - baseHsl.l) * t;
-      else stepHsl.l = 0.95 - (0.95 - baseHsl.l) * t;
-      fillColorExpression.push(depth, stepHsl.formatHex());
-    });
-    mapInstance.addLayer({ id: 'water-bathymetry', type: 'fill', source: 'gebco', 'source-layer': 'bathymetry', paint: { "fill-color": fillColorExpression as any, "fill-opacity": isRaster ? 0.5 : 1 } }, getBeforeId("water-bathymetry", mapInstance));
-  } finally { unlock(); }
-}
-
-async function updateHillShadeLayer(setting: boolean) {
-  const unlock = await map_update_lock.lock();
-  try {
-    await ensureMapLoaded(mapInstance);
-    if (mapInstance.getLayer('mapterhorn-layer')) mapInstance.removeLayer('mapterhorn-layer');
-    if (mapInstance.getSource('mapterhorn')) mapInstance.removeSource('mapterhorn');
-    if (!setting) return;
-    mapInstance.addSource('mapterhorn', { type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json', maxzoom: 15 });
-    mapInstance.addLayer({ id: 'mapterhorn-layer', type: 'hillshade', source: 'mapterhorn', paint: { 'hillshade-shadow-color': '#000', 'hillshade-highlight-color': '#fff', 'hillshade-accent-color': '#fff', 'hillshade-exaggeration': 0.1, 'hillshade-method': 'igor' } }, getBeforeId("mapterhorn-layer", mapInstance));
-  } finally { unlock(); }
-}
-
-async function updateTerrain(setting: boolean) {
-  const unlock = await map_update_lock.lock();
-  try {
-    await ensureMapLoaded(mapInstance);
-    if (!mapInstance.getSource('mapterhorn-3d')) mapInstance.addSource('mapterhorn-3d', { type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json', maxzoom: 15 });
-    mapInstance.setTerrain(setting ? { source: 'mapterhorn-3d', exaggeration: 3 } : null);
-  } finally { unlock(); }
-}
-
-const updateStops = async (map: maplibregl.Map) => {
-  const zoom = map.getZoom();
-  if (zoom < 2) {
-    if (isStopsLayerVisible) {
-      const source = map.getSource('stops') as maplibregl.GeoJSONSource;
-      if (source) {
-        source.setData({ type: 'FeatureCollection', features: [] });
-      }
-      isStopsLayerVisible = false;
-    }
-    return;
-  }
-
-  isStopsLayerVisible = true;
-
-  const center = map.getCenter();
-  const now = Date.now();
-
-  if ($isFollowing.get() && lastUpdatePos) {
-    const dist = haversineDist({ lon: center.lng, lat: center.lat }, lastUpdatePos);
-    // don't update if we haven't moved at least 100m and it's been less than 5 seconds
-    if (dist !== null && dist < 0.1 && (now - lastUpdateTime) < 5000) {
-      return;
-    }
-  }
-
-  lastUpdatePos = { lon: center.lng, lat: center.lat };
-  lastUpdateTime = now;
-
-  const bounds = map.getBounds();
-  const query = `
-    SELECT
-      crow_km,
-      stop_lat,
-      stop_lon,
-      stop_name,
-      route_type
-    FROM transitous_everything_${$gameBounds.get().league}_stop_statistics_unmerged3
-    WHERE stop_lat BETWEEN ${bounds.getSouth()} AND ${bounds.getNorth()}
-      AND stop_lon BETWEEN ${bounds.getWest()} AND ${bounds.getEast()}
-    ORDER BY crow_km desc
-    LIMIT ${$playerSettings.get().maxStops}
-  `;
-  // ${zoom <= 13.5 ? ("AND (" + getClickHouseRouteTypeBetweens(["rail", "ferry"]) + ")") : ""}
-  // ${zoom <= 9 ? ("AND crow_km >= 150") : ""}
-  // ${zoom <= 9 ? ("LIMIT 100") : zoom <= 13.5 ? ("AND crow_km >= 100") : ""}
-  //${zoom >= 16 ? "_unmerged" : ""}
-
-  try {
-    const res = await chQuery(query);
-    if (res && res.data) {
-      function getHalo(hex: string) {
-        const colour = hsl(hex);
-        colour.l = colour.l > 0.5 ? 0.3 : 0.95;
-        colour.s *= 0.5;
-        return colour.toString();
-      }
-      const features = res.data.map((stop: any) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [stop.stop_lon, stop.stop_lat]
-        },
-        properties: {
-          emoji: [getRouteEmoji(stop.route_type), stop.stop_name].join(' '),
-          name: stop.stop_name,
-          route_type: stop.route_type,
-          crow_km: stop.crow_km,
-          color: getCrowKmColor(stop.crow_km || 0),
-          halo_color: getHalo(getCrowKmColor(stop.crow_km || 0))
-        }
-      }));
-
-      const source = map.getSource('stops') as maplibregl.GeoJSONSource;
-      if (source) {
-        source.setData({ type: 'FeatureCollection', features });
-      }
-    }
-  } catch (err) {
-  }
-};
-
-const getPointer = (targetLat: number, targetLng: number): { x: number, y: number, bearing: number, distance: number } | null => {
-  if (!mapInstance) return null;
-
-  const targetLngLat = new maplibregl.LngLat(targetLng, targetLat);
-  const bounds = mapInstance.getBounds();
-
-  if (bounds.contains(targetLngLat)) return null;
-
-  const canvas = mapInstance.getCanvas();
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  const paddingX = 120;
-  const paddingY = 40;
-
-  const centerMap = mapInstance.getCenter();
-  const centerScreen = mapInstance.project(centerMap);
-  const targetScreen = mapInstance.project(targetLngLat);
-
-  const rect = { minX: paddingX, minY: paddingY, maxX: w - paddingX, maxY: h - paddingY };
-  const dx = targetScreen.x - centerScreen.x;
-  const dy = targetScreen.y - centerScreen.y;
-
-  let t = Infinity;
-  if (dx > 0) t = Math.min(t, (rect.maxX - centerScreen.x) / dx);
-  else if (dx < 0) t = Math.min(t, (rect.minX - centerScreen.x) / dx);
-
-  if (dy > 0) t = Math.min(t, (rect.maxY - centerScreen.y) / dy);
-  else if (dy < 0) t = Math.min(t, (rect.minY - centerScreen.y) / dy);
-
-  const intersection = {
-    x: centerScreen.x + dx * t,
-    y: centerScreen.y + dy * t
-  };
-
-  const pointerLngLat = mapInstance.unproject([intersection.x, intersection.y]);
-  const bearing = getBearing(pointerLngLat.lat, pointerLngLat.lng, targetLat, targetLng);
-  const distance = haversineDist({ lat: centerMap.lat, lon: centerMap.lng }, { lat: targetLat, lon: targetLng }) || 0;
-
-  return { x: intersection.x, y: intersection.y, bearing, distance };
-};
-
-const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecification => {
-  switch (setting) {
-    // :(
-    case 'Transport dark':
-    case 'Transport':
-    case 'Positron':
-      return "https://tiles.openfreemap.org/styles/positron"
-    case 'Bright':
-      return "https://tiles.openfreemap.org/styles/bright"
-    case 'Toner-like':
-      return "./toner_ofm.json"
-    case 'OSM Carto':
-      return {
-        'version': 8,
-        'sources': {
-          'raster-tiles': {
-            'type': 'raster',
-            'tiles': [
-              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            ],
-            'tileSize': 128,
-            'attribution':
-              '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-          }
-        },
-        'layers': [
-          {
-            'id': 'simple-tiles',
-            'type': 'raster',
-            'source': 'raster-tiles',
-            'minzoom': 0,
-            'maxzoom': 22
-          }
-        ]
-      }
-    case 'Liberty (3D)':
-      return "https://tiles.openfreemap.org/styles/liberty"
-    // case 'Transport':
-    //   return {
-    //     'version': 8,
-    //     'sources': {
-    //       'raster-tiles': {
-    //         'type': 'raster',
-    //         'tiles': [
-    //           `https://tile.thunderforest.com/transport/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
-    //         ],
-    //         'tileSize': 256,
-    //         'attribution':
-    //           '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-    //       }
-    //     },
-    //     'layers': [
-    //       {
-    //         'id': 'simple-tiles',
-    //         'type': 'raster',
-    //         'source': 'raster-tiles',
-    //         'minzoom': 0,
-    //         'maxzoom': 22
-    //       }
-    //     ]
-    //   }
-    // case 'Transport dark':
-    //   return {
-    //     'version': 8,
-    //     'sources': {
-    //       'raster-tiles': {
-    //         'type': 'raster',
-    //         'tiles': [
-    //           `https://tile.thunderforest.com/transport-dark/{z}/{x}/{y}@2x.png?apikey=${import.meta.env.VITE_THUNDERFOREST_API_KEY}`,
-    //         ],
-    //         'tileSize': 256,
-    //         'attribution':
-    //           '<a href="https://www.thunderforest.com/" target="_blank">&copy; Thunderforest</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-    //       }
-    //     },
-    //     'layers': [
-    //       {
-    //         'id': 'simple-tiles',
-    //         'type': 'raster',
-    //         'source': 'raster-tiles',
-    //         'minzoom': 0,
-    //         'maxzoom': 22
-    //       }
-    //     ]
-    //   }
-    case 'Virtual Earth':
-      return {
-        'version': 8,
-        'sources': {
-          'raster-tiles': {
-            'type': 'raster',
-            'tiles': [
-              'https://tiles.virtualearth.net/tiles/a{quadkey}.jpg?g=45',
-            ],
-            'maxzoom': 17,
-            'tileSize': 128,
-            'attribution':
-              '<a href="https://en.wikipedia.org/wiki/Microsoft_Virtual_Earth" target="_blank">&copy; Microsoft Virtual Earth</a>'
-          }
-        },
-        'layers': [
-          {
-            'id': 'simple-tiles',
-            'type': 'raster',
-            'source': 'raster-tiles',
-            'minzoom': 0,
-          }
-        ]
-      }
-    default:
-      return "https://tiles.openfreemap.org/styles/positron"
-  }
-}
-
-
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
-  let frameId: number;
-  let smoothedMyBearing = 0;
+  let cancelAnimation: (() => void) | undefined;
   const [mapReady, setMapReady] = createSignal(false);
   const [clickPopupPos, setClickPopupPos] = createSignal<{ lat: number, lng: number } | null>(null);
   const isFollowing = useStore($isFollowing);
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
   const [pingPointers, setPingPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
-  const playerMarkers = new Map<string, maplibregl.Marker>();
 
   onMount(() => {
-
     if (!mapContainer) {
       console.error('[Map] Fatal: Map container ref is missing!');
       return;
@@ -600,8 +148,7 @@ export default function MapView() {
     });
 
     mapInstance.on('load', () => {
-      mapInstance.boxZoom.disable(); // give shift back
-      // mapInstance.setProjection({type: 'globe'}); // kinda trippy
+      mapInstance.boxZoom.disable();
       mapInstance.addSource('course-markers', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
@@ -817,7 +364,6 @@ export default function MapView() {
         submitWaypoint(e.lngLat.lat, e.lngLat.lng);
       });
 
-      // middle click to send ping, shift+middle to teleport (dev only)
       mapInstance.on('mousedown', (e) => {
         if (e.originalEvent.button === 1) {
           if (e.originalEvent.shiftKey && !import.meta.env.PROD) {
@@ -832,7 +378,9 @@ export default function MapView() {
 
       mapInstance.on('click', (e) => {
         !import.meta.env.PROD && console.log(`{ lat = "${e.lngLat.lat}", lon = "${e.lngLat.lng}" }`);
-        !import.meta.env.PROD && getCountry({lat: e.lngLat.lat, lon: e.lngLat.lng}).then((c) => console.log(countryToFlag(c || '')));
+        !import.meta.env.PROD && import('./utils/tiny-countries').then(({ getCountry, countryToFlag }) => {
+          getCountry({lat: e.lngLat.lat, lon: e.lngLat.lng}).then((c) => console.log(countryToFlag(c || '')));
+        });
 
         if (clickTimeout) clearTimeout(clickTimeout);
         const mode = $pickerMode.get();
@@ -847,18 +395,29 @@ export default function MapView() {
         }
 
         clickTimeout = setTimeout(() => {
-          handleMapClickForDepartures(e.lngLat.lat, e.lngLat.lng, e.originalEvent.shiftKey);
+          handleMapClickForDepartures(mapInstance, e.lngLat.lat, e.lngLat.lng, e.originalEvent.shiftKey);
           clickTimeout = null;
         }, 300);
       });
-
 
       if (mapInstance) {
         throttledUpdate();
       }
       setMapReady(true);
-      startAnimationLoop();
+      startAnimationLoopWithConfig();
     });
+
+    const startAnimationLoopWithConfig = () => {
+      const config: AnimationLoopConfig = {
+        map: mapInstance,
+        onSmoothedBearingChange: () => {},
+        onUpdatePointers: (pointers) => { setPlayerPointers(reconcile(pointers, { key: 'pid' })); },
+        onUpdatePingPointers: (pointers) => { setPingPointers(pointers); },
+        onFinishPointer: (pointer) => { setFinishPointer(pointer); },
+        getPointer: (lat, lng) => getPointer(mapInstance, lat, lng),
+      };
+      cancelAnimation = startAnimationLoop(mapInstance, config);
+    };
 
     const context = useStore($lastClickContext);
     const boardPage = useStore($departureBoardPage);
@@ -870,7 +429,7 @@ export default function MapView() {
           LIMIT 1 BY
             source,
             departure_time,
-            h3ToParent(next_h3, 9) -- eugh but this then excludes e.g. night trains which split...
+            h3ToParent(next_h3, 9)
       ` : '';
       const limByInner = $playerSettings.get().hidePotentialDuplicateDepartures ? `
            LIMIT 1 BY
@@ -890,7 +449,7 @@ export default function MapView() {
             ${limByInner}
             LIMIT 1000
           )
-          ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC -- hmm geoDistance should probably be rounded
+          ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC
           ${limBy}
         )
         ORDER BY sort_time ASC
@@ -902,17 +461,17 @@ export default function MapView() {
       if (!res || !res.data) return [];
       return res.data.map((row: DepartureResult) => {
         row.bearing = getBearing(row.stop_lat, row.stop_lon, row.next_lat, row.next_lon);
-        row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon); // for arrivals, the "next" stop is our stop
+        row.bearing_origin = getBearing(row.next_lat, row.next_lon, row.initial_lat, row.initial_lon);
         const dist = haversineDist({ lat: row.stop_lat, lon: row.stop_lon }, {
           lat: row[currentMode === 'departures' ? 'final_lat' : 'initial_lat'],
           lon: row[currentMode === 'departures' ? 'final_lon' : 'initial_lon'],
         });
-        const start = new Date(row.initial_arrival || ""); // todo: add initial_departure
+        const start = new Date(row.initial_arrival || "");
         const finish = new Date(row.final_arrival || "");
-        if (finish < start) finish.setDate(finish.getDate() + 1); // not going to work for trips across timezones but who cares for now
+        if (finish < start) finish.setDate(finish.getDate() + 1);
         row.dist = dist || 0;
         const duration = (finish.getTime() - start.getTime()) / (1000 * 60 * 60);
-        row.speed = duration > 0 ? (dist || 0) / duration : 0; // never actually zero here but ts whines
+        row.speed = duration > 0 ? (dist || 0) / duration : 0;
         return row;
       });
     };
@@ -920,7 +479,7 @@ export default function MapView() {
     createEffect(() => {
       const ctx = context();
       if (ctx === null) return;
-      ctx.clickTime; // force reactivity on repeated clicks in same position
+      ctx.clickTime;
 
       $departureBoardPage.set(0);
       $departureBoardHasMore.set(true);
@@ -991,40 +550,39 @@ export default function MapView() {
     const playerSettings = useStore($playerSettings);
     createEffect(() => {
       const setting = playerSettings().baseMap;
-      updateBasemap(setting);
-      updateBathymetryLayer(setting); // change colour if we need to
+      updateBasemap(mapInstance, setting);
+      updateBathymetryLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
-      updateRailwaysLayer(setting);
+      updateRailwaysLayer(mapInstance, setting);
     });
 
     createEffect(() => {
-      // backwards compat with old basemap (rip) setting
       const setting = playerSettings().publicTransportLayer || (["Transport dark", "Transport"].includes(playerSettings().baseMap));
-      updateTransportLayer(setting);
+      updateTransportLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().bathymetry;
-      updateBathymetryLayer(setting);
+      updateBathymetryLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().hillShade;
-      updateHillShadeLayer(setting);
+      updateHillShadeLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().terrain3d;
-      updateTerrain(setting);
+      updateTerrain(mapInstance, setting);
     });
 
     const simTime = useStore($clock);
     let i = 0;
     createEffect(async () => {
-      simTime(); // force reactivity
+      simTime();
       i++;
       await ensureMapLoaded(mapInstance);
       if (!mapInstance) return;
@@ -1164,7 +722,7 @@ export default function MapView() {
           properties: { color: player.color, sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0 : 1 }
         });
 
-        if (!(player.id == 'the-stig-🏎️') && playerSettings().showWaypoints) { // it adds his driving directions which is cute but also silly
+        if (!(player.id == 'the-stig-🏎️') && playerSettings().showWaypoints) {
           const pointFeatures = player.waypoints
             .filter(wp => wp.stopName && !wp.isWalk && !wp.isWait)
             .map(wp => ({
@@ -1174,7 +732,7 @@ export default function MapView() {
                 stop_name: wp.stopName,
                 arrival_time: wp.timeStr || "",
                 opacity: player.isGhost ? 0 : 1,
-                color: player.color // this seems awkward, why do we need to specify it per point
+                color: player.color
               }
             }));
           routeFeatures.push(...pointFeatures);
@@ -1192,7 +750,7 @@ export default function MapView() {
   const myId = useStore($myPlayerId);
   const isFinished = createMemo(() => players()[myId() || '']?.finishTime != null);
   createEffect(async () => {
-    const finished = isFinished(); // ... i really don't understand why this is necessary
+    const finished = isFinished();
     await ensureMapLoaded(mapInstance);
     if (finished) {
       mapInstance.setPaintProperty('routes-casing', 'line-opacity', 1);
@@ -1205,234 +763,14 @@ export default function MapView() {
     }
   });
 
-  const updateCamera = (myPos: [number, number], mySpeed: number, alpha: number, autoZoomEnabled: boolean) => {
-    if (!isFollowing() || !mapInstance || !myPos) return;
-    const firstPersonFollow = $playerSettings.get().firstPersonFollow;
-    const centre = mapInstance.getCenter();
-    const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.000001;
-
-    const REFERENCE_SPEED = 50;
-    const REFERENCE_ZOOM = firstPersonFollow ? 16 : 15;
-    const MIN_ZOOM = firstPersonFollow ? 13 : 5;
-    const MAX_ZOOM = firstPersonFollow ? 18 : 16;
-    const dilation = $globalRate.get() / 20;
-    const safeSpeed = Math.max(1, mySpeed * dilation || 0);
-
-    let nextZoom: number | undefined;
-    if (autoZoomEnabled) {
-      let targetZoom = REFERENCE_ZOOM - Math.log2(safeSpeed / REFERENCE_SPEED);
-      targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
-      const currentZoom = mapInstance.getZoom();
-      if (Math.abs(currentZoom - targetZoom) > 0.01) {
-        nextZoom = lerp(currentZoom, targetZoom, alpha);
-      }
-    }
-
-    if (!approxEq(myPos[0], centre.lng) || !approxEq(myPos[1], centre.lat) || nextZoom !== undefined) {
-      if (firstPersonFollow) {
-        mapInstance.jumpTo({ center: myPos, pitch: 75, bearing: smoothedMyBearing, zoom: nextZoom ?? mapInstance.getZoom() });
-      } else {
-        const jumpOptions: any = { center: myPos };
-        if (nextZoom !== undefined) jumpOptions.zoom = nextZoom;
-        mapInstance.jumpTo(jumpOptions);
-      }
-    }
-  };
-
-  const startAnimationLoop = () => {
-    let lastFrameTime = performance.now();
-    let frameCount = 0;
-    let autoZoomEnabled = $playerSettings.get().autoZoom;
-
-    const loop = (timestamp: number) => {
-      frameId = requestAnimationFrame(loop);
-      frameCount++;
-
-      const dt = timestamp - lastFrameTime;
-      lastFrameTime = timestamp;
-
-      if (!mapInstance || dt < 1) return;
-
-      const now = getServerTime();
-      const allPlayers = $players.get();
-      const currentSpeeds: Record<string, number> = {};
-      const currentBearings: Record<string, number> = {};
-      const currentDists: Record<string, number | null> = {};
-      const vehicleFeatures: any[] = [];
-
-      const isRunning = $roomState.get() === 'RUNNING';
-      const startTime = $gameStartTime.get();
-
-      const SMOOTHING_TIME_CONSTANT = 100;
-      const alpha = 1 - Math.exp(-dt / SMOOTHING_TIME_CONSTANT);
-      const myId = $myPlayerId.get();
-      let myTargetPos: [number, number] | null = null;
-      let myTargetSpeed = 0;
-      let myTargetBearing = 0;
-
-      for (const pid in allPlayers) {
-        const player = allPlayers[pid];
-        let targetPos: [number, number] | null = null;
-
-        if (player.segments.length === 0) {
-          if (player.waypoints.length > 0) {
-            const p = player.waypoints[0];
-            targetPos = [p.x, p.y];
-          }
-        } else {
-          const last = player.segments[player.segments.length - 1];
-          targetPos = last.end;
-
-          for (const seg of player.segments) {
-            if (now >= seg.startTime && now < seg.endTime) {
-              const t = (now - seg.startTime) / (seg.endTime - seg.startTime);
-              targetPos = [
-                lerp(seg.start[0], seg.end[0], t),
-                lerp(seg.start[1], seg.end[1], t)
-              ];
-
-              const dist = haversineDist({ lon: seg.start[0], lat: seg.start[1] }, { lon: seg.end[0], lat: seg.end[1] });
-              const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
-              const speed = durationHours > 0 ? (dist || 0) / durationHours : 0; // never actually zero here but ts whines
-              currentSpeeds[pid] = speed;
-              currentBearings[pid] = getBearing(seg.start[1], seg.start[0], seg.end[1], seg.end[0]);
-              break;
-            }
-          }
-
-          const b = $gameBounds.get().finish;
-          const distToFinish = haversineDist(targetPos ? { lon: targetPos[0], lat: targetPos[1] } : null, b?.length === 2 ? { lat: b[0], lon: b[1] } : null);
-          currentDists[pid] = distToFinish;
-        }
-
-        if (targetPos) {
-          const previousPos = playerPositions[pid] || targetPos;
-
-          const smoothedPos: [number, number] = [
-            lerp(previousPos[0], targetPos[0], alpha),
-            lerp(previousPos[1], targetPos[1], alpha)
-          ];
-
-          playerPositions[pid] = smoothedPos;
-
-          vehicleFeatures.push({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: smoothedPos },
-            properties: { id: player.id, color: player.color }
-          });
-
-          if (pid === myId) {
-            myTargetPos = targetPos;
-            myTargetSpeed = currentSpeeds[pid] || 0;
-            if (currentBearings[pid] !== undefined) {
-              myTargetBearing = currentBearings[pid];
-              smoothedMyBearing = lerpBearing(smoothedMyBearing, myTargetBearing, alpha);
-            }
-
-            if (frameCount % 60 === 0) {
-              autoZoomEnabled = $playerSettings.get().autoZoom;
-
-              const zone = getTimeZone(smoothedPos[1], smoothedPos[0]);
-              if ($playerTimeZone.get() !== zone) {
-                $playerTimeZone.set(zone);
-              }
-              // delete positions that are not in the game
-              for (const pid in playerPositions) {
-                if (!allPlayers[pid]) {
-                  delete playerPositions[pid];
-                }
-              }
-            }
-            if (isRunning && startTime && !player.finishTime && finishCells.length > 0) {
-              if (frameCount % 10 === 0) {
-                try {
-                  const myCell = latLngToCell(smoothedPos[1], smoothedPos[0], 11);
-                  if (finishCells.includes(myCell)) {
-                    const finishTimeMs = now - startTime;
-                    finishRace(finishTimeMs);
-                    updatePlayerStats((stats) => ({
-                      ...stats,
-                      racesFinished: stats.racesFinished + 1,
-                    }));
-                    const bounds = $gameBounds.get();
-                    const dailyIndex = $currentDailyRaceIndex.get();
-                    if (bounds.ghosts && dailyIndex !== null) {
-                      submitGhostWaypoints(dailyIndex, finishTimeMs);
-                    }
-                  }
-                } catch (e) { /* ignore H3 errors */ }
-              }
-            }
-          }
-        }
-      }
-
-      updatePlayerMarkers(allPlayers, playerPositions, playerMarkers);
-
-      const PING_DURATION = 10000;
-      if (frameCount % 10 === 0) {
-        $playerSpeeds.set(currentSpeeds);
-        $playerDistances.set(currentDists);
-
-        const finish = $gameBounds.get().finish;
-        if (finish) {
-          setFinishPointer(getPointer(finish[0], finish[1]));
-        } else {
-          setFinishPointer(null);
-        }
-
-        const t_playerPointers = Object.entries(playerPositions).map(([pid, pos]) => {
-          const pointer = getPointer(pos[1], pos[0]);
-          return { pid, pointer };
-        });
-        const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
-        setPlayerPointers(reconcile(validPointers, { key: 'pid' }));
-
-        const now = Date.now();
-        const allPings = $pings.get();
-        const pingFeatures = [];
-        for (const pid in allPings) {
-          const ping = allPings[pid];
-          if (now - ping.timestamp < PING_DURATION) {
-            pingFeatures.push({
-              type: 'Feature',
-              geometry: { type: 'Point', coordinates: [ping.lon, ping.lat] },
-              properties: {}
-            });
-          }
-        }
-        const pingSource = mapInstance.getSource('pings') as maplibregl.GeoJSONSource;
-        if (pingSource) {
-          pingSource.setData({ type: 'FeatureCollection', features: pingFeatures as any });
-        }
-        const pingPointerData = Object.entries(allPings)
-          .filter(([_, ping]) => now - ping.timestamp < PING_DURATION)
-          .map(([pid, ping]) => {
-            const pointer = getPointer(ping.lat, ping.lon);
-            return { pid, pointer };
-          })
-          .filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
-        setPingPointers(pingPointerData);
-      }
-
-      if (myTargetPos) updateCamera(myTargetPos, myTargetSpeed, alpha, autoZoomEnabled);
-    };
-    requestAnimationFrame(loop);
-  };
-
   onCleanup(() => {
-    cancelAnimationFrame(frameId);
-    playerMarkers.forEach(m => m.remove());
-    playerMarkers.clear();
+    cancelAnimation?.();
     mapInstance?.remove();
   });
 
   const toggleFollow = () => {
     const following = !isFollowing();
     $isFollowing.set(following);
-    if (following && mapInstance) {
-      smoothedMyBearing = mapInstance.getBearing();
-    }
     if (following) {
       const myId = $myPlayerId.get();
       const myPos = myId ? playerPositions[myId] : null;

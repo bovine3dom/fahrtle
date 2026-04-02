@@ -1,5 +1,6 @@
 import { submitWaypoint } from './store';
-import { handleMapClickForDepartures } from './Map';
+import { handleMapClickForDepartures } from './map/clickHandlers';
+import { getMapInstance } from './Map';
 
 interface MapClickPopupProps {
   lat: number;
@@ -15,7 +16,8 @@ export default function MapClickPopup(props: MapClickPopupProps) {
   };
 
   const handleDepartures = (precise: boolean = false) => {
-    handleMapClickForDepartures(props.lat, props.lng, precise);
+    const map = getMapInstance();
+    if (map) handleMapClickForDepartures(map, props.lat, props.lng, precise);
     props.onShowDepartures();
     props.onClose();
   };
