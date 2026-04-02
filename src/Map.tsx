@@ -103,6 +103,41 @@ export function fitGameBounds() {
   }
 }
 
+function updatePlayerMarkers(allPlayers: Record<string, any>, playerPositions: Record<string, [number, number]>, playerMarkers: Map<string, maplibregl.Marker>) {
+  for (const pid in allPlayers) {
+    const player = allPlayers[pid];
+    const pos = playerPositions[pid];
+    if (!pos) continue;
+
+    let marker = playerMarkers.get(pid);
+    if (!marker) {
+      const el = document.createElement('div');
+      el.className = 'player-marker';
+      el.style.width = '12px';
+      el.style.height = '12px';
+      el.style.borderRadius = '50%';
+      el.style.background = player.color;
+      el.style.border = '2px solid white';
+      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
+
+      marker = new maplibregl.Marker({ element: el })
+        .setLngLat(pos)
+        .addTo(mapInstance);
+      playerMarkers.set(pid, marker);
+    } else {
+      marker.setLngLat(pos);
+      marker.getElement().style.background = player.color;
+    }
+  }
+
+  playerMarkers.forEach((marker, pid) => {
+    if (!allPlayers[pid]) {
+      marker.remove();
+      playerMarkers.delete(pid);
+    }
+  });
+}
+
 export default function MapView() {
   let mapContainer: HTMLDivElement | undefined;
   let cancelAnimation: (() => void) | undefined;
@@ -112,6 +147,7 @@ export default function MapView() {
   const [finishPointer, setFinishPointer] = createSignal<{ x: number, y: number, bearing: number, distance: number } | null>(null);
   const [playerPointers, setPlayerPointers] = createStore<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
   const [pingPointers, setPingPointers] = createSignal<{ pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]>([]);
+  const playerMarkers = new Map<string, maplibregl.Marker>();
 
   onMount(() => {
     if (!mapContainer) {
@@ -414,6 +450,9 @@ export default function MapView() {
         onUpdatePointers: (pointers) => { setPlayerPointers(reconcile(pointers, { key: 'pid' })); },
         onUpdatePingPointers: (pointers) => { setPingPointers(pointers); },
         onFinishPointer: (pointer) => { setFinishPointer(pointer); },
+        onUpdatePlayerMarkers: () => {
+          updatePlayerMarkers($players.get(), playerPositions, playerMarkers);
+        },
         getPointer: (lat, lng) => getPointer(mapInstance, lat, lng),
       };
       cancelAnimation = startAnimationLoop(mapInstance, config);
@@ -765,6 +804,8 @@ export default function MapView() {
 
   onCleanup(() => {
     cancelAnimation?.();
+    playerMarkers.forEach(m => m.remove());
+    playerMarkers.clear();
     mapInstance?.remove();
   });
 

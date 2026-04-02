@@ -65,6 +65,7 @@ export interface AnimationLoopConfig {
   onUpdatePointers: (pointers: { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]) => void;
   onUpdatePingPointers: (pointers: { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[]) => void;
   onFinishPointer: (pointer: { x: number, y: number, bearing: number, distance: number } | null) => void;
+  onUpdatePlayerMarkers: () => void;
   getPointer: (lat: number, lng: number) => { x: number, y: number, bearing: number, distance: number } | null;
 }
 
@@ -231,6 +232,7 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
       smoothedMyBearing = updateCamera(map, myTargetPos, myTargetSpeed, alpha, autoZoomEnabled, smoothedMyBearing);
       config.onSmoothedBearingChange(smoothedMyBearing);
     }
+    config.onUpdatePlayerMarkers();
   };
 
   frameId = requestAnimationFrame(loop);
