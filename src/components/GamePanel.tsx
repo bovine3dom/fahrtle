@@ -51,8 +51,6 @@ export function GamePanel(props: {
   nextWaypoint: () => any;
   futureWaypoints: () => any[];
   sortedPlayerIds: () => string[];
-  speeds: () => Record<string, number>;
-  distances: () => Record<string, number | null>;
   bounds: () => any;
   rate: () => number;
   elapsedTime: () => string | null;
@@ -263,8 +261,6 @@ export function GamePanel(props: {
               sortedPlayerIds={props.sortedPlayerIds}
               players={props.players}
               myId={props.myId}
-              speeds={props.speeds}
-              distances={props.distances}
               roomState={roomState}
               time={props.time}
             />

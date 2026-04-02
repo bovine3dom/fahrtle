@@ -1,19 +1,20 @@
 import { Show, For, createMemo } from 'solid-js';
+import { useStore } from '@nanostores/solid';
+import { $playerSpeeds, $playerDistances, updateSetting } from '../store';
 import { formatDuration } from '../utils/time';
 import { sensibleNumber } from '../utils/format';
 import { calculateCO2Emissions } from '../utils/co2';
-import { updateSetting } from '../store';
 import { colours } from '../colours';
 
 export function PlayerList(props: {
   sortedPlayerIds: () => string[];
   players: () => Record<string, any>;
   myId: () => string | null;
-  speeds: () => Record<string, number>;
-  distances: () => Record<string, number | null>;
   roomState: () => 'JOINING' | 'COUNTDOWN' | 'RUNNING';
   time: () => number;
 }) {
+  const speeds = useStore($playerSpeeds);
+  const distances = useStore($playerDistances);
   const getMedal = (rankIndex: number) => {
     if (rankIndex === 0) return '🥇';
     if (rankIndex === 1) return '🥈';
@@ -36,9 +37,9 @@ export function PlayerList(props: {
             const p = () => props.players()[id];
             const isFinished = createMemo(() => p().finishTime != null);
             const nextWpIndex = createMemo(() => p().segments.findIndex((s: any) => s.startTime > props.time() && !s.isInterstop));
-            const nextWp = createMemo(() => p().waypoints[nextWpIndex() || 1]);
-            const mySpeed = createMemo(() => (props.speeds()[id] || 0).toFixed(0));
-            const myDist = createMemo(() => sensibleNumber(props.distances()[id] || 0));
+            const nextWp = createMemo(() => p().waypoints[nextWpIndex() !== -1 ? nextWpIndex() : 1]);
+            const mySpeed = createMemo(() => (speeds()[id] || 0).toFixed(0));
+            const myDist = createMemo(() => sensibleNumber(distances()[id] || 0));
 
             return (
               <div
