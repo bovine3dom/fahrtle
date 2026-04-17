@@ -3,7 +3,7 @@ import type { GameBounds } from '../shared/gameLogic';
 import { getDailyRaceIndex } from './daily';
 import { formatRowTime, sensibleNumber } from './format';
 import { haversineDist } from './geo';
-import { createClosestCity, cityDbPromise } from './tiny-cities';
+import { createClosestCity } from './tiny-cities';
 import { formatDuration } from './time';
 import { $currentDailyRaceIndex } from '../store';
 import { routeTypeEmissions } from '../getRouteEmoji';
@@ -144,7 +144,6 @@ const getTravelSummaryObj = (player: Player): SummaryEntry[] => {
 
 /* convert object to a human readable string for sharing on socials */
 export const getTravelSummary = async (player: Player, gameBounds: GameBounds, stealth = false, targetTime?: number) => {
-    await cityDbPromise;
     const summaryEntries = getTravelSummaryObj(player);
     let travel = stealth ? summaryEntries.map((wp) => { return `${wp.emoji}`; }).join('') : summaryEntries.map((wp) => {
         if (wp.type === 'walk') {

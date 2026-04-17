@@ -16,13 +16,10 @@
     "@nanostores/solid": "^1.1.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/d3": "^7.4.3",
-    "@types/geokdbush": "^1.1.5",
     "apache-arrow": "^21.1.0",
     "canvas-confetti": "^1.9.4",
     "d3": "^7.9.0",
-    "geokdbush": "^2.0.1",
     "h3-js": "^4.4.0",
-    "kdbush": "^4.0.2",
     "maplibre-gl": "^5.15.0",
     "maplibre-gl-nightlayer": "^1.0.0-alpha.14",
     "micro-memoize": "^5.1.1",
@@ -30,6 +27,7 @@
     "simplify-js": "^1.2.4",
     "solid-js": "^1.9.10",
     "throttle-debounce": "^5.0.2",
+    "tiny-geocoder": "^0.0.1",
     "tz-lookup": "^6.1.25"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ import { createResource, createSignal, For, Show, createEffect } from 'solid-js'
 import { colours } from './colours';
 import { formatDuration } from './utils/time';
 import { getRaceByIndex } from './utils/daily';
-import { cityDbPromise, getClosestCityObject } from './utils/tiny-cities';
+import { getClosestCityObject } from './utils/tiny-cities';
 import { sensibleNumber } from './utils/format';
 
 const s: Record<string, any> = {
@@ -66,8 +66,6 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
   createEffect(async () => {
     const indices = raceIndices();
     if (indices.length === 0) return;
-    
-    await cityDbPromise;
     
     const labels: Record<number, string> = {};
     for (const idx of indices) {

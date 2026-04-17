@@ -3,8 +3,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useStore } from '@nanostores/solid';
 import { connectAndJoin, type Difficulty, $isSinglePlayer, $isDaily, $playerSettings, updateSetting } from './store';
 import { getDailyRace, getRaceByIndex, getRaces, getDailyRaceIndex } from './utils/daily';
-import { createClosestCity, cityDbPromise } from './utils/tiny-cities';
-import { around } from 'geokdbush';
+import { createClosestCity, getClosestCityObject } from './utils/tiny-cities';
 import { sharedFakeServer } from './fakeServer';
 import { CURRENT_LEAGUE } from './shared/gameLogic';
 import { generatePilotName } from './names';
@@ -497,11 +496,10 @@ export default function Lobby() {
 
 function logAllDailyRaces() {
   getRaces().then(async (races) => {
-    const { cities, tree } = await cityDbPromise;
     races.forEach((race, i) => {
-      const sIdx = around(tree, race.start_lon, race.start_lat, 1)[0] as number;
-      const fIdx = around(tree, race.finish_lon, race.finish_lat, 1)[0] as number;
-      console.log(`Race ${i}: ${cities[sIdx].name}, ${cities[sIdx].country_code} ➡️ ${cities[fIdx].name}, ${cities[fIdx].country_code}`);
+      const startCity = getClosestCityObject(race.start[0], race.start[1]);
+      const finishCity = getClosestCityObject(race.finish[0], race.finish[1]);
+      console.log(`Race ${i}: ${startCity} ➡️ ${finishCity}`);
     });
   });
 }
