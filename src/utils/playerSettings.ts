@@ -14,7 +14,7 @@ export const defaultPlayerSettings: Record<string, PlayerSetting> = {
   publicTransportLayer: { type: 'boolean', value: true, description: 'Draw OSM public transport routes' },
   name: { type: 'text', value: undefined, description: 'Callsign', hidden: true }, // hide for now until we can change while in progress
   color: { type: 'color', value: undefined, description: 'Player colour' },
-  walkConfirm: { type: 'boolean', value: false, description: 'Require confirmation before walking' },
+  walkConfirm: { type: 'boolean', value: true, description: 'Show menu on click instead of departures' },
   hidePotentialDuplicateDepartures: { type: 'boolean', value: true, description: 'Hide duplicate departures (may hide some sleepers)' },
   maxStops: { type: 'number', value: 50, description: 'Maximum stops to show', min: 0, max: 1000 },
   showWaypoints: { type: 'boolean', value: true, description: 'Always show waypoints on map' },

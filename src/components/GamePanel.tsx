@@ -194,7 +194,7 @@ export function GamePanel(props: {
                   'text-overflow': 'ellipsis',
                   'flex': 1
                 }}>
-                  Double click map to walk
+                  Click map to see departures or walk
                 </span>
               </button>
             </Show>
