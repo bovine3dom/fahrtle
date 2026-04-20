@@ -278,7 +278,7 @@ export function GamePanel(props: {
                   'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px',
                   'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'gap': '6px'
                 }}>
-                  <span>🚶</span> Double click map to walk
+                  <span>🚶</span> Click map for menu
                 </button>
               </Show>
             }>
@@ -358,7 +358,7 @@ export function GamePanel(props: {
             </button>
 
             <div class="interaction-hint" style={{ 'font-size': '0.75em', 'color': colours.textLight, 'margin-top': '6px', 'text-align': 'center' }}>
-              {roomState() === 'RUNNING' ? 'Click map for departures, double click to board or walk' : 'Waiting for game to start...'}
+              {roomState() === 'RUNNING' ? 'Click map for menu' : 'Waiting for game to start...'}
             </div>
           </div>
         </div>
