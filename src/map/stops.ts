@@ -5,7 +5,7 @@ import { chQuery } from '../clickhouse';
 import { getRouteEmoji } from '../getRouteEmoji';
 import { $gameBounds, $playerSettings, $isFollowing } from '../store';
 import { getCrowKmColor } from './layers';
-import { hsl } from 'd3';
+import { getHalo } from '../utils/colour';
 
 let lastUpdatePos: Coords | null = null;
 let lastUpdateTime = 0;
@@ -57,12 +57,6 @@ export const updateStops = async (map: maplibregl.Map) => {
   try {
     const res = await chQuery(query);
     if (res && res.data) {
-      function getHalo(hex: string) {
-        const colour = hsl(hex);
-        colour.l = colour.l > 0.5 ? 0.3 : 0.95;
-        colour.s *= 0.5;
-        return colour.toString();
-      }
       const features = res.data.map((stop: any) => ({
         type: 'Feature',
         geometry: {

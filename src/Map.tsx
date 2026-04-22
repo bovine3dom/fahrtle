@@ -18,6 +18,7 @@ import { getPointer } from './map/pointers';
 import { startAnimationLoop, type AnimationLoopConfig } from './map/animationLoop';
 import { handleMapClickForDepartures } from './map/clickHandlers';
 import type { DepartureResult } from './store';
+import { getHalo } from './utils/colour';
 
 const PointerArrow = (props: { color: string; size?: number }) => (
   <svg
@@ -243,7 +244,7 @@ export default function MapView() {
       mapInstance.addLayer({
         id: 'routes-casing', type: 'line', source: 'routes',
         paint: {
-          'line-color': '#ffffff',
+          'line-color': ['get', 'halo_color'],
           'line-width': 7,
           'line-opacity': ['get', 'opacity'],
         },
@@ -323,7 +324,7 @@ export default function MapView() {
         },
         paint: {
           'text-color': ['get', 'color'],
-          'text-halo-color': '#ffffff',
+          'text-halo-color': ['get', 'halo_color'],
           'text-halo-width': 2,
         }
       }, getBeforeId("routes-labels", mapInstance));
@@ -758,7 +759,7 @@ export default function MapView() {
         routeFeatures.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: player.color, sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0 : 1 }
+          properties: { color: player.color, halo_color: getHalo(player.color), sort_key: Number(!player.isGhost), opacity: player.isGhost ? 0 : 1 }
         });
 
         if (!(player.id == 'the-stig-🏎️') && playerSettings().showWaypoints) {
@@ -771,6 +772,7 @@ export default function MapView() {
                 stop_name: wp.stopName,
                 arrival_time: wp.timeStr || "",
                 opacity: player.isGhost ? 0 : 1,
+                halo_color: getHalo(player.color),
                 color: player.color
               }
             }));
