@@ -535,6 +535,8 @@ class MultiplayerFuzzer {
 
   private sendHostileMessage() {
     const client = this.rng.pick(this.connectedClients());
+    const room = client.wsData.roomId ? this.rooms.get(client.wsData.roomId) : null;
+    const realPlayerId = room ? Object.values(room.players).find((player) => !player.isGhost)?.id : client.playerId;
     const malformed = [
       null,
       {},
@@ -545,6 +547,7 @@ class MultiplayerFuzzer {
       { type: 'PLAYER_FINISHED', finishTime: Number.NaN },
       { type: 'RACE_AGAIN', waypoints: [] },
       { type: 'ADD_GHOSTS', ghosts: [{ playerName: 'bad', waypoints: [] }] },
+      { type: 'PLAYER_KICK', playerId: realPlayerId },
       { type: 'SEND_PING', lat: Number.POSITIVE_INFINITY, lon: Number.NEGATIVE_INFINITY },
     ];
     this.send(client, this.rng.pick(malformed), 'HOSTILE_MESSAGE');
@@ -618,6 +621,12 @@ class MultiplayerFuzzer {
 
   private assertInvariants() {
     const seenTimerIds = new Set<number>();
+    for (const client of this.clients) {
+      if (!client.connected || !client.wsData.roomId || !client.wsData.playerId) continue;
+      const room = this.rooms.get(client.wsData.roomId);
+      assert(room && Object.prototype.hasOwnProperty.call(room.players, client.wsData.playerId), `${client.id} is connected but missing player ${client.wsData.playerId}`);
+    }
+
     for (const [roomId, room] of this.rooms) {
       assert(room.id === roomId, `room key/id mismatch: ${roomId} !== ${room.id}`);
       assert(room.state === 'JOINING' || room.state === 'COUNTDOWN' || room.state === 'RUNNING', `invalid room state: ${room.state}`);
