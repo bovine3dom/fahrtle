@@ -334,6 +334,31 @@ function isFiniteCoord(value: unknown): value is [number, number] {
         && value[1] >= -180 && value[1] <= 180;
 }
 
+function isDifficulty(value: unknown): value is Difficulty {
+    return value === 'Easy' || value === 'Normal' || value === 'Transport nerd';
+}
+
+function isLeague(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{8}$/.test(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
+}
+
+function validOptionalWaypointFields(wp: Record<string, any>) {
+    return (wp.stopName === undefined || typeof wp.stopName === 'string')
+        && (wp.isWalk === undefined || typeof wp.isWalk === 'boolean')
+        && (wp.isWait === undefined || typeof wp.isWait === 'boolean')
+        && (wp.isInterstop === undefined || typeof wp.isInterstop === 'boolean')
+        && (wp.route_color === undefined || typeof wp.route_color === 'string')
+        && (wp.route_short_name === undefined || typeof wp.route_short_name === 'string')
+        && (wp.display_name === undefined || typeof wp.display_name === 'string')
+        && (wp.emoji === undefined || typeof wp.emoji === 'string')
+        && (wp.route_departure_time === undefined || typeof wp.route_departure_time === 'string')
+        && (wp.timeStr === undefined || typeof wp.timeStr === 'string');
+}
+
 function isValidWaypointList(value: unknown): value is Waypoint[] {
     if (!Array.isArray(value) || value.length === 0) return false;
     let previousArrival = -Infinity;
@@ -345,7 +370,8 @@ function isValidWaypointList(value: unknown): value is Waypoint[] {
             || !Number.isFinite(wp.arrivalTime)
             || !Number.isFinite(wp.speedFactor) || wp.speedFactor < 0
             || wp.startTime < previousArrival
-            || wp.arrivalTime < wp.startTime) return false;
+            || wp.arrivalTime < wp.startTime
+            || !validOptionalWaypointFields(wp)) return false;
         previousArrival = wp.arrivalTime;
     }
     return true;
@@ -367,11 +393,11 @@ function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint
 
     return {
         x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
-        speedFactor: wp.speedFactor, stopName: typeof wp.stopName === 'string' ? wp.stopName : undefined,
-        isWalk: wp.isWalk || false, isWait: wp.isWait || false, isInterstop: wp.isInterstop || false,
-        route_color: wp.route_color, route_short_name: wp.route_short_name,
-        display_name: wp.display_name, emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
-        route_departure_time: wp.route_departure_time, timeStr: wp.timeStr
+        speedFactor: wp.speedFactor, stopName: optionalString(wp.stopName),
+        isWalk: wp.isWalk === true, isWait: wp.isWait === true, isInterstop: wp.isInterstop === true,
+        route_color: optionalString(wp.route_color), route_short_name: optionalString(wp.route_short_name),
+        display_name: optionalString(wp.display_name), emoji: wp.isWalk === true ? '🐾' : (wp.isWait === true ? '⏳' : optionalString(wp.emoji)),
+        route_departure_time: optionalString(wp.route_departure_time), timeStr: optionalString(wp.timeStr)
     };
 }
 
@@ -428,7 +454,7 @@ function handleJoinRoom(
             id: playerId,
             color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
-            waypoints: [{ x: spawn.x, y: spawn.y, startTime: 0, arrivalTime: 0, speedFactor: 1 }],
+            waypoints: [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }],
             desiredRate: 1, forceRealtime: false, finishTime: null,
             disconnectedAt: null, viewingStopName: null, isGhost: false
         };
@@ -507,7 +533,8 @@ function handleSetGameBounds(
     if (!isFiniteCoord(message.startPos)) return;
     if (message.finishPos !== null && !isFiniteCoord(message.finishPos)) return;
     if (message.startTime !== undefined && !Number.isFinite(message.startTime)) return;
-    if (typeof message.league !== 'string' || message.league.length === 0) return;
+    if (!isDifficulty(message.difficulty)) return;
+    if (!isLeague(message.league)) return;
 
     const prevStart = room.startPos;
     room.startPos = message.startPos;
@@ -621,6 +648,7 @@ export function handleIncomingMessage(
     if (message.type === 'TOGGLE_READY') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (r.room.state === 'RUNNING') return;
         r.player.isReady = !r.player.isReady;
         hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: r.player.isReady });
         checkCountdownLogic(r.room, hooks);
@@ -646,7 +674,7 @@ export function handleIncomingMessage(
             const { playerName, waypoints, color } = ghostData;
             const ghostId = `👻-${playerName}`;
             const ghost: Player = {
-                id: ghostId, color: color || `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
+                id: ghostId, color: typeof color === 'string' ? color : `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
                 isReady: true, waypoints, desiredRate: 1e9, forceRealtime: false,
                 finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
             };
@@ -697,6 +725,7 @@ export function handleIncomingMessage(
     if (message.type === 'SET_VIEWING_STOP') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (message.stopName !== null && typeof message.stopName !== 'string') return;
         r.player.viewingStopName = message.stopName;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: wsData.playerId, viewingStopName: r.player.viewingStopName });
         return;
@@ -750,6 +779,7 @@ export function handleIncomingMessage(
         if (!r || r.player.finishTime !== null || !Number.isFinite(message.finishTime) || message.finishTime < 0) return;
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
+        triggerUpdate(wsData.roomId!);
         return;
     }
 
@@ -798,6 +828,7 @@ function calculatePlaybackRate(room: Room, hooks: GameHooks) {
     const activeFactors: number[] = [];
     for (const pid in room.players) {
         const p = room.players[pid];
+        if (p.isGhost || p.finishTime !== null) continue;
         let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
         for (const wp of p.waypoints) {
             if (room.virtualTime >= wp.startTime && room.virtualTime < wp.arrivalTime) {
@@ -862,6 +893,12 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
         room.state = 'RUNNING';
         room.gameStartTime = room.virtualTime;
         room.countdownEnd = null;
+        for (const player of Object.values(room.players)) {
+            if (!player.isGhost && player.waypoints.length === 1) {
+                player.waypoints[0].startTime = room.virtualTime;
+                player.waypoints[0].arrivalTime = room.virtualTime;
+            }
+        }
         hooks.broadcastRoomState(room);
 
         if (room.computerDriver && !room.players['the-stig-🏎️']) {
