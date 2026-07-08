@@ -595,11 +595,14 @@ class MultiplayerFuzzer {
     const stationY = this.safeY(last.y + this.deltaCoord());
     const waypoints: Array<Omit<Waypoint, 'startTime'>> = [
       { x: stationX, y: stationY, arrivalTime: start + 90_000, speedFactor: 1, stopName: 'walk to rail', isWalk: true, emoji: '🐾' },
+      { x: stationX, y: stationY, arrivalTime: start + 100_000, speedFactor: 1, stopName: 'wait for rail', isWait: true, emoji: '⏳' },
       { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 5_000, speedFactor: 20, stopName: 'early rail interstop', isInterstop: true, route_short_name: 'R' },
       { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 20_000, speedFactor: 20, stopName: 'early rail stop', route_short_name: 'R', route_departure_time: '12:00' },
     ];
     this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_RAIL_EARLY_BATCH');
     assert(player.waypoints.length === beforeCount + waypoints.length, `rail-style early batch was rejected for ${client.id}`);
+    const active = player.waypoints.slice(beforeCount).find((waypoint) => start >= waypoint.startTime && start < waypoint.arrivalTime);
+    assert(active && active.speedFactor > 1, `rail-style early batch left ${client.id} pinned on ${active?.speedFactor ?? 'no'} active segment`);
   }
 
   private advanceToNextWaypointEvent() {

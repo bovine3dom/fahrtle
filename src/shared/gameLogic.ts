@@ -798,9 +798,18 @@ export function handleIncomingMessage(
         if (!Array.isArray(waypoints) || waypoints.length === 0) { triggerUpdate(wsData.roomId!); return; }
         const nextWaypoints: Waypoint[] = [];
         let lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-        for (const wp of waypoints) {
+        for (let i = 0; i < waypoints.length; i++) {
+            const wp = waypoints[i];
             const next = buildWaypoint(wp, lastPoint, r.room.virtualTime);
             if (!next) { triggerUpdate(wsData.roomId!); return; }
+            if (next.isWalk || next.isWait) {
+                for (let j = i + 1; j < waypoints.length; j++) {
+                    const upcoming = waypoints[j];
+                    if (upcoming?.isWalk === true || upcoming?.isWait === true) continue;
+                    if (Number.isFinite(upcoming?.arrivalTime) && upcoming.arrivalTime < next.arrivalTime) next.arrivalTime = next.startTime;
+                    break;
+                }
+            }
             nextWaypoints.push(next);
             lastPoint = next;
         }
