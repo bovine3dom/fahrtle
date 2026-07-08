@@ -753,12 +753,12 @@ export function handleIncomingMessage(
         if (!r) return;
         stepClock(r.room);
         const { waypoints } = message;
-        if (!Array.isArray(waypoints) || waypoints.length === 0) return;
+        if (!Array.isArray(waypoints) || waypoints.length === 0) { triggerUpdate(wsData.roomId!); return; }
         const nextWaypoints: Waypoint[] = [];
         let lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
         for (const wp of waypoints) {
             const next = buildWaypoint(wp, lastPoint, r.room.virtualTime);
-            if (!next) return;
+            if (!next) { triggerUpdate(wsData.roomId!); return; }
             nextWaypoints.push(next);
             lastPoint = next;
         }
@@ -776,7 +776,7 @@ export function handleIncomingMessage(
         const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
         const newWaypoint = buildWaypoint({ x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop }, lastPoint, r.room.virtualTime);
-        if (!newWaypoint) return;
+        if (!newWaypoint) { triggerUpdate(wsData.roomId!); return; }
         r.player.viewingStopName = null;
         r.player.waypoints.push(newWaypoint);
         hooks.publish(wsData.roomId!, { type: 'WAYPOINT_ADDED', playerId: wsData.playerId, waypoint: newWaypoint });
