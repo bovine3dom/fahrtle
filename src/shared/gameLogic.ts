@@ -388,6 +388,7 @@ function handleJoinRoom(
 
     hooks.subscribeToRoom(roomId);
     stepClock(room);
+    checkCountdownLogic(room, hooks);
 
     hooks.sendToSender({
         type: 'ROOM_STATE', state: room.state, countdownEnd: room.countdownEnd,
