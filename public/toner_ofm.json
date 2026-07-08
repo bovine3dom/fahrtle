@@ -79,8 +79,18 @@
         "fill-color": "#000000",
         "fill-opacity": {
           "stops": [[13, 0], [15, 0.1], [16, 0.3]]
-        },
-        "fill-outline-color": "rgba(0,0,0,0.3)"
+        }
+      }
+    },
+    {
+      "id": "building-outline",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "building",
+      "minzoom": 13,
+      "paint": {
+        "line-color": "#555",
+        "line-width": 1
       }
     },
     {
@@ -172,18 +182,6 @@
       }
     },
     {
-      "id": "boundary_state",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "boundary",
-      "filter": ["==", "admin_level", 4],
-      "paint": {
-        "line-color": "#000",
-        "line-width": 1,
-        "line-dasharray": [2, 2]
-      }
-    },
-    {
       "id": "boundary_country",
       "type": "line",
       "source": "openmaptiles",
@@ -191,7 +189,8 @@
       "filter": ["==", "admin_level", 2],
       "paint": {
         "line-color": "#000",
-        "line-width": 2
+        "line-opacity": 0.25,
+        "line-width": 1
       }
     },
     {
@@ -202,7 +201,7 @@
       "filter": ["==", "$type", "LineString"],
       "layout": {
         "text-field": "{name}",
-        "text-font": ["Metropolis Regular Italic"],
+        "text-font": ["Noto Sans Italic"],
         "symbol-placement": "line",
         "text-size": 12
       },
@@ -213,18 +212,73 @@
       }
     },
     {
+      "id": "place_city_circle",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "filter": ["==", "class", "city"],
+      "paint": {
+        "circle-color": "#000000",
+        "circle-radius": 3,
+        "circle-stroke-width": 1,
+        "circle-stroke-color": "#ffffff"
+      }
+    },
+    {
       "id": "place_label_city",
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "place",
       "filter": ["==", "class", "city"],
       "layout": {
-        "text-field": "{name}",
-        "text-font": ["Metropolis Bold"],
-        "text-transform": "uppercase",
-        "text-size": {
-          "stops": [[4, 12], [10, 18]]
-        }
+        "text-field": [
+          "case",
+          ["all", ["has", "name_en"], ["!=", ["get", "name"], ["get", "name_en"]]],
+          ["concat", ["get", "name"], " ", ["get", "name_en"]],
+          ["get", "name"]
+        ],
+        "text-font": ["Noto Sans Regular"],
+        "text-anchor": "left",
+        "text-offset": [0.5, 0.5],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          ["interpolate", ["linear"], ["get", "rank"], 1, 14, 10, 8],
+          12,
+          ["interpolate", ["linear"], ["get", "rank"], 1, 22, 10, 14]
+        ]
+      },
+      "paint": {
+        "text-color": "#000",
+        "text-halo-color": "#fff",
+        "text-halo-width": 3
+      }
+    },
+    {
+      "id": "place_label_country",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "filter": ["==", "class", "country"],
+      "layout": {
+        "text-field": [
+          "case",
+          ["all", ["has", "name_en"], ["!=", ["get", "name"], ["get", "name_en"]]],
+          ["concat", ["get", "name"], " ", ["get", "name_en"]],
+          ["get", "name"]
+        ],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5,
+          ["interpolate", ["linear"], ["get", "rank"], 1, 16, 3, 10],
+          12,
+          ["interpolate", ["linear"], ["get", "rank"], 1, 24, 3, 16]
+        ]
       },
       "paint": {
         "text-color": "#000",
@@ -241,7 +295,7 @@
       "minzoom": 10,
       "layout": {
         "text-field": "{name}",
-        "text-font": ["Metropolis Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": {
           "stops": [[10, 10], [16, 14]]
         }
@@ -261,7 +315,7 @@
       "minzoom": 13,
       "layout": {
         "text-field": "{name}",
-        "text-font": ["Metropolis Bold"],
+        "text-font": ["Noto Sans Bold"],
         "symbol-placement": "line",
         "text-size": 12
       },
