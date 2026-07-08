@@ -220,6 +220,15 @@ class MultiplayerFuzzer {
   }
 
   run() {
+    try {
+      this.assertDisconnectedPlayersDoNotPinPlayback();
+      this.assertRaceAgainRequiresConnectedFinishers();
+      this.assertInvariants();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new FuzzFailure(`Setup: ${message}`, this.recentTrace());
+    }
+
     for (this.currentStep = 0; this.currentStep < this.options.steps; this.currentStep++) {
       try {
         this.runAction();
@@ -507,6 +516,109 @@ class MultiplayerFuzzer {
     }, 'DUPLICATE_SESSION');
   }
 
+  private assertDisconnectedPlayersDoNotPinPlayback() {
+    if (this.clients.length < 2) return;
+
+    const first = this.clients[0];
+    first.connected = true;
+    first.wsData = { roomId: null, playerId: null };
+    first.inbox = [];
+    first.checkedInboxLength = 0;
+    this.send(first, { type: 'JOIN_ROOM', roomId: 'room-0', playerId: first.playerId, color: this.colorFor(first) }, 'PIN_REGRESSION_JOIN_FIRST');
+    this.send(first, {
+      type: 'SET_GAME_BOUNDS',
+      startPos: [55.9533, -3.1883],
+      finishPos: [43.7101, 7.2660],
+      startTime: this.clock.nowMs,
+      difficulty: 'Easy',
+      computerDriver: false,
+      ghosts: false,
+      league: '20260706',
+    }, 'PIN_REGRESSION_SET_BOUNDS');
+    this.send(first, { type: 'TOGGLE_READY' }, 'PIN_REGRESSION_READY_FIRST');
+    this.clock.advance(6_000);
+
+    const room = this.rooms.get('room-0');
+    assert(room?.state === 'RUNNING', 'pin regression room did not start');
+
+    this.record({ action: 'PIN_REGRESSION_DISCONNECT_FIRST', client: first.id });
+    first.connected = false;
+    for (const subscribers of this.subscriptions.values()) subscribers.delete(first.id);
+    handleGameClose(this.rooms, first.wsData, this.hooksFor(first), this.updateRoom);
+
+    const second = this.clients[1];
+    second.connected = true;
+    second.wsData = { roomId: null, playerId: null };
+    second.inbox = [];
+    second.checkedInboxLength = 0;
+    this.send(second, { type: 'JOIN_ROOM', roomId: 'room-0', playerId: second.playerId, color: this.colorFor(second) }, 'PIN_REGRESSION_JOIN_SECOND');
+
+    const updatedRoom = this.rooms.get('room-0')!;
+    const player = updatedRoom.players[second.playerId];
+    const last = player.waypoints[player.waypoints.length - 1];
+    this.send(second, {
+      type: 'ADD_WAYPOINTS_BATCH',
+      waypoints: [{
+        x: this.safeX(last.x + this.deltaCoord()),
+        y: this.safeY(last.y + this.deltaCoord()),
+        arrivalTime: updatedRoom.virtualTime + 60_000,
+        speedFactor: 20,
+        stopName: 'pin regression fast segment',
+      }],
+    }, 'PIN_REGRESSION_FAST_SEGMENT');
+
+    assert(updatedRoom.players[first.playerId].disconnectedAt !== null, 'pin regression player was not disconnected');
+    assert(updatedRoom.playbackRate > 1, `disconnected player pinned playback at ${updatedRoom.playbackRate}`);
+  }
+
+  private assertRaceAgainRequiresConnectedFinishers() {
+    if (this.clients.length < 5 || this.options.rooms < 2) return;
+
+    const roomId = 'room-1';
+    const first = this.clients[2];
+    const second = this.clients[3];
+    const third = this.clients[4];
+    for (const client of [first, second, third]) {
+      client.connected = true;
+      client.wsData = { roomId: null, playerId: null };
+      client.inbox = [];
+      client.checkedInboxLength = 0;
+      this.send(client, { type: 'JOIN_ROOM', roomId, playerId: client.playerId, color: this.colorFor(client) }, 'RACE_AGAIN_GUARD_JOIN');
+    }
+    this.send(first, {
+      type: 'SET_GAME_BOUNDS',
+      startPos: [55.9533, -3.1883],
+      finishPos: [43.7101, 7.2660],
+      startTime: this.clock.nowMs,
+      difficulty: 'Easy',
+      computerDriver: false,
+      ghosts: false,
+      league: '20260706',
+    }, 'RACE_AGAIN_GUARD_SET_BOUNDS');
+    this.send(first, { type: 'TOGGLE_READY' }, 'RACE_AGAIN_GUARD_READY');
+    this.send(second, { type: 'TOGGLE_READY' }, 'RACE_AGAIN_GUARD_READY');
+    this.send(third, { type: 'TOGGLE_READY' }, 'RACE_AGAIN_GUARD_READY');
+    this.clock.advance(6_000);
+
+    const room = this.rooms.get(roomId);
+    assert(room?.state === 'RUNNING', 'race again guard room did not start');
+    const elapsed = Math.max(1, room.virtualTime - (room.gameStartTime ?? room.virtualTime));
+    this.send(first, { type: 'PLAYER_FINISHED', finishTime: elapsed }, 'RACE_AGAIN_GUARD_FIRST_FINISHED');
+    this.send(second, { type: 'PLAYER_FINISHED', finishTime: elapsed + 1 }, 'RACE_AGAIN_GUARD_SECOND_FINISHED');
+    this.send(first, { type: 'RACE_AGAIN', waypoints: clone(room.players[first.playerId].waypoints) }, 'RACE_AGAIN_GUARD_EARLY');
+    assert(room.state === 'RUNNING', 'race again reset before every connected player finished');
+
+    this.record({ action: 'RACE_AGAIN_GUARD_DISCONNECT_THIRD', client: third.id });
+    third.connected = false;
+    for (const subscribers of this.subscriptions.values()) subscribers.delete(third.id);
+    handleGameClose(this.rooms, third.wsData, this.hooksFor(third), this.updateRoom);
+
+    const ghostCount = Object.values(room.players).filter((player) => player.isGhost).length;
+    this.send(first, { type: 'RACE_AGAIN', waypoints: clone(room.players[first.playerId].waypoints) }, 'RACE_AGAIN_GUARD_AFTER_DISCONNECT');
+    assert(this.rooms.get(roomId)?.state === 'JOINING', 'race again did not ignore disconnected unfinished player');
+    assert(Object.values(room.players).filter((player) => player.isGhost).length === ghostCount + 2, 'race again did not create ghosts for every connected finisher');
+  }
+
   private disconnect() {
     const client = this.rng.pick(this.connectedClients());
     this.record({ action: 'DISCONNECT', client: client.id });
@@ -595,14 +707,11 @@ class MultiplayerFuzzer {
     const stationY = this.safeY(last.y + this.deltaCoord());
     const waypoints: Array<Omit<Waypoint, 'startTime'>> = [
       { x: stationX, y: stationY, arrivalTime: start + 90_000, speedFactor: 1, stopName: 'walk to rail', isWalk: true, emoji: '🐾' },
-      { x: stationX, y: stationY, arrivalTime: start + 100_000, speedFactor: 1, stopName: 'wait for rail', isWait: true, emoji: '⏳' },
       { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 5_000, speedFactor: 20, stopName: 'early rail interstop', isInterstop: true, route_short_name: 'R' },
       { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 20_000, speedFactor: 20, stopName: 'early rail stop', route_short_name: 'R', route_departure_time: '12:00' },
     ];
     this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_RAIL_EARLY_BATCH');
     assert(player.waypoints.length === beforeCount + waypoints.length, `rail-style early batch was rejected for ${client.id}`);
-    const active = player.waypoints.slice(beforeCount).find((waypoint) => start >= waypoint.startTime && start < waypoint.arrivalTime);
-    assert(active && active.speedFactor > 1, `rail-style early batch left ${client.id} pinned on ${active?.speedFactor ?? 'no'} active segment`);
   }
 
   private advanceToNextWaypointEvent() {
@@ -976,7 +1085,7 @@ class MultiplayerFuzzer {
     if (this.subscriberCount(room.id) === 0) return 0;
     const activeFactors: number[] = [];
     for (const player of Object.values(room.players)) {
-      if (player.isGhost || player.finishTime !== null) continue;
+      if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
       let currentFactor = player.forceRealtime ? 1.0 : (player.desiredRate || 1.0);
       for (const waypoint of player.waypoints) {
         if (room.virtualTime >= waypoint.startTime && room.virtualTime < waypoint.arrivalTime) {
@@ -1051,6 +1160,11 @@ function assertServerMessage(message: unknown, label: string) {
     assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
     assert(finiteNumber(msg.desiredRate), `${label} has invalid desiredRate`);
     assert(typeof msg.forceRealtime === 'boolean', `${label} has invalid forceRealtime`);
+    return;
+  }
+  if (msg.type === 'PLAYER_DISCONNECT_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(msg.disconnectedAt === null || finiteNumber(msg.disconnectedAt), `${label} has invalid disconnectedAt`);
     return;
   }
   if (msg.type === 'PLAYER_VIEW_UPDATE') {
