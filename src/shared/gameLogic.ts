@@ -2,7 +2,7 @@
 import simplify from 'simplify-js';
 import { haversineDist } from '../utils/geo';
 import { generatePilotName } from '../names';
-export const CURRENT_LEAGUE = "20260218";
+export const CURRENT_LEAGUE = "20260706";
 
 const COUNTDOWN_DURATION = import.meta.env.PROD ? 5000 : 100;
 
