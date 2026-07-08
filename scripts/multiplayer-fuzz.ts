@@ -95,6 +95,10 @@ class FakeClock {
     return typeof id === 'number' && this.timers.has(id);
   }
 
+  timerAt(id: unknown) {
+    return typeof id === 'number' ? this.timers.get(id)?.at : undefined;
+  }
+
   activeTimerCount() {
     return this.timers.size;
   }
@@ -263,6 +267,8 @@ class MultiplayerFuzzer {
       actions.push(
         () => this.addWaypoint(),
         () => this.addWaypointsBatch(),
+        () => this.addPlannedService(),
+        () => this.advanceToNextWaypointEvent(),
         () => this.stopImmediately(),
         () => this.finishPlayer(),
       );
@@ -270,6 +276,10 @@ class MultiplayerFuzzer {
 
     if (this.finishedClients().length > 0) {
       actions.push(() => this.raceAgain());
+    }
+
+    if (this.reusableRoomClients().length > 0) {
+      actions.push(() => this.reuseFinishedRoom());
     }
 
     if (this.options.hostile && this.connectedClients().length > 0) {
@@ -439,7 +449,18 @@ class MultiplayerFuzzer {
   }
 
   private sendPing() {
-    this.send(this.rng.pick(this.joinedClients()), { type: 'SEND_PING', lat: this.coord(-85, 85), lon: this.coord(-180, 180) }, 'SEND_PING');
+    const client = this.rng.pick(this.joinedClients());
+    const lat = this.coord(-85, 85);
+    const lon = this.coord(-180, 180);
+    const recipients = this.connectedClients().filter((candidate) => candidate.wsData.roomId === client.wsData.roomId);
+    this.send(client, { type: 'SEND_PING', lat, lon }, 'SEND_PING');
+    for (const recipient of recipients) {
+      assert(recipient.inbox.some((message) => isMessage(message, 'RECV_PING')
+        && message.playerId === client.wsData.playerId
+        && message.lat === lat
+        && message.lon === lon
+        && message.timestamp === this.clock.nowMs), `ping from ${client.id} was not delivered to ${recipient.id}`);
+    }
   }
 
   private disconnect() {
@@ -477,6 +498,41 @@ class MultiplayerFuzzer {
     this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_WAYPOINTS_BATCH');
   }
 
+  private addPlannedService() {
+    const client = this.rng.pick(this.routingClients());
+    this.syncRoomFor(client);
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const player = room.players[client.wsData.playerId!];
+    const last = player.waypoints[player.waypoints.length - 1];
+    const walkArrival = Math.max(last.arrivalTime, room.virtualTime) + 10_000;
+    const waitArrival = walkArrival + 45_000;
+    const firstStopArrival = waitArrival + 30_000;
+    const finalArrival = firstStopArrival + 90_000;
+    const stationX = last.x + this.deltaCoord();
+    const stationY = last.y + this.deltaCoord();
+    const waypoints: Array<Omit<Waypoint, 'startTime'>> = [
+      { x: stationX, y: stationY, arrivalTime: walkArrival, speedFactor: 1, stopName: 'walk to station', isWalk: true, emoji: '🐾' },
+      { x: stationX, y: stationY, arrivalTime: waitArrival, speedFactor: 1, stopName: 'waiting for planned service', isWait: true, emoji: '⏳' },
+      { x: stationX + this.deltaCoord(), y: stationY + this.deltaCoord(), arrivalTime: firstStopArrival, speedFactor: 20, stopName: 'through stop', isInterstop: true, route_short_name: 'FZ' },
+      { x: stationX + this.deltaCoord(), y: stationY + this.deltaCoord(), arrivalTime: finalArrival, speedFactor: 20, stopName: 'planned final stop', route_short_name: 'FZ' },
+    ];
+    this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_PLANNED_SERVICE');
+  }
+
+  private advanceToNextWaypointEvent() {
+    const candidates = Array.from(this.rooms.values()).filter((room) => room.state === 'RUNNING' && this.subscriberCount(room.id) > 0 && room.playbackRate > 0 && this.nextWaypointEvent(room) !== null);
+    if (candidates.length === 0) return this.advanceTime();
+    const room = this.rng.pick(candidates);
+    this.updateRoom(room.id);
+    const nextEvent = this.nextWaypointEvent(room);
+    if (nextEvent === null) return;
+    const ms = Math.max(60, Math.ceil((nextEvent - room.virtualTime) / room.playbackRate) + 60);
+    this.record({ action: 'ADVANCE_TO_WAYPOINT_EVENT', message: { roomId: room.id, nextEvent, ms } });
+    this.clock.advance(ms);
+    const updatedRoom = this.rooms.get(room.id);
+    assert(!updatedRoom || updatedRoom.state !== 'RUNNING' || updatedRoom.virtualTime >= nextEvent, `room ${room.id} did not progress to waypoint event ${nextEvent}`);
+  }
+
   private stopImmediately() {
     const candidates = this.routingClients().filter((client) => {
       this.syncRoomFor(client);
@@ -511,6 +567,46 @@ class MultiplayerFuzzer {
     const room = this.rooms.get(client.wsData.roomId!)!;
     const player = room.players[client.wsData.playerId!];
     this.send(client, { type: 'RACE_AGAIN', waypoints: clone(player.waypoints) }, 'RACE_AGAIN');
+  }
+
+  private reusableRoomClients() {
+    return Array.from(this.rooms.values()).flatMap((room) => {
+      if (room.state !== 'RUNNING') return [];
+      const clients = this.joinedClients().filter((client) => client.wsData.roomId === room.id);
+      return clients.length >= 2 ? clients : [];
+    });
+  }
+
+  private reuseFinishedRoom() {
+    const client = this.rng.pick(this.reusableRoomClients());
+    const roomId = client.wsData.roomId!;
+    const roomClients = this.joinedClients().filter((candidate) => candidate.wsData.roomId === roomId);
+    for (const candidate of roomClients) {
+      const room = this.rooms.get(roomId);
+      if (!room || room.state !== 'RUNNING') return;
+      const player = room.players[candidate.wsData.playerId!];
+      if (player.finishTime !== null) continue;
+      if (player.waypoints.length === 1) {
+        const waypoint = this.nextWaypointFor(candidate);
+        this.send(candidate, { type: 'ADD_WAYPOINT', ...waypoint }, 'REUSE_ADD_WAYPOINT');
+      }
+      const updatedRoom = this.rooms.get(roomId)!;
+      const elapsed = Math.max(1, updatedRoom.virtualTime - (updatedRoom.gameStartTime ?? updatedRoom.virtualTime));
+      this.send(candidate, { type: 'PLAYER_FINISHED', finishTime: elapsed }, 'REUSE_PLAYER_FINISHED');
+    }
+    const updatedRoom = this.rooms.get(roomId);
+    if (!updatedRoom) return;
+    const sender = roomClients.find((candidate) => updatedRoom.players[candidate.wsData.playerId!]?.waypoints.length > 1) ?? roomClients[0];
+    const senderPlayer = updatedRoom.players[sender.wsData.playerId!];
+    this.send(sender, { type: 'RACE_AGAIN', waypoints: clone(senderPlayer.waypoints) }, 'REUSE_RACE_AGAIN');
+    const resetRoom = this.rooms.get(roomId);
+    assert(resetRoom?.state === 'JOINING', `room ${roomId} was not reusable after RACE_AGAIN`);
+    for (const candidate of roomClients) {
+      const resetPlayer = resetRoom.players[candidate.wsData.playerId!];
+      assert(resetPlayer.finishTime === null, `player ${candidate.wsData.playerId} stayed finished after room reuse`);
+      assert(!resetPlayer.isReady, `player ${candidate.wsData.playerId} stayed ready after room reuse`);
+      assert(resetPlayer.waypoints.length === 1, `player ${candidate.wsData.playerId} kept old route after room reuse`);
+    }
   }
 
   private addGhosts() {
@@ -713,6 +809,8 @@ class MultiplayerFuzzer {
         assert(!seenTimerIds.has(room.timerId), `timer ${room.timerId} is attached to multiple rooms`);
         seenTimerIds.add(room.timerId);
         assert(this.clock.hasTimer(room.timerId), `room ${roomId} points at missing timer ${room.timerId}`);
+        const timerAt = this.clock.timerAt(room.timerId);
+        assert(timerAt === undefined || timerAt >= this.clock.nowMs, `room ${roomId} has overdue timer ${room.timerId}`);
       }
 
       this.assertPlayers(room);
@@ -747,9 +845,12 @@ class MultiplayerFuzzer {
       assert(player.viewingStopName === null || typeof player.viewingStopName === 'string', `player ${playerId} has invalid viewingStopName`);
       assert(typeof player.isGhost === 'boolean', `player ${playerId} has invalid isGhost`);
       const hasConnection = this.clients.some((client) => client.connected && client.wsData.roomId === room.id && client.wsData.playerId === playerId);
+      if (room.state !== 'RUNNING' && !player.isGhost) {
+        assert(player.finishTime === null, `waiting player ${playerId} still has finishTime ${player.finishTime}`);
+      }
       if (!player.isGhost && player.disconnectedAt !== null) {
         assert(!hasConnection, `player ${playerId} is connected and marked disconnected`);
-        assert(this.clock.nowMs - player.disconnectedAt <= 60_000, `disconnected player ${playerId} was not deleted after idle timeout`);
+        if (room.emptySince === null) assert(this.clock.nowMs - player.disconnectedAt <= 60_050, `disconnected player ${playerId} was not deleted after idle timeout`);
       }
       if (room.state === 'RUNNING' && !player.isGhost) {
         assert(player.isReady, `running player ${playerId} is not ready`);
@@ -782,6 +883,22 @@ class MultiplayerFuzzer {
     }
     return activeFactors.length > 0 ? Math.max(1.0, Math.min(...activeFactors)) : 1.0;
   }
+
+  private nextWaypointEvent(room: Room) {
+    let nextEvent = Number.POSITIVE_INFINITY;
+    for (const player of Object.values(room.players)) {
+      if (player.isGhost || player.finishTime !== null) continue;
+      for (const waypoint of player.waypoints) {
+        if (waypoint.startTime > room.virtualTime) nextEvent = Math.min(nextEvent, waypoint.startTime);
+        if (waypoint.startTime <= room.virtualTime && waypoint.arrivalTime > room.virtualTime) nextEvent = Math.min(nextEvent, waypoint.arrivalTime);
+      }
+    }
+    return Number.isFinite(nextEvent) ? nextEvent : null;
+  }
+}
+
+function isMessage(message: unknown, type: string): message is Record<string, any> {
+  return !!message && typeof message === 'object' && (message as { type?: unknown }).type === type;
 }
 
 function assertCoord(value: unknown, label: string): asserts value is [number, number] {
