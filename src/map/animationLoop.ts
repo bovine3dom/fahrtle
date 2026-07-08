@@ -219,8 +219,18 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
 
     const nowMs = Date.now();
     const allPings = $pings.get();
-    const pingPointerData = Object.entries(allPings)
-      .filter(([_, ping]) => nowMs - ping.timestamp < PING_DURATION)
+    const activePings = Object.entries(allPings)
+      .filter(([_, ping]) => nowMs - ping.timestamp < PING_DURATION);
+    const pingSource = map.getSource('pings') as maplibregl.GeoJSONSource | undefined;
+    pingSource?.setData({
+      type: 'FeatureCollection',
+      features: activePings.map(([pid, ping]) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [ping.lon, ping.lat] },
+        properties: { playerId: pid }
+      })) as any
+    });
+    const pingPointerData = activePings
       .map(([pid, ping]) => {
         const pointer = config.getPointer(ping.lat, ping.lon);
         return { pid, pointer };
