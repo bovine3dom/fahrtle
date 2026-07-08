@@ -148,7 +148,39 @@ export interface GameHooks {
     onRoomDeleted?: (roomId: string) => void;
     sendToSender: (message: any) => void;
     subscribeToRoom: (roomId: string) => void;
+    unsubscribeFromRoom?: (roomId: string) => void;
     shouldDeletePlayer?: (roomId: string, playerId: string) => boolean;
+}
+
+function markPlayerDisconnected(
+    room: Room,
+    roomId: string,
+    playerId: string,
+    hooks: GameHooks,
+    updateRoom: (room: Room) => void
+) {
+    const player = room.players[playerId];
+    if (!player) return;
+    if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
+
+    player.disconnectedAt = Date.now();
+    checkCountdownLogic(room, hooks);
+
+    const roomConnections = hooks.getSubscriberCount(roomId);
+    if (roomConnections > 0) {
+        player.forceRealtime = false;
+        player.desiredRate = 500.0;
+        hooks.publish(roomId, {
+            type: 'PLAYER_SNOOZE_UPDATE',
+            playerId,
+            desiredRate: player.desiredRate,
+            forceRealtime: player.forceRealtime
+        });
+    } else {
+        room.emptySince = Date.now();
+        room.playbackRate = 0;
+    }
+    updateRoom(room);
 }
 
 function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) {
@@ -441,6 +473,9 @@ function handleJoinRoom(
     const now = Date.now();
     const { roomId, playerId, color } = message;
     if (!isSafeKey(roomId) || !isSafeKey(playerId)) return;
+    const previousRoomId = wsData.roomId;
+    const previousPlayerId = wsData.playerId;
+    const switchedPlayer = !!previousRoomId && !!previousPlayerId && (previousRoomId !== roomId || previousPlayerId !== playerId);
 
     let room = rooms.get(roomId);
     if (!room) {
@@ -474,10 +509,16 @@ function handleJoinRoom(
         }
     }
 
+    if (switchedPlayer) hooks.unsubscribeFromRoom?.(previousRoomId);
     wsData.roomId = roomId;
     wsData.playerId = playerId;
-
     hooks.subscribeToRoom(roomId);
+
+    if (switchedPlayer) {
+        const previousRoom = rooms.get(previousRoomId);
+        if (previousRoom) markPlayerDisconnected(previousRoom, previousRoomId, previousPlayerId, hooks, (r) => triggerUpdate(r.id));
+    }
+
     stepClock(room);
     checkCountdownLogic(room, hooks);
 
@@ -950,30 +991,7 @@ export function handleGameClose(
     if (wsData.roomId && wsData.playerId) {
         const room = rooms.get(wsData.roomId);
         if (room) {
-            const player = room.players[wsData.playerId];
-            if (player) {
-                if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(wsData.roomId, wsData.playerId)) return;
-                player.disconnectedAt = Date.now();
-                checkCountdownLogic(room, hooks);
-
-                const roomConnections = hooks.getSubscriberCount(wsData.roomId);
-                if (roomConnections > 0) {
-                    player.forceRealtime = false;
-                    player.desiredRate = 500.0;
-                    hooks.publish(wsData.roomId, {
-                        type: 'PLAYER_SNOOZE_UPDATE',
-                        playerId: wsData.playerId,
-                        desiredRate: player.desiredRate,
-                        forceRealtime: player.forceRealtime
-                    });
-
-                    updateRoomLogic(room, hooks, updateRoomCallback);
-                } else {
-                    room.emptySince = Date.now();
-                    room.playbackRate = 0;
-                    updateRoomLogic(room, hooks, updateRoomCallback);
-                }
-            }
+            markPlayerDisconnected(room, wsData.roomId, wsData.playerId, hooks, (r) => updateRoomLogic(r, hooks, updateRoomCallback));
         }
     }
 }

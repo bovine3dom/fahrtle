@@ -130,6 +130,7 @@ class FakeServer {
                 }
             },
             subscribeToRoom: (_roomId: string) => { /* No-op in fake server */ },
+            unsubscribeFromRoom: (_roomId: string) => { /* No-op in fake server */ },
             shouldDeletePlayer: () => false
         };
     }

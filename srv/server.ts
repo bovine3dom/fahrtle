@@ -183,6 +183,7 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
       ws.subscribe(roomId);
       addPlayerConnection(ws);
     },
+    unsubscribeFromRoom: (roomId: string) => ws.unsubscribe(roomId),
     shouldDeletePlayer
   };
 }
@@ -198,6 +199,7 @@ const gameHooks: GameHooks = {
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
   subscribeToRoom: () => { /* Server root doesn't subscribe */ },
+  unsubscribeFromRoom: () => { /* Server root doesn't subscribe */ },
   shouldDeletePlayer
 };
 
