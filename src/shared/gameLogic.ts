@@ -164,6 +164,7 @@ function markPlayerDisconnected(
     if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
 
     player.disconnectedAt = Date.now();
+    hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
     checkCountdownLogic(room, hooks);
 
     const roomConnections = hooks.getSubscriberCount(roomId);
@@ -543,16 +544,19 @@ function handleRaceAgain(
     triggerUpdate: (rid: string) => void
 ) {
     const { room } = result;
+    const activePlayers = Object.values(room.players).filter(p => !p.isGhost && p.disconnectedAt === null);
+    if (activePlayers.length === 0 || activePlayers.some(p => p.finishTime === null)) return;
     if (!isValidWaypointList(message.waypoints)) return;
-    const ghostId = `👻-${generatePilotName()}`;
-    const hue = Math.floor(Math.random() * 360);
-    const ghost: Player = {
-        id: ghostId, color: `hsl(${hue}, 30%, 50%)`, isReady: true,
-        waypoints: message.waypoints, desiredRate: 1e9, forceRealtime: false,
-        finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
-    };
-
-    room.players[ghostId] = ghost;
+    const ghosts = activePlayers.map((p) => {
+        const ghostId = `👻-${generatePilotName()}`;
+        const ghost: Player = {
+            id: ghostId, color: p.color, isReady: true,
+            waypoints: p.waypoints, desiredRate: 1e9, forceRealtime: false,
+            finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
+        };
+        room.players[ghostId] = ghost;
+        return ghost;
+    });
 
     room.state = 'JOINING';
     room.virtualTime = room.initialStartTime;
@@ -560,7 +564,9 @@ function handleRaceAgain(
     room.gameStartTime = null;
     room.isRerun = true;
 
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
+    for (const ghost of ghosts) {
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghost.id, player: ghost });
+    }
     for (const pid of Object.keys(room.players)) {
         const p = room.players[pid];
         if (p.isGhost) continue;
@@ -798,18 +804,9 @@ export function handleIncomingMessage(
         if (!Array.isArray(waypoints) || waypoints.length === 0) { triggerUpdate(wsData.roomId!); return; }
         const nextWaypoints: Waypoint[] = [];
         let lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-        for (let i = 0; i < waypoints.length; i++) {
-            const wp = waypoints[i];
+        for (const wp of waypoints) {
             const next = buildWaypoint(wp, lastPoint, r.room.virtualTime);
             if (!next) { triggerUpdate(wsData.roomId!); return; }
-            if (next.isWalk || next.isWait) {
-                for (let j = i + 1; j < waypoints.length; j++) {
-                    const upcoming = waypoints[j];
-                    if (upcoming?.isWalk === true || upcoming?.isWait === true) continue;
-                    if (Number.isFinite(upcoming?.arrivalTime) && upcoming.arrivalTime < next.arrivalTime) next.arrivalTime = next.startTime;
-                    break;
-                }
-            }
             nextWaypoints.push(next);
             lastPoint = next;
         }
@@ -893,7 +890,7 @@ function calculatePlaybackRate(room: Room, hooks: GameHooks) {
     const activeFactors: number[] = [];
     for (const pid in room.players) {
         const p = room.players[pid];
-        if (p.isGhost || p.finishTime !== null) continue;
+        if (p.isGhost || p.disconnectedAt !== null || p.finishTime !== null) continue;
         let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
         for (const wp of p.waypoints) {
             if (room.virtualTime >= wp.startTime && room.virtualTime < wp.arrivalTime) {

@@ -57,6 +57,7 @@ export type Player = {
   waypoints: Waypoint[];
   renderableSegments?: AnimationSegment[];
   finishTime?: number;
+  disconnectedAt?: number | null;
   desiredRate?: number;
   forceRealtime?: boolean;
   viewingStopName?: string | null;
@@ -332,6 +333,7 @@ function handleWsMessage(event: any) {
 
   if (msg.type === 'PLAYER_COLOR_UPDATE') { updatePlayerField(msg.playerId, () => ({ color: msg.color })); return; }
   if (msg.type === 'PLAYER_SNOOZE_UPDATE') { updatePlayerField(msg.playerId, () => ({ desiredRate: msg.desiredRate, forceRealtime: msg.forceRealtime })); return; }
+  if (msg.type === 'PLAYER_DISCONNECT_UPDATE') { updatePlayerField(msg.playerId, () => ({ disconnectedAt: msg.disconnectedAt })); return; }
   if (msg.type === 'PLAYER_VIEW_UPDATE') { updatePlayerField(msg.playerId, () => ({ viewingStopName: msg.viewingStopName })); return; }
   if (msg.type === 'PLAYER_FINISH_UPDATE') { updatePlayerField(msg.playerId, () => ({ finishTime: msg.finishTime })); return; }
 

@@ -215,6 +215,15 @@ function App() {
     return sorted_finishers.concat(sorted_others);
   });
 
+  const canRaceAgain = createMemo(() => {
+    const activePlayers = Object.values(players()).filter(p => !p.isGhost && p.disconnectedAt == null);
+    return roomState() === 'RUNNING' && activePlayers.length > 0 && activePlayers.every(p => p.finishTime != null);
+  });
+
+  createEffect(() => {
+    if (roomState() !== 'RUNNING' && showWinModal()) setShowWinModal(false);
+  });
+
   createEffect(() => {
     if (leaveConfirm()) {
       const t = setTimeout(() => setLeaveConfirm(false), 5000);
@@ -395,10 +404,10 @@ function App() {
           player={players()[myId()!]!}
           onSpectate={handleSpectate}
           onClose={() => setShowWinModal(false)}
-          onRaceAgain={() => {
+          onRaceAgain={canRaceAgain() ? () => {
             raceAgain(players()[myId()!]!.waypoints);
             setShowWinModal(false);
-          }}
+          } : undefined}
         />
       )}
     </>
