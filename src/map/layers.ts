@@ -153,18 +153,22 @@ export async function updateBathymetryLayer(map: maplibregl.Map, setting: string
   const unlock = await map_update_lock.lock();
   try {
     if (map.getLayer('water-bathymetry')) map.removeLayer('water-bathymetry');
-    if (map.getSource('gebco')) map.removeSource('gebco');
+    if (map.getLayer('water-hillshade')) map.removeLayer('water-hillshade');
+    if (map.getLayer('water-contours')) map.removeLayer('water-contours');
+    if (map.getSource('seascape-dem')) map.removeSource('seascape-dem');
+    if (map.getSource('seascape')) map.removeSource('seascape');
     if (!setting) return;
 
-    map.addSource('gebco', { type: 'vector', tiles: [`https://compute.olie.science/versatiles/tiles/bathymetry-vectors/{z}/{x}/{y}`], minzoom: 0, maxzoom: 10, attribution: '<a href="https://download.versatiles.org/" target="_blank">VersaTiles, GEBCO & OpenDEM</a>' });
+    map.addSource('seascape', { type: 'vector', url: 'https://tiles.openwaters.io/seascape/vector.json', attribution: "" })
+    map.addSource('seascape-dem', { type: 'raster-dem', url: 'https://tiles.openwaters.io/seascape/raster.json', attribution: "<a href='https://openwaters.io/charts/seascape#sources' target='_blank'>&copy; Open Water Software et al.</a>" })
     const baseColorValue = (map.getStyle().layers.find(layer => layer.id === 'basemap-water')?.paint as any)?.['fill-color'] || "#b3dbe6";
     const colorString: string = Array.isArray(baseColorValue) ? "#b3dbe6" : baseColorValue as any;
     const isRaster = baseColorValue === '#b3dbe6';
     const baseHsl = hsl(colorString);
     const isDark = baseHsl.l < 0.5;
-    const stops = [-9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, -750, -500, -250, -200, -100, -50, -25, 0];
+    const stops = [-9500, -9000, -8500, -8000, -7500, -7000, -6500, -6000, -5500, -5000, -4500, -4000, -3500, -3000, -2500, -2000, -1750, -1500, -1250, -1000, -750, -500, -250, -200, -100, -50, -25];
     const extremeLightness = isDark ? 0.95 : 0.05;
-    const fillColorExpression: any[] = ["step", ["get", "mindepth"], isDark ? "#ffffff" : "#000000"];
+    const fillColorExpression: any[] = ["interpolate", ["linear"], ["elevation"], -10000, isDark ? "#ffffff" : "#000000"];
     stops.forEach((depth, index) => {
       const t = index / (stops.length - 1);
       let stepHsl = hsl(baseHsl.toString());
@@ -172,7 +176,15 @@ export async function updateBathymetryLayer(map: maplibregl.Map, setting: string
       else stepHsl.l = 0.95 - (0.95 - baseHsl.l) * t;
       fillColorExpression.push(depth, stepHsl.formatHex());
     });
-    map.addLayer({ id: 'water-bathymetry', type: 'fill', source: 'gebco', 'source-layer': 'bathymetry', paint: { "fill-color": fillColorExpression as any, "fill-opacity": isRaster ? 0.5 : 1 } }, getBeforeId("water-bathymetry", map));
+    fillColorExpression.push(-24, "rgba(0,0,0,0)");
+    map.addLayer({ id: 'water-bathymetry', type: 'color-relief', source: 'seascape-dem', paint: { "color-relief-color": fillColorExpression as any, "color-relief-opacity": isRaster ? 0.5 : 1 } }, getBeforeId("water-bathymetry", map));
+    map.addLayer({ id: 'water-hillshade', type: 'hillshade', source: 'seascape-dem', paint: {
+        "hillshade-exaggeration": 0.1,
+        "hillshade-shadow-color": "#473b24",
+        "hillshade-highlight-color": "#ffffff",
+        "hillshade-accent-color": "#000000"
+    } }, getBeforeId("water-hillshade", map));
+    map.addLayer({ id: 'water-contours', type: 'line', source: 'seascape', 'source-layer': 'contours', "paint": { "line-color": "#000000", "line-width": 0.5, "line-opacity": 0.5 }}, getBeforeId('water-contours', map));
   } finally { unlock(); }
 }
 

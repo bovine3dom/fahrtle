@@ -5,6 +5,8 @@ import { type Map } from 'maplibre-gl';
 const ideal_hierarchy: string[] = [
   "basemap-",
   "water-bathymetry",
+  "water-hillshade",
+  "water-contours",
   "mapterhorn-layer",
   "nightlayer",
   "openrailwaymap-layer",
