@@ -223,6 +223,12 @@ class MultiplayerFuzzer {
         throw new FuzzFailure(`Step ${this.currentStep}: ${message}`, this.recentTrace());
       }
     }
+    try {
+      this.cleanupAndAssert();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new FuzzFailure(`Cleanup: ${message}`, this.recentTrace());
+    }
   }
 
   private runAction() {
@@ -247,6 +253,7 @@ class MultiplayerFuzzer {
         () => this.setViewingStop(),
         () => this.sendPing(),
         () => this.disconnect(),
+        () => this.closeStaleConnection(),
         () => this.addGhosts(),
         () => this.kickGhost(),
       );
@@ -306,7 +313,7 @@ class MultiplayerFuzzer {
         }
         subscribers.add(client.id);
       },
-      shouldDeletePlayer: (_roomId, playerId) => !this.clients.some((c) => c.connected && c.wsData.playerId === playerId),
+      shouldDeletePlayer: (roomId, playerId) => !this.clients.some((c) => c.connected && c.wsData.roomId === roomId && c.wsData.playerId === playerId),
     };
   }
 
@@ -441,6 +448,12 @@ class MultiplayerFuzzer {
     client.connected = false;
     for (const subscribers of this.subscriptions.values()) subscribers.delete(client.id);
     handleGameClose(this.rooms, client.wsData, this.hooksFor(client), this.updateRoom);
+  }
+
+  private closeStaleConnection() {
+    const client = this.rng.pick(this.joinedClients());
+    this.record({ action: 'STALE_CLOSE', client: client.id });
+    handleGameClose(this.rooms, { ...client.wsData }, this.hooksFor(), this.updateRoom);
   }
 
   private addWaypoint() {
@@ -640,10 +653,20 @@ class MultiplayerFuzzer {
 
   private assertInvariants() {
     const seenTimerIds = new Set<number>();
+    for (const [roomId, subscribers] of this.subscriptions) {
+      assert(this.rooms.has(roomId), `subscriptions exist for missing room ${roomId}`);
+      for (const clientId of subscribers) {
+        const client = this.clients.find((candidate) => candidate.id === clientId);
+        assert(client?.connected, `${clientId} is subscribed to ${roomId} but is not connected`);
+        assert(client.wsData.roomId === roomId, `${clientId} is subscribed to ${roomId} but joined ${client.wsData.roomId}`);
+      }
+    }
+
     for (const client of this.clients) {
       if (!client.connected || !client.wsData.roomId || !client.wsData.playerId) continue;
       const room = this.rooms.get(client.wsData.roomId);
       assert(room && Object.prototype.hasOwnProperty.call(room.players, client.wsData.playerId), `${client.id} is connected but missing player ${client.wsData.playerId}`);
+      assert(room.players[client.wsData.playerId].disconnectedAt === null, `${client.id} is connected but player ${client.wsData.playerId} is marked disconnected`);
     }
 
     for (const [roomId, room] of this.rooms) {
@@ -657,6 +680,12 @@ class MultiplayerFuzzer {
       if (room.finishPos !== null) assertCoord(room.finishPos, `room ${roomId}.finishPos`);
       assert(room.difficulty === 'Easy' || room.difficulty === 'Normal' || room.difficulty === 'Transport nerd', `room ${roomId} has invalid difficulty: ${String(room.difficulty)}`);
       assert(typeof room.league === 'string' && /^\d{8}$/.test(room.league), `room ${roomId} has invalid league: ${String(room.league)}`);
+      const subscriberCount = this.subscriberCount(roomId);
+      if (subscriberCount > 0) assert(room.emptySince === null, `room ${roomId} has subscribers but emptySince ${room.emptySince}`);
+      if (room.emptySince !== null) {
+        assert(subscriberCount === 0, `room ${roomId} is marked empty with ${subscriberCount} subscribers`);
+        assert(this.clock.nowMs - room.emptySince <= 60_000, `empty room ${roomId} was not deleted after idle timeout`);
+      }
 
       if (room.state === 'JOINING') {
         assert(room.countdownEnd === null, `room ${roomId} is JOINING with countdownEnd ${room.countdownEnd}`);
@@ -664,9 +693,13 @@ class MultiplayerFuzzer {
       }
       if (room.state === 'COUNTDOWN') {
         assert(finiteNumber(room.countdownEnd), `room ${roomId} is COUNTDOWN without finite countdownEnd`);
-        const realPlayers = Object.values(room.players).filter((player) => !player.isGhost);
-        assert(realPlayers.length > 0, `room ${roomId} is COUNTDOWN with no real players`);
-        assert(realPlayers.every((player) => player.isReady), `room ${roomId} is COUNTDOWN but not all real players are ready`);
+        const activeRealPlayers = Object.values(room.players).filter((player) => !player.isGhost && !player.disconnectedAt);
+        assert(activeRealPlayers.length > 0, `room ${roomId} is COUNTDOWN with no connected real players`);
+        assert(activeRealPlayers.every((player) => player.isReady), `room ${roomId} is COUNTDOWN but not all connected real players are ready`);
+      }
+      if (room.state === 'JOINING') {
+        const activeRealPlayers = Object.values(room.players).filter((player) => !player.isGhost && !player.disconnectedAt);
+        assert(activeRealPlayers.length === 0 || activeRealPlayers.some((player) => !player.isReady), `room ${roomId} is JOINING even though all connected real players are ready`);
       }
       if (room.state === 'RUNNING') {
         assert(room.countdownEnd === null, `room ${roomId} is RUNNING with countdownEnd ${room.countdownEnd}`);
@@ -688,6 +721,19 @@ class MultiplayerFuzzer {
     assert(this.clock.activeTimerCount() <= this.rooms.size, `too many active timers: ${this.clock.activeTimerCount()} for ${this.rooms.size} rooms`);
   }
 
+  private cleanupAndAssert() {
+    for (const client of this.connectedClients()) {
+      this.record({ action: 'FINAL_DISCONNECT', client: client.id });
+      client.connected = false;
+      for (const subscribers of this.subscriptions.values()) subscribers.delete(client.id);
+      handleGameClose(this.rooms, client.wsData, this.hooksFor(client), this.updateRoom);
+    }
+    this.clock.advance(61_000);
+    this.assertInvariants();
+    assert(this.rooms.size === 0, `cleanup left ${this.rooms.size} rooms`);
+    assert(this.clock.activeTimerCount() === 0, `cleanup left ${this.clock.activeTimerCount()} timers`);
+  }
+
   private assertPlayers(room: Room) {
     for (const [playerId, player] of Object.entries(room.players)) {
       assert(player.id === playerId, `player key/id mismatch in ${room.id}: ${playerId} !== ${player.id}`);
@@ -700,6 +746,11 @@ class MultiplayerFuzzer {
       assert(player.disconnectedAt === null || finiteNumber(player.disconnectedAt), `player ${playerId} has invalid disconnectedAt: ${player.disconnectedAt}`);
       assert(player.viewingStopName === null || typeof player.viewingStopName === 'string', `player ${playerId} has invalid viewingStopName`);
       assert(typeof player.isGhost === 'boolean', `player ${playerId} has invalid isGhost`);
+      const hasConnection = this.clients.some((client) => client.connected && client.wsData.roomId === room.id && client.wsData.playerId === playerId);
+      if (!player.isGhost && player.disconnectedAt !== null) {
+        assert(!hasConnection, `player ${playerId} is connected and marked disconnected`);
+        assert(this.clock.nowMs - player.disconnectedAt <= 60_000, `disconnected player ${playerId} was not deleted after idle timeout`);
+      }
       if (room.state === 'RUNNING' && !player.isGhost) {
         assert(player.isReady, `running player ${playerId} is not ready`);
         assert(player.waypoints[0].arrivalTime >= (room.gameStartTime ?? -Infinity), `running player ${playerId} starts before game start`);
