@@ -535,18 +535,28 @@ class MultiplayerFuzzer {
 
   private sendHostileMessage() {
     const client = this.rng.pick(this.connectedClients());
-    const room = client.wsData.roomId ? this.rooms.get(client.wsData.roomId) : null;
+    const room = client.wsData.roomId ? (this.rooms.get(client.wsData.roomId) ?? null) : null;
     const realPlayerId = room ? Object.values(room.players).find((player) => !player.isGhost)?.id : client.playerId;
+    const startPos = room?.startPos ?? [55.9533, -3.1883];
+    const finishPos = room?.finishPos ?? [43.7101, 7.2660];
+    const ghostWaypoints = this.validGhostWaypoints(room);
     const malformed = [
       null,
       {},
       { type: 'JOIN_ROOM', roomId: client.roomId, playerId: '__proto__' },
       { type: 'SET_GAME_BOUNDS', startPos: {}, finishPos: [], league: null },
+      { type: 'SET_GAME_BOUNDS', startPos, finishPos, startTime: this.clock.nowMs, difficulty: { nope: true }, computerDriver: false, ghosts: false, league: 'not_a_league' },
+      { type: 'TOGGLE_READY' },
+      { type: 'SET_VIEWING_STOP', stopName: { definitely: 'not a stop name' } },
+      { type: 'UPDATE_PLAYER_COLOR', color: { hue: 120 } },
       { type: 'ADD_WAYPOINTS_BATCH', waypoints: [null] },
+      { type: 'ADD_WAYPOINTS_BATCH', waypoints: [{ x: startPos[1], y: startPos[0], arrivalTime: this.clock.nowMs + 60_000, speedFactor: 10, isWalk: { wrong: true }, route_short_name: { also: 'wrong' } }] },
       { type: 'ADD_WAYPOINT', x: Number.POSITIVE_INFINITY, y: {}, speedFactor: 'fast' },
+      { type: 'ADD_WAYPOINT', x: startPos[1], y: startPos[0], arrivalTime: this.clock.nowMs + 60_000, speedFactor: 10, isWait: { wrong: true }, emoji: { nope: true } },
       { type: 'PLAYER_FINISHED', finishTime: Number.NaN },
       { type: 'RACE_AGAIN', waypoints: [] },
       { type: 'ADD_GHOSTS', ghosts: [{ playerName: 'bad', waypoints: [] }] },
+      { type: 'ADD_GHOSTS', ghosts: [{ playerName: 'bad-colour', color: { hue: 20 }, waypoints: ghostWaypoints }] },
       { type: 'PLAYER_KICK', playerId: realPlayerId },
       { type: 'SEND_PING', lat: Number.POSITIVE_INFINITY, lon: Number.NEGATIVE_INFINITY },
     ];
@@ -558,6 +568,15 @@ class MultiplayerFuzzer {
     if (connected.length > 0) return connected;
     this.connectOrReconnect();
     return this.connectedClients();
+  }
+
+  private validGhostWaypoints(room: Room | null): Waypoint[] {
+    const start = room?.initialStartTime ?? this.clock.nowMs;
+    const startPos = room?.startPos ?? [55.9533, -3.1883];
+    return [
+      { x: startPos[1], y: startPos[0], startTime: start, arrivalTime: start, speedFactor: 1, stopName: 'ghost-start' },
+      { x: startPos[1] + 0.1, y: startPos[0] + 0.1, startTime: start, arrivalTime: start + 60_000, speedFactor: 50, stopName: 'ghost-end' },
+    ];
   }
 
   private syncRoomFor(client: Client) {
@@ -636,7 +655,8 @@ class MultiplayerFuzzer {
       assert(finiteNumber(room.playbackRate) && room.playbackRate >= 0, `room ${roomId} has invalid playbackRate: ${room.playbackRate}`);
       assertCoord(room.startPos, `room ${roomId}.startPos`);
       if (room.finishPos !== null) assertCoord(room.finishPos, `room ${roomId}.finishPos`);
-      assert(typeof room.league === 'string' && room.league.length > 0, `room ${roomId} has invalid league: ${String(room.league)}`);
+      assert(room.difficulty === 'Easy' || room.difficulty === 'Normal' || room.difficulty === 'Transport nerd', `room ${roomId} has invalid difficulty: ${String(room.difficulty)}`);
+      assert(typeof room.league === 'string' && /^\d{8}$/.test(room.league), `room ${roomId} has invalid league: ${String(room.league)}`);
 
       if (room.state === 'JOINING') {
         assert(room.countdownEnd === null, `room ${roomId} is JOINING with countdownEnd ${room.countdownEnd}`);
@@ -651,6 +671,8 @@ class MultiplayerFuzzer {
       if (room.state === 'RUNNING') {
         assert(room.countdownEnd === null, `room ${roomId} is RUNNING with countdownEnd ${room.countdownEnd}`);
         assert(finiteNumber(room.gameStartTime), `room ${roomId} is RUNNING without finite gameStartTime`);
+        const expectedRate = this.expectedPlaybackRate(room);
+        assert(Math.abs(room.playbackRate - expectedRate) <= 0.01, `room ${roomId} playbackRate ${room.playbackRate} !== expected ${expectedRate}`);
       }
 
       if (room.timerId !== undefined) {
@@ -676,7 +698,12 @@ class MultiplayerFuzzer {
       assert(typeof player.forceRealtime === 'boolean', `player ${playerId} has invalid forceRealtime`);
       assert(player.finishTime === null || finiteNumber(player.finishTime), `player ${playerId} has invalid finishTime: ${player.finishTime}`);
       assert(player.disconnectedAt === null || finiteNumber(player.disconnectedAt), `player ${playerId} has invalid disconnectedAt: ${player.disconnectedAt}`);
+      assert(player.viewingStopName === null || typeof player.viewingStopName === 'string', `player ${playerId} has invalid viewingStopName`);
       assert(typeof player.isGhost === 'boolean', `player ${playerId} has invalid isGhost`);
+      if (room.state === 'RUNNING' && !player.isGhost) {
+        assert(player.isReady, `running player ${playerId} is not ready`);
+        assert(player.waypoints[0].arrivalTime >= (room.gameStartTime ?? -Infinity), `running player ${playerId} starts before game start`);
+      }
 
       let previousArrival = Number.NEGATIVE_INFINITY;
       player.waypoints.forEach((waypoint, index) => {
@@ -686,6 +713,23 @@ class MultiplayerFuzzer {
         previousArrival = waypoint.arrivalTime;
       });
     }
+  }
+
+  private expectedPlaybackRate(room: Room) {
+    if (this.subscriberCount(room.id) === 0) return 0;
+    const activeFactors: number[] = [];
+    for (const player of Object.values(room.players)) {
+      if (player.isGhost || player.finishTime !== null) continue;
+      let currentFactor = player.forceRealtime ? 1.0 : (player.desiredRate || 1.0);
+      for (const waypoint of player.waypoints) {
+        if (room.virtualTime >= waypoint.startTime && room.virtualTime < waypoint.arrivalTime) {
+          currentFactor = player.forceRealtime ? 1.0 : Math.max(waypoint.speedFactor, player.desiredRate || 1.0);
+          break;
+        }
+      }
+      activeFactors.push(currentFactor);
+    }
+    return activeFactors.length > 0 ? Math.max(1.0, Math.min(...activeFactors)) : 1.0;
   }
 }
 
@@ -703,6 +747,16 @@ function assertWaypoint(waypoint: Waypoint, label: string) {
   assert(finiteNumber(waypoint.startTime), `${label} has invalid startTime: ${String(waypoint.startTime)}`);
   assert(finiteNumber(waypoint.arrivalTime), `${label} has invalid arrivalTime: ${String(waypoint.arrivalTime)}`);
   assert(finiteNumber(waypoint.speedFactor) && waypoint.speedFactor >= 0, `${label} has invalid speedFactor: ${String(waypoint.speedFactor)}`);
+  assert(waypoint.stopName === undefined || typeof waypoint.stopName === 'string', `${label} has invalid stopName`);
+  assert(waypoint.isWalk === undefined || typeof waypoint.isWalk === 'boolean', `${label} has invalid isWalk`);
+  assert(waypoint.isWait === undefined || typeof waypoint.isWait === 'boolean', `${label} has invalid isWait`);
+  assert(waypoint.isInterstop === undefined || typeof waypoint.isInterstop === 'boolean', `${label} has invalid isInterstop`);
+  assert(waypoint.route_color === undefined || typeof waypoint.route_color === 'string', `${label} has invalid route_color`);
+  assert(waypoint.route_short_name === undefined || typeof waypoint.route_short_name === 'string', `${label} has invalid route_short_name`);
+  assert(waypoint.display_name === undefined || typeof waypoint.display_name === 'string', `${label} has invalid display_name`);
+  assert(waypoint.emoji === undefined || typeof waypoint.emoji === 'string', `${label} has invalid emoji`);
+  assert(waypoint.route_departure_time === undefined || typeof waypoint.route_departure_time === 'string', `${label} has invalid route_departure_time`);
+  assert(waypoint.timeStr === undefined || typeof waypoint.timeStr === 'string', `${label} has invalid timeStr`);
 }
 
 function installDeterminism(clock: FakeClock, rng: Rng) {
