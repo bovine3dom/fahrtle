@@ -19,6 +19,7 @@ type Client = {
   connected: boolean;
   wsData: WsData;
   inbox: unknown[];
+  checkedInboxLength: number;
 };
 
 type TraceEntry = {
@@ -214,6 +215,7 @@ class MultiplayerFuzzer {
       connected: false,
       wsData: { roomId: null, playerId: null },
       inbox: [],
+      checkedInboxLength: 0,
     }));
   }
 
@@ -403,6 +405,7 @@ class MultiplayerFuzzer {
     client.connected = true;
     client.wsData = { roomId: null, playerId: null };
     client.inbox = [];
+    client.checkedInboxLength = 0;
     this.send(client, {
       type: 'JOIN_ROOM',
       roomId: client.roomId,
@@ -766,6 +769,8 @@ class MultiplayerFuzzer {
   }
 
   private assertInvariants() {
+    this.assertInboxMessages();
+
     const seenTimerIds = new Set<number>();
     for (const [roomId, subscribers] of this.subscriptions) {
       assert(this.rooms.has(roomId), `subscriptions exist for missing room ${roomId}`);
@@ -835,6 +840,15 @@ class MultiplayerFuzzer {
     }
 
     assert(this.clock.activeTimerCount() <= this.rooms.size, `too many active timers: ${this.clock.activeTimerCount()} for ${this.rooms.size} rooms`);
+  }
+
+  private assertInboxMessages() {
+    for (const client of this.clients) {
+      for (let i = client.checkedInboxLength; i < client.inbox.length; i++) {
+        assertServerMessage(client.inbox[i], `${client.id} inbox ${i}`);
+      }
+      client.checkedInboxLength = client.inbox.length;
+    }
   }
 
   private cleanupAndAssert() {
@@ -917,6 +931,122 @@ class MultiplayerFuzzer {
 
 function isMessage(message: unknown, type: string): message is Record<string, any> {
   return !!message && typeof message === 'object' && (message as { type?: unknown }).type === type;
+}
+
+function assertServerMessage(message: unknown, label: string) {
+  assert(message && typeof message === 'object', `${label} is not an object`);
+  const msg = message as Record<string, any>;
+  assert(typeof msg.type === 'string', `${label} has invalid type`);
+
+  if (msg.type === 'ROOM_STATE' || msg.type === 'ROOM_STATE_UPDATE') {
+    assertRoomStateMessage(msg, label, msg.type === 'ROOM_STATE');
+    return;
+  }
+  if (msg.type === 'SYNC_RESPONSE') {
+    assert(msg.clientSendTime === undefined || finiteNumber(msg.clientSendTime), `${label} has invalid clientSendTime`);
+    assert(finiteNumber(msg.serverTime), `${label} has invalid serverTime`);
+    assert(finiteNumber(msg.realTime), `${label} has invalid realTime`);
+    assert(finiteNumber(msg.rate) && msg.rate >= 0, `${label} has invalid rate`);
+    return;
+  }
+  if (msg.type === 'CLOCK_UPDATE') {
+    assert(finiteNumber(msg.serverTime), `${label} has invalid serverTime`);
+    assert(finiteNumber(msg.realTime), `${label} has invalid realTime`);
+    assert(finiteNumber(msg.rate) && msg.rate >= 0, `${label} has invalid rate`);
+    return;
+  }
+  if (msg.type === 'PLAYER_JOINED') {
+    assertPlayerMessage(msg.player, `${label}.player`);
+    if (msg.playerId !== undefined) assert(msg.playerId === msg.player.id, `${label} playerId does not match player.id`);
+    return;
+  }
+  if (msg.type === 'PLAYER_LEFT') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    return;
+  }
+  if (msg.type === 'READY_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(typeof msg.isReady === 'boolean', `${label} has invalid isReady`);
+    return;
+  }
+  if (msg.type === 'PLAYER_COLOR_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(typeof msg.color === 'string', `${label} has invalid color`);
+    return;
+  }
+  if (msg.type === 'PLAYER_SNOOZE_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(finiteNumber(msg.desiredRate), `${label} has invalid desiredRate`);
+    assert(typeof msg.forceRealtime === 'boolean', `${label} has invalid forceRealtime`);
+    return;
+  }
+  if (msg.type === 'PLAYER_VIEW_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(msg.viewingStopName === null || typeof msg.viewingStopName === 'string', `${label} has invalid viewingStopName`);
+    return;
+  }
+  if (msg.type === 'PLAYER_FINISH_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(msg.finishTime === null || finiteNumber(msg.finishTime), `${label} has invalid finishTime`);
+    return;
+  }
+  if (msg.type === 'PLAYER_WAYPOINTS_UPDATE') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(Array.isArray(msg.waypoints) && msg.waypoints.length > 0, `${label} has invalid waypoints`);
+    msg.waypoints.forEach((waypoint: Waypoint, index: number) => assertWaypoint(waypoint, `${label}.waypoints[${index}]`));
+    return;
+  }
+  if (msg.type === 'WAYPOINT_ADDED') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assertWaypoint(msg.waypoint, `${label}.waypoint`);
+    return;
+  }
+  if (msg.type === 'RECV_PING') {
+    assert(typeof msg.playerId === 'string', `${label} has invalid playerId`);
+    assert(finiteNumber(msg.lat) && msg.lat >= -90 && msg.lat <= 90, `${label} has invalid lat`);
+    assert(finiteNumber(msg.lon) && msg.lon >= -180 && msg.lon <= 180, `${label} has invalid lon`);
+    assert(finiteNumber(msg.timestamp), `${label} has invalid timestamp`);
+    return;
+  }
+
+  assert(false, `${label} has unknown message type ${msg.type}`);
+}
+
+function assertRoomStateMessage(msg: Record<string, any>, label: string, expectPlayers: boolean) {
+  assert(msg.state === 'JOINING' || msg.state === 'COUNTDOWN' || msg.state === 'RUNNING', `${label} has invalid state`);
+  assert(msg.countdownEnd === null || finiteNumber(msg.countdownEnd), `${label} has invalid countdownEnd`);
+  assert(msg.gameStartTime === null || finiteNumber(msg.gameStartTime), `${label} has invalid gameStartTime`);
+  assertCoord(msg.startPos, `${label}.startPos`);
+  if (msg.finishPos !== null) assertCoord(msg.finishPos, `${label}.finishPos`);
+  assert(msg.difficulty === 'Easy' || msg.difficulty === 'Normal' || msg.difficulty === 'Transport nerd', `${label} has invalid difficulty`);
+  assert(typeof msg.league === 'string' && /^\d{8}$/.test(msg.league), `${label} has invalid league`);
+  assert(finiteNumber(msg.serverTime), `${label} has invalid serverTime`);
+  assert(finiteNumber(msg.realTime), `${label} has invalid realTime`);
+  assert(typeof msg.isRerun === 'boolean', `${label} has invalid isRerun`);
+  assert(finiteNumber(msg.rate) && msg.rate >= 0, `${label} has invalid rate`);
+  if (expectPlayers) {
+    assert(msg.players && typeof msg.players === 'object' && !Array.isArray(msg.players), `${label} has invalid players`);
+    for (const [playerId, player] of Object.entries(msg.players)) {
+      assertPlayerMessage(player, `${label}.players.${playerId}`);
+      assert((player as { id: string }).id === playerId, `${label}.players.${playerId} key/id mismatch`);
+    }
+  }
+}
+
+function assertPlayerMessage(value: unknown, label: string) {
+  assert(value && typeof value === 'object', `${label} is not an object`);
+  const player = value as Record<string, any>;
+  assert(typeof player.id === 'string', `${label} has invalid id`);
+  assert(typeof player.color === 'string', `${label} has invalid color`);
+  assert(typeof player.isReady === 'boolean', `${label} has invalid isReady`);
+  assert(Array.isArray(player.waypoints) && player.waypoints.length > 0, `${label} has invalid waypoints`);
+  assert(finiteNumber(player.desiredRate), `${label} has invalid desiredRate`);
+  assert(typeof player.forceRealtime === 'boolean', `${label} has invalid forceRealtime`);
+  assert(player.finishTime === null || finiteNumber(player.finishTime), `${label} has invalid finishTime`);
+  assert(player.disconnectedAt === null || finiteNumber(player.disconnectedAt), `${label} has invalid disconnectedAt`);
+  assert(player.viewingStopName === null || typeof player.viewingStopName === 'string', `${label} has invalid viewingStopName`);
+  assert(typeof player.isGhost === 'boolean', `${label} has invalid isGhost`);
+  player.waypoints.forEach((waypoint: Waypoint, index: number) => assertWaypoint(waypoint, `${label}.waypoints[${index}]`));
 }
 
 function assertCoord(value: unknown, label: string): asserts value is [number, number] {
