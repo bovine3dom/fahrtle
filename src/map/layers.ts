@@ -4,13 +4,6 @@ import { map_update_lock } from '../utils/map_lock';
 import { getBeforeId } from '../utils/layer_order';
 import { give_me_more_trains } from '../utils/i_bloody_love_trains';
 
-const ensureMapLoaded = (map: maplibregl.Map) => {
-  return new Promise<void>((resolve) => {
-    if (map.isStyleLoaded()) resolve();
-    else map.once('idle', () => resolve());
-  });
-};
-
 export const getCrowKmColor = (crowKm: number): string => {
   const normalized = Math.sqrt(Math.max(crowKm / 200, 0));
   return interpolateSpectral(normalized);
@@ -84,7 +77,6 @@ const basemapSettingToStyle = (setting: string): string | maplibregl.StyleSpecif
 export async function updateBasemap(map: maplibregl.Map, setting: string) {
   const unlock = await map_update_lock.lock();
   try {
-    await ensureMapLoaded(map);
     const styleSpec = basemapSettingToStyle(setting);
     const existingLayers = map.getStyle()?.layers;
     const existingSources = map.getStyle()?.sources;
@@ -122,7 +114,6 @@ export async function updateRailwaysLayer(map: maplibregl.Map, setting: string) 
     if (path === null) {
       if (layerExists) map.setLayoutProperty('openrailwaymap-layer', 'visibility', 'none');
     } else {
-      await ensureMapLoaded(map);
       if (layerExists) map.removeLayer('openrailwaymap-layer');
       if (sourceExists) map.removeSource('openrailwaymap');
       map.addSource('openrailwaymap', { type: 'raster', tiles: [`https://tiles.openrailwaymap.org${path}{z}/{x}/{y}.png`], tileSize: 256, attribution: '&copy; <a href="https://www.openrailwaymap.org">OpenRailwayMap</a>' });
@@ -143,13 +134,12 @@ export async function updateTransportLayer(map: maplibregl.Map, setting: string)
     const style = await fetch('./public_transport.json').then(r => r.json());
     style.layers.forEach((l: any) => { if (map.getLayer(`${sourceId}-${l.id}`)) map.removeLayer(`${sourceId}-${l.id}`); });
     if (map.getSource(sourceId)) map.removeSource(sourceId);
-    await ensureMapLoaded(map);
     map.addSource(sourceId, style.sources.openmaptiles as any);
     for (const layer of style.layers) map.addLayer({ ...layer, id: `${sourceId}-${layer.id}`, source: sourceId }, getBeforeId(`${sourceId}-${layer.id}`, map));
   } finally { unlock(); }
 }
 
-export async function updateBathymetryLayer(map: maplibregl.Map, setting: string) {
+export async function updateBathymetryLayer(map: maplibregl.Map, setting: boolean) {
   const unlock = await map_update_lock.lock();
   try {
     if (map.getLayer('water-bathymetry')) map.removeLayer('water-bathymetry');
@@ -191,7 +181,6 @@ export async function updateBathymetryLayer(map: maplibregl.Map, setting: string
 export async function updateHillShadeLayer(map: maplibregl.Map, setting: boolean) {
   const unlock = await map_update_lock.lock();
   try {
-    await ensureMapLoaded(map);
     if (map.getLayer('mapterhorn-layer')) map.removeLayer('mapterhorn-layer');
     if (map.getSource('mapterhorn')) map.removeSource('mapterhorn');
     if (!setting) return;
@@ -203,8 +192,12 @@ export async function updateHillShadeLayer(map: maplibregl.Map, setting: boolean
 export async function updateTerrain(map: maplibregl.Map, setting: boolean) {
   const unlock = await map_update_lock.lock();
   try {
-    await ensureMapLoaded(map);
+    if (!setting) {
+      map.setTerrain(null);
+      if (map.getSource('mapterhorn-3d')) map.removeSource('mapterhorn-3d');
+      return;
+    }
     if (!map.getSource('mapterhorn-3d')) map.addSource('mapterhorn-3d', { type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json', maxzoom: 15 });
-    map.setTerrain(setting ? { source: 'mapterhorn-3d', exaggeration: 3 } : null);
+    map.setTerrain({ source: 'mapterhorn-3d', exaggeration: 3 });
   } finally { unlock(); }
 }
