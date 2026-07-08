@@ -495,11 +495,11 @@ export default function Lobby() {
 }
 
 function logAllDailyRaces() {
-  getRaces().then(async (races) => {
+  getRaces().then((races) => {
     races.forEach((race, i) => {
-      const startCity = getClosestCityObject(race.start[0], race.start[1]);
-      const finishCity = getClosestCityObject(race.finish[0], race.finish[1]);
-      console.log(`Race ${i}: ${startCity} ➡️ ${finishCity}`);
+      const startCity = getClosestCityObject(race.start_lat, race.start_lon);
+      const finishCity = getClosestCityObject(race.finish_lat, race.finish_lon);
+      console.log(`Race ${i} (${race.league}): ${startCity} ➡️ ${finishCity}`);
     });
   });
 }
