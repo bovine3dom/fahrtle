@@ -256,6 +256,7 @@ class MultiplayerFuzzer {
         () => this.forceRealtime(),
         () => this.setViewingStop(),
         () => this.sendPing(),
+        () => this.switchRoom(),
         () => this.disconnect(),
         () => this.closeStaleConnection(),
         () => this.addGhosts(),
@@ -322,6 +323,10 @@ class MultiplayerFuzzer {
           this.subscriptions.set(roomId, subscribers);
         }
         subscribers.add(client.id);
+      },
+      unsubscribeFromRoom: (roomId) => {
+        if (!client?.connected) return;
+        this.subscriptions.get(roomId)?.delete(client.id);
       },
       shouldDeletePlayer: (roomId, playerId) => !this.clients.some((c) => c.connected && c.wsData.roomId === roomId && c.wsData.playerId === playerId),
     };
@@ -461,6 +466,19 @@ class MultiplayerFuzzer {
         && message.lon === lon
         && message.timestamp === this.clock.nowMs), `ping from ${client.id} was not delivered to ${recipient.id}`);
     }
+  }
+
+  private switchRoom() {
+    if (this.options.rooms < 2) return this.sendSyncRequest();
+    const client = this.rng.pick(this.joinedClients());
+    const currentIndex = Number(client.wsData.roomId?.replace('room-', '') ?? 0);
+    const nextIndex = (currentIndex + 1 + this.rng.int(this.options.rooms - 1)) % this.options.rooms;
+    this.send(client, {
+      type: 'JOIN_ROOM',
+      roomId: `room-${nextIndex}`,
+      playerId: client.playerId,
+      color: this.colorFor(client),
+    }, 'SWITCH_ROOM');
   }
 
   private disconnect() {
