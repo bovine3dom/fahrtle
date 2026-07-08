@@ -429,7 +429,8 @@ function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint
         const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
         finalArrival = start + distance / BASE_SPEED;
     }
-    if (!Number.isFinite(finalArrival) || finalArrival < start) return null;
+    if (!Number.isFinite(finalArrival)) return null;
+    finalArrival = Math.max(finalArrival, start);
 
     return {
         x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,

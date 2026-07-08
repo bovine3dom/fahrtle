@@ -272,6 +272,8 @@ class MultiplayerFuzzer {
         () => this.addWaypoint(),
         () => this.addWaypointsBatch(),
         () => this.addPlannedService(),
+        () => this.addStaleTeleport(),
+        () => this.addRailStyleEarlyBatch(),
         () => this.advanceToNextWaypointEvent(),
         () => this.stopImmediately(),
         () => this.finishPlayer(),
@@ -561,6 +563,45 @@ class MultiplayerFuzzer {
     this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_PLANNED_SERVICE');
   }
 
+  private addStaleTeleport() {
+    const client = this.rng.pick(this.routingClients());
+    this.syncRoomFor(client);
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const player = room.players[client.wsData.playerId!];
+    const beforeCount = player.waypoints.length;
+    const last = player.waypoints[player.waypoints.length - 1];
+    const staleArrival = room.virtualTime - 1 - this.rng.int(5000);
+    const waypoint: Omit<Waypoint, 'startTime'> = {
+      x: this.safeX(last.x + this.deltaCoord()),
+      y: this.safeY(last.y + this.deltaCoord()),
+      arrivalTime: staleArrival,
+      speedFactor: 1,
+      stopName: 'stale teleport',
+    };
+    this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints: [waypoint] }, 'ADD_STALE_TELEPORT');
+    assert(player.waypoints.length === beforeCount + 1, `stale teleport was rejected for ${client.id}`);
+    assert(player.waypoints[player.waypoints.length - 1].arrivalTime >= Math.max(last.arrivalTime, room.virtualTime), `stale teleport was not clamped for ${client.id}`);
+  }
+
+  private addRailStyleEarlyBatch() {
+    const client = this.rng.pick(this.routingClients());
+    this.syncRoomFor(client);
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const player = room.players[client.wsData.playerId!];
+    const beforeCount = player.waypoints.length;
+    const last = player.waypoints[player.waypoints.length - 1];
+    const start = Math.max(last.arrivalTime, room.virtualTime);
+    const stationX = this.safeX(last.x + this.deltaCoord());
+    const stationY = this.safeY(last.y + this.deltaCoord());
+    const waypoints: Array<Omit<Waypoint, 'startTime'>> = [
+      { x: stationX, y: stationY, arrivalTime: start + 90_000, speedFactor: 1, stopName: 'walk to rail', isWalk: true, emoji: '🐾' },
+      { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 5_000, speedFactor: 20, stopName: 'early rail interstop', isInterstop: true, route_short_name: 'R' },
+      { x: this.safeX(stationX + this.deltaCoord()), y: this.safeY(stationY + this.deltaCoord()), arrivalTime: start + 20_000, speedFactor: 20, stopName: 'early rail stop', route_short_name: 'R', route_departure_time: '12:00' },
+    ];
+    this.send(client, { type: 'ADD_WAYPOINTS_BATCH', waypoints }, 'ADD_RAIL_EARLY_BATCH');
+    assert(player.waypoints.length === beforeCount + waypoints.length, `rail-style early batch was rejected for ${client.id}`);
+  }
+
   private advanceToNextWaypointEvent() {
     const candidates = Array.from(this.rooms.values()).filter((room) => room.state === 'RUNNING' && this.subscriberCount(room.id) > 0 && room.playbackRate > 0 && this.nextWaypointEvent(room) !== null);
     if (candidates.length === 0) return this.advanceTime();
@@ -782,6 +823,14 @@ class MultiplayerFuzzer {
 
   private deltaCoord() {
     return (this.rng.next() - 0.5) * 0.2;
+  }
+
+  private safeX(value: number) {
+    return Math.max(-179, Math.min(179, value));
+  }
+
+  private safeY(value: number) {
+    return Math.max(-89, Math.min(89, value));
   }
 
   private colorFor(client: Client) {
