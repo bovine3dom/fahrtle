@@ -314,9 +314,65 @@ function requireRoomAndPlayer(
     const room = rooms.get(wsData.roomId);
     if (!room) return null;
     if (opts.requireRunning && room.state !== 'RUNNING') return null;
-    const player = room.players[wsData.playerId];
+    const player = Object.prototype.hasOwnProperty.call(room.players, wsData.playerId) ? room.players[wsData.playerId] : undefined;
     if (!player) return null;
     return { room, player };
+}
+
+function isObject(value: unknown): value is Record<string, any> {
+    return typeof value === 'object' && value !== null;
+}
+
+function isSafeKey(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0 && value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
+}
+
+function isFiniteCoord(value: unknown): value is [number, number] {
+    return Array.isArray(value) && value.length === 2
+        && Number.isFinite(value[0]) && Number.isFinite(value[1])
+        && value[0] >= -90 && value[0] <= 90
+        && value[1] >= -180 && value[1] <= 180;
+}
+
+function isValidWaypointList(value: unknown): value is Waypoint[] {
+    if (!Array.isArray(value) || value.length === 0) return false;
+    let previousArrival = -Infinity;
+    for (const wp of value) {
+        if (!isObject(wp)
+            || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
+            || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
+            || !Number.isFinite(wp.startTime)
+            || !Number.isFinite(wp.arrivalTime)
+            || !Number.isFinite(wp.speedFactor) || wp.speedFactor < 0
+            || wp.startTime < previousArrival
+            || wp.arrivalTime < wp.startTime) return false;
+        previousArrival = wp.arrivalTime;
+    }
+    return true;
+}
+
+function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint | null {
+    if (!isObject(wp)
+        || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
+        || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
+        || !Number.isFinite(wp.speedFactor) || wp.speedFactor < 0) return null;
+
+    const start = Math.max(lastPoint.arrivalTime, roomTime);
+    let finalArrival = wp.arrivalTime;
+    if (finalArrival === undefined) {
+        const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
+        finalArrival = start + distance / BASE_SPEED;
+    }
+    if (!Number.isFinite(finalArrival) || finalArrival < start) return null;
+
+    return {
+        x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
+        speedFactor: wp.speedFactor, stopName: typeof wp.stopName === 'string' ? wp.stopName : undefined,
+        isWalk: wp.isWalk || false, isWait: wp.isWait || false, isInterstop: wp.isInterstop || false,
+        route_color: wp.route_color, route_short_name: wp.route_short_name,
+        display_name: wp.display_name, emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
+        route_departure_time: wp.route_departure_time, timeStr: wp.timeStr
+    };
 }
 
 function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHooks) {
@@ -350,6 +406,7 @@ function handleJoinRoom(
 ) {
     const now = Date.now();
     const { roomId, playerId, color } = message;
+    if (!isSafeKey(roomId) || !isSafeKey(playerId)) return;
 
     let room = rooms.get(roomId);
     if (!room) {
@@ -410,6 +467,7 @@ function handleRaceAgain(
     triggerUpdate: (rid: string) => void
 ) {
     const { room, player } = result;
+    if (!isValidWaypointList(message.waypoints)) return;
     const ghostId = `👻-${generatePilotName()}`;
     const hue = Math.floor(Math.random() * 360);
     const ghost: Player = {
@@ -446,6 +504,10 @@ function handleSetGameBounds(
     triggerUpdate: (rid: string) => void
 ) {
     if (room.state !== 'JOINING') return;
+    if (!isFiniteCoord(message.startPos)) return;
+    if (message.finishPos !== null && !isFiniteCoord(message.finishPos)) return;
+    if (message.startTime !== undefined && !Number.isFinite(message.startTime)) return;
+    if (typeof message.league !== 'string' || message.league.length === 0) return;
 
     const prevStart = room.startPos;
     room.startPos = message.startPos;
@@ -546,6 +608,8 @@ export function handleIncomingMessage(
     hooks: GameHooks,
     updateRoomCallback: (roomId: string) => void
 ) {
+    if (!isObject(message)) return;
+
     const triggerUpdate = (rid: string) => {
         const r = rooms.get(rid);
         if (r) updateRoomLogic(r, hooks, updateRoomCallback);
@@ -578,6 +642,7 @@ export function handleIncomingMessage(
         const { ghosts } = message;
         if (!Array.isArray(ghosts)) return;
         for (const ghostData of ghosts) {
+            if (!isObject(ghostData) || typeof ghostData.playerName !== 'string' || !isValidWaypointList(ghostData.waypoints)) continue;
             const { playerName, waypoints, color } = ghostData;
             const ghostId = `👻-${playerName}`;
             const ghost: Player = {
@@ -595,6 +660,7 @@ export function handleIncomingMessage(
     if (message.type === 'UPDATE_PLAYER_COLOR') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (typeof message.color !== 'string') return;
         r.player.color = message.color;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_COLOR_UPDATE', playerId: wsData.playerId, color: r.player.color });
         return;
@@ -640,26 +706,18 @@ export function handleIncomingMessage(
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r) return;
         stepClock(r.room);
-        r.player.viewingStopName = null;
         const { waypoints } = message;
         if (!Array.isArray(waypoints) || waypoints.length === 0) return;
+        const nextWaypoints: Waypoint[] = [];
+        let lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
         for (const wp of waypoints) {
-            const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-            let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
-            let finalArrival = wp.arrivalTime;
-            if (finalArrival === undefined) {
-                const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
-                finalArrival = start + distance / BASE_SPEED;
-            }
-            r.player.waypoints.push({
-                x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
-                speedFactor: wp.speedFactor, stopName: wp.stopName,
-                isWalk: wp.isWalk || false, isWait: wp.isWait || false, isInterstop: wp.isInterstop || false,
-                route_color: wp.route_color, route_short_name: wp.route_short_name,
-                display_name: wp.display_name, emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
-                route_departure_time: wp.route_departure_time, timeStr: wp.timeStr
-            });
+            const next = buildWaypoint(wp, lastPoint, r.room.virtualTime);
+            if (!next) return;
+            nextWaypoints.push(next);
+            lastPoint = next;
         }
+        r.player.viewingStopName = null;
+        r.player.waypoints.push(...nextWaypoints);
         hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: r.player.waypoints });
         triggerUpdate(wsData.roomId!);
         return;
@@ -671,19 +729,9 @@ export function handleIncomingMessage(
         stepClock(r.room);
         const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-        let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
-        let finalArrival = arrivalTime;
-        if (finalArrival === undefined) {
-            const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: y, lon: x }) || 0;
-            finalArrival = start + distance / BASE_SPEED;
-        }
+        const newWaypoint = buildWaypoint({ x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop }, lastPoint, r.room.virtualTime);
+        if (!newWaypoint) return;
         r.player.viewingStopName = null;
-        const newWaypoint: Waypoint = {
-            x, y, startTime: start, arrivalTime: finalArrival, speedFactor,
-            stopName: stopName || undefined, isWalk: isWalk || false, isWait: isWait || false, isInterstop: isInterstop || false,
-            route_color, route_short_name, display_name, emoji: isWalk ? '🐾' : (isWait ? '⏳' : emoji),
-            route_departure_time, timeStr
-        };
         r.player.waypoints.push(newWaypoint);
         hooks.publish(wsData.roomId!, { type: 'WAYPOINT_ADDED', playerId: wsData.playerId, waypoint: newWaypoint });
         triggerUpdate(wsData.roomId!);
@@ -699,7 +747,7 @@ export function handleIncomingMessage(
 
     if (message.type === 'PLAYER_FINISHED') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
-        if (!r || r.player.finishTime) return;
+        if (!r || r.player.finishTime !== null || !Number.isFinite(message.finishTime) || message.finishTime < 0) return;
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
         return;
@@ -710,7 +758,8 @@ export function handleIncomingMessage(
         const room = rooms.get(wsData.roomId);
         if (!room) return;
         const { playerId } = message;
-        if (!playerId || !room.players[playerId]) return;
+        if (!isSafeKey(playerId) || !Object.prototype.hasOwnProperty.call(room.players, playerId)) return;
+        if (!room.players[playerId].isGhost) return;
         delete room.players[playerId];
         hooks.publish(wsData.roomId, { type: 'PLAYER_LEFT', playerId });
         checkCountdownLogic(room, hooks);
@@ -722,7 +771,7 @@ export function handleIncomingMessage(
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
         const { lat, lon } = message;
-        if (typeof lat !== 'number' || typeof lon !== 'number') return;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
         hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: Date.now() });
     }
 }
