@@ -807,11 +807,8 @@ export function handleIncomingMessage(
 }
 
 function checkCountdownLogic(room: Room, hooks: GameHooks) {
-    const pCount = Object.keys(room.players).filter(pid => !room.players[pid].isGhost).length;
-    const readyCount = Object.values(room.players)
-        .filter(p => !p.isGhost && p.isReady)
-        .length;
-    const allReady = pCount > 0 && readyCount === pCount;
+    const activePlayers = Object.values(room.players).filter(p => !p.isGhost && !p.disconnectedAt);
+    const allReady = activePlayers.length > 0 && activePlayers.every(p => p.isReady);
 
     if (room.state === 'JOINING' && allReady) {
         room.state = 'COUNTDOWN';
@@ -866,7 +863,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     // Cleanup check
     if (room.emptySince !== null) {
         const emptyDuration = Date.now() - room.emptySince;
-        if (emptyDuration > MAX_IDLE_TIME) {
+        if (emptyDuration >= MAX_IDLE_TIME) {
             if (room.timerId) clearTimeout(room.timerId);
             hooks.onRoomDeleted?.(room.id);
             return;
@@ -876,7 +873,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     for (const pid in room.players) {
         const p = room.players[pid];
         if (pid === 'the-stig-🏎️') continue;
-        if (p.disconnectedAt && Date.now() - p.disconnectedAt > MAX_IDLE_TIME) {
+        if (p.disconnectedAt && Date.now() - p.disconnectedAt >= MAX_IDLE_TIME) {
             if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
                 delete room.players[pid];
                 hooks.publish(room.id, {
@@ -894,6 +891,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
         room.gameStartTime = room.virtualTime;
         room.countdownEnd = null;
         for (const player of Object.values(room.players)) {
+            if (!player.isGhost) player.isReady = true;
             if (!player.isGhost && player.waypoints.length === 1) {
                 player.waypoints[0].startTime = room.virtualTime;
                 player.waypoints[0].arrivalTime = room.virtualTime;
@@ -937,7 +935,9 @@ export function handleGameClose(
         if (room) {
             const player = room.players[wsData.playerId];
             if (player) {
+                if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(wsData.roomId, wsData.playerId)) return;
                 player.disconnectedAt = Date.now();
+                checkCountdownLogic(room, hooks);
 
                 const roomConnections = hooks.getSubscriberCount(wsData.roomId);
                 if (roomConnections > 0) {

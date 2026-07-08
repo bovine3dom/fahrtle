@@ -28,9 +28,34 @@ type GhostEntry = {
 type WSData = {
   roomId: string | null;
   playerId: string | null;
+  connectionKey: string | null;
 };
 
 const rooms = new Map<string, Room>();
+const playerConnections = new Map<string, number>();
+
+function getPlayerConnectionKey(roomId: string, playerId: string) {
+  return `${roomId}\u0000${playerId}`;
+}
+
+function removePlayerConnection(key: string) {
+  const nextCount = (playerConnections.get(key) ?? 0) - 1;
+  if (nextCount <= 0) playerConnections.delete(key);
+  else playerConnections.set(key, nextCount);
+}
+
+function addPlayerConnection(ws: ServerWebSocket<WSData>) {
+  if (!ws.data.roomId || !ws.data.playerId) return;
+  const nextKey = getPlayerConnectionKey(ws.data.roomId, ws.data.playerId);
+  if (ws.data.connectionKey === nextKey) return;
+  if (ws.data.connectionKey) removePlayerConnection(ws.data.connectionKey);
+  ws.data.connectionKey = nextKey;
+  playerConnections.set(nextKey, (playerConnections.get(nextKey) ?? 0) + 1);
+}
+
+function shouldDeletePlayer(roomId: string, playerId: string) {
+  return (playerConnections.get(getPlayerConnectionKey(roomId, playerId)) ?? 0) === 0;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -127,13 +152,17 @@ const server = serve<WSData>({
   },
   websocket: {
     open(ws: ServerWebSocket<WSData>) {
-      ws.data = { roomId: null, playerId: null };
+      ws.data = { roomId: null, playerId: null, connectionKey: null };
     },
     message(ws: ServerWebSocket<WSData>, msg: string | Uint8Array) {
       const message = JSON.parse(String(msg));
       handleIncomingMessage(message, rooms, ws.data, getwsHooks(ws), updateRoom);
     },
     close(ws: ServerWebSocket<WSData>) {
+      if (ws.data.connectionKey) {
+        removePlayerConnection(ws.data.connectionKey);
+        ws.data.connectionKey = null;
+      }
       handleGameClose(rooms, ws.data, getwsHooks(ws), updateRoom);
     }
   }
@@ -150,7 +179,11 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
       log(`Room: ${roomId}: Deleted.`);
     },
     sendToSender: (message: any) => ws.send(JSON.stringify(message)),
-    subscribeToRoom: (roomId: string) => ws.subscribe(roomId)
+    subscribeToRoom: (roomId: string) => {
+      ws.subscribe(roomId);
+      addPlayerConnection(ws);
+    },
+    shouldDeletePlayer
   };
 }
 
@@ -164,7 +197,8 @@ const gameHooks: GameHooks = {
     log(`Room: ${roomId}: Deleted.`);
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
-  subscribeToRoom: () => { /* Server root doesn't subscribe */ }
+  subscribeToRoom: () => { /* Server root doesn't subscribe */ },
+  shouldDeletePlayer
 };
 
 function getGameHooks(): GameHooks {
