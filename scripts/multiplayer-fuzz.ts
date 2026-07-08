@@ -259,6 +259,7 @@ class MultiplayerFuzzer {
         () => this.setViewingStop(),
         () => this.sendPing(),
         () => this.switchRoom(),
+        () => this.duplicateSession(),
         () => this.disconnect(),
         () => this.closeStaleConnection(),
         () => this.addGhosts(),
@@ -482,6 +483,26 @@ class MultiplayerFuzzer {
       playerId: client.playerId,
       color: this.colorFor(client),
     }, 'SWITCH_ROOM');
+  }
+
+  private duplicateSession() {
+    const target = this.rng.pick(this.joinedClients());
+    const candidates = this.clients.filter((client) => client.id !== target.id
+      && (!client.connected || client.wsData.roomId !== target.wsData.roomId || client.wsData.playerId !== target.wsData.playerId));
+    if (candidates.length === 0) return this.sendSyncRequest();
+    const client = this.rng.pick(candidates);
+    if (!client.connected) {
+      client.connected = true;
+      client.wsData = { roomId: null, playerId: null };
+      client.inbox = [];
+      client.checkedInboxLength = 0;
+    }
+    this.send(client, {
+      type: 'JOIN_ROOM',
+      roomId: target.wsData.roomId,
+      playerId: target.wsData.playerId,
+      color: this.colorFor(client),
+    }, 'DUPLICATE_SESSION');
   }
 
   private disconnect() {
