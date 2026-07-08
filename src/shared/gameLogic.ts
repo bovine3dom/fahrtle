@@ -160,6 +160,14 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
     const now = Date.now();
     let delay = MAX_IDLE_TIME;
 
+    if (room.emptySince !== null) {
+        delay = Math.min(delay, room.emptySince + MAX_IDLE_TIME - now);
+    }
+
+    for (const player of Object.values(room.players)) {
+        if (player.disconnectedAt) delay = Math.min(delay, player.disconnectedAt + MAX_IDLE_TIME - now);
+    }
+
     if (room.state === 'COUNTDOWN' && room.countdownEnd) {
         const timeToStart = room.countdownEnd - now;
         delay = Math.max(0, timeToStart);
@@ -492,7 +500,7 @@ function handleRaceAgain(
     hooks: GameHooks,
     triggerUpdate: (rid: string) => void
 ) {
-    const { room, player } = result;
+    const { room } = result;
     if (!isValidWaypointList(message.waypoints)) return;
     const ghostId = `👻-${generatePilotName()}`;
     const hue = Math.floor(Math.random() * 360);
@@ -504,20 +512,29 @@ function handleRaceAgain(
 
     room.players[ghostId] = ghost;
 
-    const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
-    player.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
-    player.isReady = false;
-    player.finishTime = null;
-
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: null });
     room.state = 'JOINING';
     room.virtualTime = room.initialStartTime;
+    room.countdownEnd = null;
     room.gameStartTime = null;
     room.isRerun = true;
 
     hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
-    hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: false });
+    for (const pid of Object.keys(room.players)) {
+        const p = room.players[pid];
+        if (p.isGhost) continue;
+        const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
+        p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
+        p.isReady = false;
+        p.finishTime = null;
+        p.desiredRate = 1;
+        p.forceRealtime = false;
+        p.viewingStopName = null;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: pid, finishTime: null });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
+        hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: pid, isReady: false });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: pid, desiredRate: p.desiredRate, forceRealtime: p.forceRealtime });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: pid, viewingStopName: p.viewingStopName });
+    }
     hooks.broadcastRoomState(room);
     triggerUpdate(wsData.roomId!);
 }
