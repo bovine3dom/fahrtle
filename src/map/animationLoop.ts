@@ -154,7 +154,7 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
               }
             }
           }
-          if (isRunning && startTime && !player.finishTime) {
+          if (isRunning && startTime !== null && player.finishTime == null) {
             if (frameCount % 10 === 0) {
               try {
                 const finish = $gameBounds.get().finish;
