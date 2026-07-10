@@ -921,6 +921,13 @@ class MultiplayerFuzzer {
 
     const room = this.rooms.get(roomId);
     assert(room?.state === 'RUNNING', 'race again guard room did not start');
+    const existingGhostId = '👻-rerun-existing';
+    const playerStart = room.players[first.playerId].waypoints[0].startTime;
+    this.send(first, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'rerun-existing', color: '#888', waypoints: [{ x: 0, y: 0, startTime: playerStart, arrivalTime: playerStart, speedFactor: 1 }] }],
+    }, 'RACE_AGAIN_GUARD_EXISTING_GHOST');
+    assert(room.players[existingGhostId].finishTime === 0, 'existing rerun ghost did not finish');
     const elapsed = Math.max(1, room.virtualTime - (room.gameStartTime ?? room.virtualTime));
     this.send(first, { type: 'PLAYER_FINISHED', finishTime: elapsed }, 'RACE_AGAIN_GUARD_FIRST_FINISHED');
     this.send(second, { type: 'PLAYER_FINISHED', finishTime: elapsed + 1 }, 'RACE_AGAIN_GUARD_SECOND_FINISHED');
@@ -934,8 +941,33 @@ class MultiplayerFuzzer {
 
     const ghostCount = Object.values(room.players).filter((player) => player.isGhost).length;
     this.send(first, { type: 'RACE_AGAIN', waypoints: clone(room.players[first.playerId].waypoints) }, 'RACE_AGAIN_GUARD_AFTER_DISCONNECT');
-    assert(this.rooms.get(roomId)?.state === 'JOINING', 'race again did not ignore disconnected unfinished player');
-    assert(Object.values(room.players).filter((player) => player.isGhost).length === ghostCount + 2, 'race again did not create ghosts for every connected finisher');
+    const rerunRoom = this.rooms.get(roomId)!;
+    assert(rerunRoom.state === 'JOINING', 'race again did not ignore disconnected unfinished player');
+    assert(Object.values(rerunRoom.players).filter((player) => player.isGhost).length === ghostCount + 2, 'race again did not create ghosts for every connected finisher');
+    assert(rerunRoom.players[existingGhostId].finishTime === null, 'race again did not re-arm an existing ghost');
+
+    const retainedGhostIds = Object.values(rerunRoom.players).filter((player) => player.isGhost).map((player) => player.id);
+    const nextStartTime = rerunRoom.initialStartTime + 60_000;
+    this.send(second, {
+      type: 'SET_GAME_BOUNDS', startPos: rerunRoom.startPos, finishPos: rerunRoom.finishPos,
+      startTime: nextStartTime, difficulty: 'Normal', computerDriver: true,
+      ghosts: false, league: rerunRoom.league,
+    }, 'RACE_AGAIN_GUARD_CHANGE_SETTINGS');
+    assert(rerunRoom.state === 'JOINING' && rerunRoom.isRerun, 'settings change left rerun setup');
+    assert(retainedGhostIds.every((id) => Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'non-positional settings change removed a ghost');
+    assert(Object.values(rerunRoom.players).filter((player) => !player.isGhost).every((player) => !player.isReady), 'settings change readied a player');
+
+    const inboxStart = first.inbox.length;
+    this.send(first, {
+      type: 'SET_GAME_BOUNDS', startPos: [rerunRoom.startPos[0] + 0.001, rerunRoom.startPos[1]], finishPos: rerunRoom.finishPos,
+      startTime: nextStartTime, difficulty: rerunRoom.difficulty, computerDriver: rerunRoom.computerDriver,
+      ghosts: false, league: rerunRoom.league,
+    }, 'RACE_AGAIN_GUARD_CHANGE_POSITION');
+    assert(retainedGhostIds.every((id) => !Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'position change retained a ghost');
+    for (const ghostId of retainedGhostIds) {
+      const leaves = first.inbox.slice(inboxStart).filter((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === ghostId);
+      assert(leaves.length === 1, `position change emitted ${leaves.length} leave events for ${ghostId}`);
+    }
   }
 
   private disconnect() {
