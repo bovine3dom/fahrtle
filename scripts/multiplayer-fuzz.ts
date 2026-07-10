@@ -1,5 +1,6 @@
 import {
   boundsToWire,
+  getProjectedRoomClock,
   getProjectedRoomTime,
   getRoomBounds,
   handleGameClose,
@@ -12,6 +13,7 @@ import {
 } from '../src/shared/gameLogic';
 import { createClockState, projectClock } from '../src/time-sync';
 import { bindCurrentWebSocket, parseWebSocketMessage } from '../src/websocket';
+import { buildRenderablePlayer, buildRenderablePlayers, getPlayerMotionAt } from '../src/playerRendering';
 
 type WsData = { roomId: string | null; playerId: string | null };
 
@@ -231,8 +233,14 @@ class MultiplayerFuzzer {
     try {
       this.assertClockSynchronizationUnderNetworkFaults();
       this.assertStaleSocketEventsIgnored();
+      this.assertRenderableSnapshots();
+      this.assertRateBoundariesAreIntegrated();
       this.assertBoundaryInputs();
+      this.assertJoiningResetConverges();
       this.assertDisconnectedPlayersDoNotPinPlayback();
+      this.assertStopClearsViewingState();
+      this.assertGhostFinishesExactlyOnce();
+      this.assertExtremeNumbersAreRejected();
       this.assertRaceAgainRequiresConnectedFinishers();
       this.assertBroadcastClockProjection();
       this.assertServerClockRollbackDoesNotRewind();
@@ -327,16 +335,17 @@ class MultiplayerFuzzer {
     return {
       broadcastRoomState: (room) => {
         const bounds = getRoomBounds(room);
+        const projectedClock = getProjectedRoomClock(room);
         this.publish(room.id, {
           type: 'ROOM_STATE_UPDATE',
           state: room.state,
           countdownEnd: room.countdownEnd,
           gameStartTime: room.gameStartTime,
           ...boundsToWire(bounds),
-          serverTime: getProjectedRoomTime(room),
+          serverTime: projectedClock.virtualTime,
           realTime: Date.now(),
           isRerun: room.isRerun,
-          rate: room.state === 'RUNNING' ? room.playbackRate : 0,
+          rate: projectedClock.playbackRate,
         });
       },
       publish: (roomId, message) => this.publish(roomId, message),
@@ -418,7 +427,7 @@ class MultiplayerFuzzer {
     return this.runningClients().filter((client) => {
       const room = this.rooms.get(client.wsData.roomId!);
       const player = room?.players[client.wsData.playerId!];
-      return player && !player.finishTime;
+      return player && player.finishTime === null;
     });
   }
 
@@ -426,7 +435,7 @@ class MultiplayerFuzzer {
     return this.runningClients().filter((client) => {
       const room = this.rooms.get(client.wsData.roomId!);
       const player = room?.players[client.wsData.playerId!];
-      return !!player?.finishTime && player.waypoints.length > 1;
+      return player?.finishTime !== null && player?.finishTime !== undefined && player.waypoints.length > 1;
     });
   }
 
@@ -621,6 +630,102 @@ class MultiplayerFuzzer {
     assert(client.wsData.roomId === previousData.roomId && client.wsData.playerId === previousData.playerId, 'NUL-containing identity changed the connection');
   }
 
+  private assertRenderableSnapshots() {
+    for (let iteration = 0; iteration < 200; iteration++) {
+      const localStart = this.clock.nowMs + this.rng.int(1_000_000);
+      const makePlayer = (id: string, startOffset: number) => {
+        const start = localStart + startOffset;
+        const firstArrival = start + this.rng.int(10_000);
+        const secondStart = firstArrival + 1 + this.rng.int(60_000);
+        const secondArrival = secondStart + 1 + this.rng.int(60_000);
+        return {
+          id,
+          isGhost: id !== 'local',
+          waypoints: [
+            { x: 1, y: 2, startTime: start, arrivalTime: firstArrival, speedFactor: 1 },
+            { x: 3, y: 4, startTime: secondStart, arrivalTime: secondArrival, speedFactor: 20 },
+          ],
+        };
+      };
+      const local = makePlayer('local', 0);
+      const remote = makePlayer('remote', this.rng.int(120_000) - 60_000);
+      const players = this.rng.bool()
+        ? { local, remote }
+        : { remote, local };
+      const renderables = buildRenderablePlayers(players, localStart);
+      for (const [id, raw] of Object.entries(players)) {
+        const segment = renderables[id].segments[0];
+        const offset = local.waypoints[0].startTime - raw.waypoints[0].startTime;
+        assert(finiteNumber(segment.startTime) && finiteNumber(segment.endTime), `${id} snapshot produced non-finite segment times`);
+        assert(segment.startTime === raw.waypoints[1].startTime + offset, `${id} snapshot erased a timetable gap`);
+        assert(segment.endTime === raw.waypoints[1].arrivalTime + offset, `${id} snapshot changed segment arrival`);
+      }
+      const missingLocal = buildRenderablePlayer(remote);
+      assert(missingLocal.segments.every((segment) => finiteNumber(segment.startTime) && finiteNumber(segment.endTime)), 'missing local player produced non-finite segments');
+      const renderedLocal = renderables.local;
+      const gapTime = renderedLocal.waypoints[0].arrivalTime + 0.5;
+      assert(formatJson(getPlayerMotionAt(renderedLocal, gapTime)?.position) === '[1,2]', 'player moved during a timetable gap');
+      const activeTime = (renderedLocal.segments[0].startTime + renderedLocal.segments[0].endTime) / 2;
+      const activePosition = getPlayerMotionAt(renderedLocal, activeTime)?.position;
+      assert(activePosition?.[0] === 2 && activePosition[1] === 3, 'active segment interpolation was incorrect');
+      assert(formatJson(getPlayerMotionAt(renderedLocal, renderedLocal.segments[0].endTime)?.position) === '[3,4]', 'completed route did not end at its destination');
+    }
+  }
+
+  private assertRateBoundariesAreIntegrated() {
+    const player = this.testPlayer('rate-player', [
+      { x: 0, y: 0, startTime: 0, arrivalTime: 0, speedFactor: 1 },
+      { x: 1, y: 1, startTime: 0, arrivalTime: 1_000, speedFactor: 500 },
+      { x: 2, y: 2, startTime: 1_000, arrivalTime: 2_000, speedFactor: 1 },
+    ]);
+    const room = this.testRoom('rate-boundary', { [player.id]: player });
+    room.virtualTime = 0;
+    room.lastRealTime = 0;
+    room.playbackRate = 500;
+    const projectedClock = getProjectedRoomClock(room, 50);
+    assert(projectedClock.virtualTime === 1_048, `late timer skipped a rate boundary: ${projectedClock.virtualTime}`);
+    assert(projectedClock.playbackRate === 1, 'projected clock retained its pre-boundary rate');
+  }
+
+  private assertJoiningResetConverges() {
+    const client = this.clients[0];
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const ghostId = '👻-bounds-reset';
+    const start = room.virtualTime;
+    this.send(client, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'bounds-reset', color: '#888', waypoints: [{ x: 0, y: 0, startTime: start, arrivalTime: start, speedFactor: 1 }] }],
+    }, 'RESET_REGRESSION_ADD_GHOST');
+    this.send(client, { type: 'SET_VIEWING_STOP', stopName: 'stale stop' }, 'RESET_REGRESSION_VIEW_STOP');
+    const inboxStart = client.inbox.length;
+    this.send(client, {
+      type: 'SET_GAME_BOUNDS', startPos: [0, 0], finishPos: [1, 1], startTime: 0,
+      difficulty: 'Easy', computerDriver: false, ghosts: false, league: '20260706',
+    }, 'RESET_REGRESSION_SET_BOUNDS');
+    assert(room.virtualTime === 0 && room.initialStartTime === 0, 'explicit zero start time was ignored');
+    assert(!Object.prototype.hasOwnProperty.call(room.players, ghostId), 'bounds reset retained a ghost');
+    assert(room.players[client.playerId].viewingStopName === null, 'bounds reset retained authoritative viewing state');
+    assert(client.inbox.slice(inboxStart).some((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === ghostId), 'bounds reset did not publish ghost removal');
+    this.send(client, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'finish-reset', color: '#888', waypoints: [{ x: 0, y: 0, startTime: 0, arrivalTime: 0, speedFactor: 1 }] }],
+    }, 'RESET_REGRESSION_ADD_FINISH_GHOST');
+    const finishGhostId = '👻-finish-reset';
+    const finishInboxStart = client.inbox.length;
+    this.send(client, {
+      type: 'SET_GAME_BOUNDS', startPos: [0, 0], finishPos: [2, 2],
+      difficulty: 'Easy', computerDriver: false, ghosts: true, league: '20260706',
+    }, 'RESET_REGRESSION_FINISH_ONLY');
+    assert(!Object.prototype.hasOwnProperty.call(room.players, finishGhostId), 'finish-only bounds change retained a ghost');
+    assert(client.inbox.slice(finishInboxStart).some((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === finishGhostId), 'finish-only bounds change did not publish ghost removal');
+    const before = formatJson(getRoomBounds(room));
+    this.send(client, {
+      type: 'SET_GAME_BOUNDS', startPos: [5, 5], finishPos: [6, 6], startTime: Number.MAX_VALUE,
+      difficulty: 'Easy', computerDriver: false, ghosts: false, league: '20260706',
+    }, 'RESET_REGRESSION_EXTREME_TIME');
+    assert(formatJson(getRoomBounds(room)) === before && room.virtualTime === 0, 'unsafe start time partially changed room bounds');
+  }
+
   private assertClockSynchronizationUnderNetworkFaults() {
     const rates = [0, 1, 20, 500];
     for (let i = 0; i < 500; i++) {
@@ -724,6 +829,65 @@ class MultiplayerFuzzer {
     assert(room.virtualTime >= before, 'server wall-clock rollback rewound virtual time');
     this.clock.shiftWallTime(30_000);
     this.updateRoom(room.id);
+  }
+
+  private assertStopClearsViewingState() {
+    const client = this.joinedClients().find((candidate) => this.rooms.get(candidate.wsData.roomId!)?.state === 'RUNNING');
+    if (!client) return;
+    this.send(client, { type: 'SET_VIEWING_STOP', stopName: 'running stale stop' }, 'STOP_VIEW_REGRESSION_SET');
+    this.send(client, { type: 'STOP_IMMEDIATELY' }, 'STOP_VIEW_REGRESSION_STOP');
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    assert(room.players[client.wsData.playerId!].viewingStopName === null, 'stop immediately retained authoritative viewing state');
+  }
+
+  private assertGhostFinishesExactlyOnce() {
+    const client = this.joinedClients().find((candidate) => this.rooms.get(candidate.wsData.roomId!)?.state === 'RUNNING');
+    if (!client) return;
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const playerStart = room.players[client.wsData.playerId!].waypoints[0].startTime;
+    const ghostId = '👻-zero-finish';
+    const inboxStart = client.inbox.length;
+    this.send(client, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'zero-finish', color: '#888', waypoints: [{ x: 0, y: 0, startTime: playerStart, arrivalTime: playerStart, speedFactor: 1 }] }],
+    }, 'ZERO_GHOST_ADD');
+    assert(room.players[ghostId].finishTime === 0, 'late zero-duration ghost was not finished immediately');
+    this.updateRoom(room.id);
+    assert(room.players[ghostId].finishTime === 0, 'zero-duration ghost did not finish at zero');
+    const updates = client.inbox.slice(inboxStart).filter((message) => isMessage(message, 'PLAYER_FINISH_UPDATE') && message.playerId === ghostId);
+    assert(updates.length === 1, `zero-duration ghost emitted ${updates.length} finish updates`);
+  }
+
+  private assertExtremeNumbersAreRejected() {
+    const client = this.routingClients()[0];
+    if (!client) return;
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    const player = room.players[client.wsData.playerId!];
+    const waypointCount = player.waypoints.length;
+    this.send(client, {
+      type: 'ADD_WAYPOINT', x: 0, y: 0, arrivalTime: room.virtualTime + 1_000,
+      speedFactor: Number.MAX_VALUE,
+    }, 'EXTREME_SPEED_FACTOR');
+    assert(player.waypoints.length === waypointCount, 'extreme speed factor changed the route');
+    this.send(client, { type: 'PLAYER_FINISHED', finishTime: Number.MAX_VALUE }, 'EXTREME_FINISH_TIME');
+    assert(player.finishTime === null, 'extreme finish time finished the player');
+  }
+
+  private testPlayer(id: string, waypoints: Waypoint[]) {
+    return {
+      id, color: '#888', isReady: true, waypoints, desiredRate: 1,
+      forceRealtime: false, finishTime: null, disconnectedAt: null,
+      viewingStopName: null, isGhost: false,
+    };
+  }
+
+  private testRoom(id: string, players: Room['players']): Room {
+    return {
+      id, players, state: 'RUNNING', countdownEnd: null, emptySince: null,
+      gameStartTime: 0, startPos: [0, 0], finishPos: [1, 1], virtualTime: 0,
+      lastRealTime: 0, playbackRate: 1, initialStartTime: 0,
+      difficulty: 'Easy', isRerun: false, league: '20260706',
+    };
   }
 
   private assertRaceAgainRequiresConnectedFinishers() {
@@ -1036,8 +1200,10 @@ class MultiplayerFuzzer {
       { type: 'ADD_WAYPOINTS_BATCH', waypoints: [null] },
       { type: 'ADD_WAYPOINTS_BATCH', waypoints: [{ x: startPos[1], y: startPos[0], arrivalTime: this.clock.nowMs + 60_000, speedFactor: 10, isWalk: { wrong: true }, route_short_name: { also: 'wrong' } }] },
       { type: 'ADD_WAYPOINT', x: Number.POSITIVE_INFINITY, y: {}, speedFactor: 'fast' },
+      { type: 'ADD_WAYPOINT', x: startPos[1], y: startPos[0], arrivalTime: Number.MAX_VALUE, speedFactor: Number.MAX_VALUE },
       { type: 'ADD_WAYPOINT', x: startPos[1], y: startPos[0], arrivalTime: this.clock.nowMs + 60_000, speedFactor: 10, isWait: { wrong: true }, emoji: { nope: true } },
       { type: 'PLAYER_FINISHED', finishTime: Number.NaN },
+      { type: 'PLAYER_FINISHED', finishTime: Number.MAX_VALUE },
       { type: 'RACE_AGAIN', waypoints: [] },
       { type: 'ADD_GHOSTS', ghosts: [{ playerName: 'bad', waypoints: [] }] },
       { type: 'ADD_GHOSTS', ghosts: [{ playerName: 'bad-colour', color: { hue: 20 }, waypoints: ghostWaypoints }] },
