@@ -665,6 +665,7 @@ function handleSetGameBounds(
     if (!isLeague(message.league)) return;
 
     const prevStart = room.startPos;
+    const prevFinish = room.finishPos;
     room.startPos = message.startPos;
     room.finishPos = message.finishPos;
     room.difficulty = message.difficulty || 'Normal';
@@ -680,11 +681,20 @@ function handleSetGameBounds(
     if (room.startPos) {
         const [newLat, newLng] = room.startPos;
         const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+        const finishChanged = prevFinish === null || room.finishPos === null
+            ? prevFinish !== room.finishPos
+            : Math.abs(prevFinish[0] - room.finishPos[0]) > 0.0001 || Math.abs(prevFinish[1] - room.finishPos[1]) > 0.0001;
         const timeChanged = message.startTime !== undefined;
+        const resetPlayers = posChanged || timeChanged;
 
-        if (posChanged || timeChanged) {
+        if (resetPlayers || finishChanged || !room.ghosts) {
             for (const pid of Object.keys(room.players)) {
-                if (room.players[pid].isGhost) { delete room.players[pid]; continue; }
+                if (room.players[pid].isGhost) {
+                    delete room.players[pid];
+                    hooks.publish(wsData.roomId!, { type: 'PLAYER_LEFT', playerId: pid });
+                    continue;
+                }
+                if (!resetPlayers) continue;
                 const p = room.players[pid];
                 const spawn = getSpawnPoint(newLat, newLng);
                 p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
