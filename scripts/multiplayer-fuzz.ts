@@ -1,5 +1,6 @@
 import {
   boundsToWire,
+  getProjectedRoomTime,
   getRoomBounds,
   handleGameClose,
   handleIncomingMessage,
@@ -9,6 +10,8 @@ import {
   type Room,
   type Waypoint,
 } from '../src/shared/gameLogic';
+import { createClockState, projectClock } from '../src/time-sync';
+import { bindCurrentWebSocket, parseWebSocketMessage } from '../src/websocket';
 
 type WsData = { roomId: string | null; playerId: string | null };
 
@@ -102,6 +105,11 @@ class FakeClock {
 
   activeTimerCount() {
     return this.timers.size;
+  }
+
+  shiftWallTime(ms: number) {
+    if (!Number.isFinite(ms)) throw new Error(`Invalid wall clock shift: ${ms}`);
+    this.nowMs += ms;
   }
 
   advance(ms: number) {
@@ -221,8 +229,13 @@ class MultiplayerFuzzer {
 
   run() {
     try {
+      this.assertClockSynchronizationUnderNetworkFaults();
+      this.assertStaleSocketEventsIgnored();
+      this.assertBoundaryInputs();
       this.assertDisconnectedPlayersDoNotPinPlayback();
       this.assertRaceAgainRequiresConnectedFinishers();
+      this.assertBroadcastClockProjection();
+      this.assertServerClockRollbackDoesNotRewind();
       this.assertInvariants();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -257,6 +270,7 @@ class MultiplayerFuzzer {
       () => this.advanceTime(),
       () => this.connectOrReconnect(),
       () => this.sendSyncRequest(),
+      () => this.jumpServerClockBackward(),
     ];
 
     if (this.joinedClients().length > 0) {
@@ -266,6 +280,7 @@ class MultiplayerFuzzer {
         () => this.toggleSnooze(),
         () => this.forceRealtime(),
         () => this.setViewingStop(),
+        () => this.updateColor(),
         () => this.sendPing(),
         () => this.switchRoom(),
         () => this.duplicateSession(),
@@ -279,6 +294,7 @@ class MultiplayerFuzzer {
     if (this.routingClients().length > 0) {
       actions.push(
         () => this.addWaypoint(),
+        () => this.addWalkingWaypoint(),
         () => this.addWaypointsBatch(),
         () => this.addPlannedService(),
         () => this.addStaleTeleport(),
@@ -298,7 +314,10 @@ class MultiplayerFuzzer {
     }
 
     if (this.options.hostile && this.connectedClients().length > 0) {
-      actions.push(() => this.sendHostileMessage());
+      actions.push(
+        () => this.sendHostileMessage(),
+        () => this.sendMalformedFrame(),
+      );
     }
 
     return actions;
@@ -314,7 +333,7 @@ class MultiplayerFuzzer {
           countdownEnd: room.countdownEnd,
           gameStartTime: room.gameStartTime,
           ...boundsToWire(bounds),
-          serverTime: room.virtualTime,
+          serverTime: getProjectedRoomTime(room),
           realTime: Date.now(),
           isRerun: room.isRerun,
           rate: room.state === 'RUNNING' ? room.playbackRate : 0,
@@ -369,7 +388,10 @@ class MultiplayerFuzzer {
 
   private send(client: Client, message: unknown, action: string) {
     this.record({ action, client: client.id, message });
-    handleIncomingMessage(message, this.rooms, client.wsData, this.hooksFor(client), this.updateRoom);
+    const wireMessage = JSON.stringify(message);
+    if (wireMessage === undefined) return;
+    const parsed = parseWebSocketMessage(wireMessage);
+    if (parsed !== undefined) handleIncomingMessage(parsed, this.rooms, client.wsData, this.hooksFor(client), this.updateRoom);
   }
 
   private record(entry: Omit<TraceEntry, 'step' | 'at'>) {
@@ -465,7 +487,12 @@ class MultiplayerFuzzer {
   }
 
   private setViewingStop() {
-    this.send(this.rng.pick(this.joinedClients()), { type: 'SET_VIEWING_STOP', stopName: `stop-${this.rng.int(100)}` }, 'SET_VIEWING_STOP');
+    const stopName = this.rng.bool(0.2) ? null : `stop-${this.rng.int(100)}`;
+    this.send(this.rng.pick(this.joinedClients()), { type: 'SET_VIEWING_STOP', stopName }, 'SET_VIEWING_STOP');
+  }
+
+  private updateColor() {
+    this.send(this.rng.pick(this.joinedClients()), { type: 'UPDATE_PLAYER_COLOR', color: `hsl(${this.rng.int(360)}, 70%, 50%)` }, 'UPDATE_PLAYER_COLOR');
   }
 
   private sendPing() {
@@ -571,6 +598,134 @@ class MultiplayerFuzzer {
     assert(updatedRoom.playbackRate > 1, `disconnected player pinned playback at ${updatedRoom.playbackRate}`);
   }
 
+  private assertBoundaryInputs() {
+    const client = this.clients[0];
+    client.connected = true;
+    client.wsData = { roomId: null, playerId: null };
+    client.inbox = [];
+    client.checkedInboxLength = 0;
+    this.send(client, { type: 'JOIN_ROOM', roomId: 'room-0', playerId: 'toString', color: { invalid: true } }, 'BOUNDARY_JOIN_PROTOTYPE_ID');
+    const room = this.rooms.get('room-0');
+    assert(room && Object.prototype.hasOwnProperty.call(room.players, 'toString'), 'prototype-named player was not created as an own property');
+    const prototypePlayer = room.players['toString'];
+    assert(typeof prototypePlayer.color === 'string', 'invalid join color poisoned player state');
+    this.send(client, {
+      type: 'SET_GAME_BOUNDS', startPos: [90, 180], finishPos: [-90, -180],
+      startTime: this.clock.nowMs, difficulty: 'Easy', computerDriver: false,
+      ghosts: false, league: '20260706',
+    }, 'BOUNDARY_POLAR_BOUNDS');
+    assertWaypoint(prototypePlayer.waypoints[0], 'polar spawn waypoint');
+    this.send(client, { type: 'JOIN_ROOM', roomId: 'room-0', playerId: client.playerId, color: this.colorFor(client) }, 'BOUNDARY_RESTORE_PLAYER');
+    const previousData = { ...client.wsData };
+    this.send(client, { type: 'JOIN_ROOM', roomId: 'room-0\0collision', playerId: client.playerId }, 'BOUNDARY_NUL_ROOM');
+    assert(client.wsData.roomId === previousData.roomId && client.wsData.playerId === previousData.playerId, 'NUL-containing identity changed the connection');
+  }
+
+  private assertClockSynchronizationUnderNetworkFaults() {
+    const rates = [0, 1, 20, 500];
+    for (let i = 0; i < 500; i++) {
+      const rate = this.rng.pick(rates);
+      const outbound = this.networkDelay();
+      const inbound = this.networkDelay();
+      const driftPpm = this.coord(-500, 500);
+      const serverAtResponse = this.clock.nowMs + outbound * rate;
+      const clientAtReceipt = 1_000_000 + (outbound + inbound) * (1 + driftPpm / 1_000_000);
+      const measuredLatency = (outbound + inbound) * (1 + driftPpm / 1_000_000) / 2;
+      const state = createClockState(serverAtResponse, rate, measuredLatency, clientAtReceipt);
+      const expectedAtReceipt = serverAtResponse + inbound * rate;
+      const syncError = Math.abs(measuredLatency - inbound) * rate;
+      assert(Math.abs(projectClock(state, clientAtReceipt) - expectedAtReceipt) <= syncError + 0.01,
+        `clock did not scale latency at ${rate}x`);
+
+      const dropout = this.rng.bool(0.15) ? this.rng.int(6 * 60 * 60 * 1000) : this.rng.int(60_000);
+      const clientAfterDropout = clientAtReceipt + dropout * (1 + driftPpm / 1_000_000);
+      const expectedAfterDropout = expectedAtReceipt + dropout * rate;
+      const driftError = Math.abs(dropout * driftPpm / 1_000_000 * rate);
+      assert(Math.abs(projectClock(state, clientAfterDropout) - expectedAfterDropout) <= syncError + driftError + 0.01,
+        `clock exceeded drift bound after ${dropout}ms dropout at ${rate}x`);
+    }
+  }
+
+  private networkDelay() {
+    if (this.rng.bool(0.05)) return this.rng.int(30_000);
+    if (this.rng.bool(0.2)) return this.rng.int(2_000);
+    return this.rng.int(250);
+  }
+
+  private assertStaleSocketEventsIgnored() {
+    type TestSocket = {
+      id: number;
+      onopen: ((event: any) => void) | null;
+      onmessage: ((event: any) => void) | null;
+      onclose: ((event: any) => void) | null;
+    };
+    type Event = { socket: TestSocket; type: 'open' | 'message' | 'close'; value?: number };
+    let current: TestSocket | null = null;
+    let nextSocketId = 1;
+    let state = { connected: false, generation: 0, lastMessage: -1 };
+    const events: Event[] = [];
+
+    const connect = () => {
+      if (current) events.push({ socket: current, type: 'close' });
+      const socket: TestSocket = { id: nextSocketId++, onopen: null, onmessage: null, onclose: null };
+      current = socket;
+      bindCurrentWebSocket(socket, (candidate) => current === candidate, {
+        open: () => { state = { ...state, connected: true, generation: socket.id }; },
+        message: (event) => { state = { ...state, lastMessage: event.data }; },
+        close: () => {
+          current = null;
+          state = { ...state, connected: false, generation: 0 };
+        },
+      });
+      events.push({ socket, type: 'open' });
+    };
+
+    connect();
+    for (let i = 0; i < 500; i++) {
+      if (!current || this.rng.bool(0.18)) connect();
+      if (current && this.rng.bool(0.7)) events.push({ socket: current, type: 'message', value: i });
+      if (events.length === 0) continue;
+      if (this.rng.bool(0.12)) {
+        const droppedSocket = this.rng.pick(events).socket;
+        for (let index = events.length - 1; index >= 0; index--) {
+          if (events[index].socket === droppedSocket) events.splice(index, 1);
+        }
+        continue;
+      }
+      const deliverable = events.filter((event, index) => events.findIndex((candidate) => candidate.socket === event.socket) === index);
+      const event = this.rng.pick(deliverable);
+      events.splice(events.indexOf(event), 1);
+      const wasCurrent = event.socket === current;
+      const before = { ...state };
+      if (event.type === 'open') event.socket.onopen?.({});
+      else if (event.type === 'message') event.socket.onmessage?.({ data: event.value });
+      else event.socket.onclose?.({});
+      if (!wasCurrent) assert(formatJson(state) === formatJson(before), `stale socket ${event.type} mutated current connection state`);
+    }
+  }
+
+  private assertBroadcastClockProjection() {
+    const client = this.joinedClients().find((candidate) => this.rooms.get(candidate.wsData.roomId!)?.state === 'RUNNING');
+    if (!client) return;
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    this.clock.advance(25);
+    this.hooksFor(client).broadcastRoomState(room);
+    const message = [...client.inbox].reverse().find((value) => isMessage(value, 'ROOM_STATE_UPDATE'));
+    assert(message && message.serverTime === getProjectedRoomTime(room, message.realTime), 'room update published a stale virtual-time anchor');
+  }
+
+  private assertServerClockRollbackDoesNotRewind() {
+    const room = Array.from(this.rooms.values()).find((candidate) => candidate.state === 'RUNNING');
+    if (!room) return;
+    this.updateRoom(room.id);
+    const before = room.virtualTime;
+    this.clock.shiftWallTime(-30_000);
+    this.updateRoom(room.id);
+    assert(room.virtualTime >= before, 'server wall-clock rollback rewound virtual time');
+    this.clock.shiftWallTime(30_000);
+    this.updateRoom(room.id);
+  }
+
   private assertRaceAgainRequiresConnectedFinishers() {
     if (this.clients.length < 5 || this.options.rooms < 2) return;
 
@@ -638,6 +793,14 @@ class MultiplayerFuzzer {
     this.syncRoomFor(client);
     const waypoint = this.nextWaypointFor(client);
     this.send(client, { type: 'ADD_WAYPOINT', ...waypoint }, 'ADD_WAYPOINT');
+  }
+
+  private addWalkingWaypoint() {
+    const client = this.rng.pick(this.routingClients());
+    this.syncRoomFor(client);
+    const waypoint = this.nextWaypointFor(client);
+    const { arrivalTime: _arrivalTime, ...walkingWaypoint } = waypoint;
+    this.send(client, { type: 'ADD_WAYPOINT', ...walkingWaypoint, speedFactor: 1, isWalk: true }, 'ADD_WALKING_WAYPOINT');
   }
 
   private addWaypointsBatch() {
@@ -837,6 +1000,21 @@ class MultiplayerFuzzer {
     this.clock.advance(ms);
   }
 
+  private jumpServerClockBackward() {
+    const rooms = Array.from(this.rooms.values());
+    if (rooms.length === 0) return this.advanceTime();
+    const room = this.rng.pick(rooms);
+    this.updateRoom(room.id);
+    const before = room.virtualTime;
+    const ms = 1 + this.rng.int(5 * 60_000);
+    this.record({ action: 'SERVER_CLOCK_ROLLBACK', message: { roomId: room.id, ms } });
+    this.clock.shiftWallTime(-ms);
+    this.updateRoom(room.id);
+    assert(room.virtualTime >= before, `room ${room.id} rewound after server clock rollback`);
+    this.clock.shiftWallTime(ms);
+    this.updateRoom(room.id);
+  }
+
   private sendHostileMessage() {
     const client = this.rng.pick(this.connectedClients());
     const room = client.wsData.roomId ? (this.rooms.get(client.wsData.roomId) ?? null) : null;
@@ -848,6 +1026,8 @@ class MultiplayerFuzzer {
       null,
       {},
       { type: 'JOIN_ROOM', roomId: client.roomId, playerId: '__proto__' },
+      { type: 'JOIN_ROOM', roomId: `${client.roomId}\0other`, playerId: client.playerId },
+      { type: 'JOIN_ROOM', roomId: client.roomId, playerId: `poison-${this.currentStep}`, color: { invalid: true } },
       { type: 'SET_GAME_BOUNDS', startPos: {}, finishPos: [], league: null },
       { type: 'SET_GAME_BOUNDS', startPos, finishPos, startTime: this.clock.nowMs, difficulty: { nope: true }, computerDriver: false, ghosts: false, league: 'not_a_league' },
       { type: 'TOGGLE_READY' },
@@ -865,6 +1045,25 @@ class MultiplayerFuzzer {
       { type: 'SEND_PING', lat: Number.POSITIVE_INFINITY, lon: Number.NEGATIVE_INFINITY },
     ];
     this.send(client, this.rng.pick(malformed), 'HOSTILE_MESSAGE');
+  }
+
+  private sendMalformedFrame() {
+    const client = this.rng.pick(this.connectedClients());
+    const frames: Array<string | Uint8Array> = [
+      '', '{', 'null', '[]', 'true', '"text"',
+      '{"type":"UNKNOWN"}', '{"type":',
+      new Uint8Array([0xff, 0x00, 0x7b, 0x7d]),
+    ];
+    const frame = this.rng.pick(frames);
+    this.record({ action: 'MALFORMED_FRAME', client: client.id, message: typeof frame === 'string' ? frame : Array.from(frame) });
+    const beforeRooms = formatJson(Array.from(this.rooms.entries()));
+    const beforeData = formatJson(client.wsData);
+    const beforeInboxLengths = this.clients.map((candidate) => candidate.inbox.length);
+    const parsed = parseWebSocketMessage(frame);
+    if (parsed !== undefined) handleIncomingMessage(parsed, this.rooms, client.wsData, this.hooksFor(client), this.updateRoom);
+    assert(formatJson(Array.from(this.rooms.entries())) === beforeRooms, 'malformed frame mutated room state');
+    assert(formatJson(client.wsData) === beforeData, 'malformed frame mutated connection identity');
+    assert(this.clients.every((candidate, index) => candidate.inbox.length === beforeInboxLengths[index]), 'malformed frame emitted a server message');
   }
 
   private connectedClientsOrConnect() {
