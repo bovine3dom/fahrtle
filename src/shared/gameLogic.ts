@@ -123,6 +123,39 @@ function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
 }
 
+function pushMinHeap(heap: number[], value: number) {
+    let index = heap.length;
+    heap.push(value);
+    while (index > 0) {
+        const parent = (index - 1) >> 1;
+        if (heap[parent] <= value) break;
+        heap[index] = heap[parent];
+        index = parent;
+    }
+    heap[index] = value;
+}
+
+function popMinHeap(heap: number[]) {
+    const last = heap.pop();
+    if (last === undefined || heap.length === 0) return;
+    let index = 0;
+    while (true) {
+        const left = index * 2 + 1;
+        if (left >= heap.length) break;
+        const right = left + 1;
+        const child = right < heap.length && heap[right] < heap[left] ? right : left;
+        if (heap[child] >= last) break;
+        heap[index] = heap[child];
+        index = child;
+    }
+    heap[index] = last;
+}
+
+function minHeapValue(heap: number[], isCurrent: (value: number) => boolean) {
+    while (heap.length > 0 && !isCurrent(heap[0])) popMinHeap(heap);
+    return heap[0];
+}
+
 function getSpawnPoint(centerLat: number, centerLng: number) {
     const spreadMeters = 50;
     const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
@@ -153,28 +186,87 @@ export function getProjectedRoomClock(room: Room, now = Date.now()) {
     let virtualTime = room.virtualTime;
     let rate = room.playbackRate;
 
-    while (remainingRealTime > 0 && rate > 0) {
-        const boundary = nextPlaybackBoundary(room, virtualTime);
-        if (boundary === null) return { virtualTime: virtualTime + remainingRealTime * rate, playbackRate: rate };
+    if (remainingRealTime <= 0 || rate <= 0) return { virtualTime, playbackRate: rate };
+
+    const states: {
+        player: Player;
+        activeWaypoints: number[];
+        activeWaypointSet: Set<number>;
+        factor: number;
+    }[] = [];
+    const events: { time: number; playerIndex: number; waypointIndex: number; active: boolean }[] = [];
+    const factorHeap: number[] = [];
+    const factorCounts = new Map<number, number>();
+    const addFactor = (factor: number) => {
+        const count = factorCounts.get(factor) ?? 0;
+        factorCounts.set(factor, count + 1);
+        if (count === 0) pushMinHeap(factorHeap, factor);
+    };
+    const removeFactor = (factor: number) => {
+        const count = factorCounts.get(factor) ?? 0;
+        if (count <= 1) factorCounts.delete(factor);
+        else factorCounts.set(factor, count - 1);
+    };
+    const getPlayerFactor = (state: typeof states[number]) => {
+        if (state.player.forceRealtime) return 1;
+        const desiredRate = state.player.desiredRate || 1;
+        const waypointIndex = minHeapValue(state.activeWaypoints, (index) => state.activeWaypointSet.has(index));
+        return waypointIndex === undefined
+            ? desiredRate
+            : Math.max(state.player.waypoints[waypointIndex].speedFactor, desiredRate);
+    };
+
+    for (const player of Object.values(room.players)) {
+        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
+        const playerIndex = states.length;
+        const state = { player, activeWaypoints: [] as number[], activeWaypointSet: new Set<number>(), factor: 1 };
+        states.push(state);
+        for (let waypointIndex = 0; waypointIndex < player.waypoints.length; waypointIndex++) {
+            const waypoint = player.waypoints[waypointIndex];
+            if (waypoint.arrivalTime <= waypoint.startTime) continue;
+            if (virtualTime >= waypoint.startTime && virtualTime < waypoint.arrivalTime) {
+                state.activeWaypointSet.add(waypointIndex);
+                pushMinHeap(state.activeWaypoints, waypointIndex);
+            }
+            if (waypoint.startTime > virtualTime) events.push({ time: waypoint.startTime, playerIndex, waypointIndex, active: true });
+            if (waypoint.arrivalTime > virtualTime) events.push({ time: waypoint.arrivalTime, playerIndex, waypointIndex, active: false });
+        }
+        state.factor = getPlayerFactor(state);
+        addFactor(state.factor);
+    }
+
+    events.sort((a, b) => a.time - b.time);
+    let eventIndex = 0;
+    while (eventIndex < events.length && remainingRealTime > 0 && rate > 0) {
+        const boundary = events[eventIndex].time;
         const realTimeToBoundary = (boundary - virtualTime) / rate;
         if (realTimeToBoundary > remainingRealTime) return { virtualTime: virtualTime + remainingRealTime * rate, playbackRate: rate };
         virtualTime = boundary;
         remainingRealTime -= realTimeToBoundary;
-        rate = playbackRateAt(room, virtualTime);
-    }
-    return { virtualTime, playbackRate: rate };
-}
-
-function nextPlaybackBoundary(room: Room, virtualTime: number) {
-    let boundary = Number.POSITIVE_INFINITY;
-    for (const player of Object.values(room.players)) {
-        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
-        for (const waypoint of player.waypoints) {
-            if (waypoint.startTime > virtualTime) boundary = Math.min(boundary, waypoint.startTime);
-            if (waypoint.arrivalTime > virtualTime) boundary = Math.min(boundary, waypoint.arrivalTime);
+        const affectedPlayers = new Set<number>();
+        while (eventIndex < events.length && events[eventIndex].time === boundary) {
+            const event = events[eventIndex++];
+            const state = states[event.playerIndex];
+            if (event.active) {
+                state.activeWaypointSet.add(event.waypointIndex);
+                pushMinHeap(state.activeWaypoints, event.waypointIndex);
+            } else {
+                state.activeWaypointSet.delete(event.waypointIndex);
+            }
+            affectedPlayers.add(event.playerIndex);
         }
+        for (const playerIndex of affectedPlayers) {
+            const state = states[playerIndex];
+            const nextFactor = getPlayerFactor(state);
+            if (nextFactor === state.factor) continue;
+            removeFactor(state.factor);
+            state.factor = nextFactor;
+            addFactor(nextFactor);
+        }
+        rate = Math.max(1, minHeapValue(factorHeap, (factor) => factorCounts.has(factor)) ?? 1);
     }
-    return Number.isFinite(boundary) ? boundary : null;
+    if (remainingRealTime > 0 && rate > 0) virtualTime += remainingRealTime * rate;
+    return { virtualTime, playbackRate: rate };
 }
 
 function playbackRateAt(room: Room, virtualTime: number) {

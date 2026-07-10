@@ -235,6 +235,7 @@ class MultiplayerFuzzer {
       this.assertStaleSocketEventsIgnored();
       this.assertRenderableSnapshots();
       this.assertRateBoundariesAreIntegrated();
+      this.assertProjectionDoesNotRescanRoutes();
       this.assertBoundaryInputs();
       this.assertJoiningResetConverges();
       this.assertDisconnectedPlayersDoNotPinPlayback();
@@ -685,6 +686,26 @@ class MultiplayerFuzzer {
     const projectedClock = getProjectedRoomClock(room, 50);
     assert(projectedClock.virtualTime === 1_048, `late timer skipped a rate boundary: ${projectedClock.virtualTime}`);
     assert(projectedClock.playbackRate === 1, 'projected clock retained its pre-boundary rate');
+  }
+
+  private assertProjectionDoesNotRescanRoutes() {
+    const waypointCount = 400;
+    let waypointReads = 0;
+    const rawWaypoints = Array.from({ length: waypointCount }, (_unused, index) => ({
+      x: 0, y: 0, startTime: index * 2, arrivalTime: index * 2 + 1, speedFactor: 1_000_000,
+    }));
+    const waypoints = new Proxy(rawWaypoints, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) waypointReads++;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const player = this.testPlayer('projection-scale', waypoints);
+    player.desiredRate = 500;
+    const room = this.testRoom('projection-scale', { [player.id]: player });
+    room.playbackRate = 500;
+    getProjectedRoomClock(room, 100);
+    assert(waypointReads < waypointCount * 20, `projection rescanned ${waypointCount} waypoints ${waypointReads} times`);
   }
 
   private assertJoiningResetConverges() {
