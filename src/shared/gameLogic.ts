@@ -698,6 +698,7 @@ function handleSetGameBounds(
                 const p = room.players[pid];
                 const spawn = getSpawnPoint(newLat, newLng);
                 p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
+                p.viewingStopName = null;
                 hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
             }
         }
@@ -721,6 +722,7 @@ function handleStopImmediately(
         const idx = message.destinationWpIndex;
         if (idx >= 0 && idx < player.waypoints.length) {
             player.waypoints = player.waypoints.slice(0, idx + 1);
+            player.viewingStopName = null;
             hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
             triggerUpdate(wsData.roomId!);
             return;
@@ -762,6 +764,7 @@ function handleStopImmediately(
         if (last) { last.stopName = 'Stopped'; last.arrivalTime = Math.min(last.arrivalTime, vTime); }
     }
 
+    player.viewingStopName = null;
     hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
     triggerUpdate(wsData.roomId!);
 }
