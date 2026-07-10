@@ -590,41 +590,47 @@ export default function MapView() {
     const playerSettings = useStore($playerSettings);
     createEffect(() => {
       const setting = playerSettings().baseMap;
+      if (!mapReady()) return;
       updateBasemap(mapInstance, setting);
-      updateBathymetryLayer(mapInstance, setting);
+      updateBathymetryLayer(mapInstance, $playerSettings.get().bathymetry);
     });
 
     createEffect(() => {
       const setting = playerSettings().railwaysLayer;
+      if (!mapReady()) return;
       updateRailwaysLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().publicTransportLayer || (["Transport dark", "Transport"].includes(playerSettings().baseMap));
+      if (!mapReady()) return;
       updateTransportLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().bathymetry;
+      if (!mapReady()) return;
       updateBathymetryLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().hillShade;
+      if (!mapReady()) return;
       updateHillShadeLayer(mapInstance, setting);
     });
 
     createEffect(() => {
       const setting = playerSettings().terrain3d;
+      if (!mapReady()) return;
       updateTerrain(mapInstance, setting);
     });
 
     const simTime = useStore($clock);
     let i = 0;
-    createEffect(async () => {
+    createEffect(() => {
       simTime();
       i++;
-      await ensureMapLoaded(mapInstance);
+      if (!mapReady()) return;
       if (!mapInstance) return;
       NIGHT_LAYER.setDate(new Date(simTime()));
     });
@@ -790,9 +796,9 @@ export default function MapView() {
 
   const myId = useStore($myPlayerId);
   const isFinished = createMemo(() => players()[myId() || '']?.finishTime != null);
-  createEffect(async () => {
+  createEffect(() => {
     const finished = isFinished();
-    await ensureMapLoaded(mapInstance);
+    if (!mapReady()) return;
     if (finished) {
       mapInstance.setPaintProperty('routes-casing', 'line-opacity', 1);
       mapInstance.setPaintProperty('routes-line', 'line-opacity', 1);
@@ -1058,10 +1064,3 @@ export default function MapView() {
     </div>
   );
 }
-
-const ensureMapLoaded = (map: maplibregl.Map) => {
-  return new Promise<void>((resolve) => {
-    if (map.isStyleLoaded()) resolve();
-    else map.once('idle', () => resolve());
-  });
-};
