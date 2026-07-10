@@ -8,6 +8,7 @@ import {
     getRoomBounds,
     boundsToWire
 } from "./shared/gameLogic";
+import { parseWebSocketMessage } from "./websocket";
 
 class FakeWebSocket {
     onopen: ((this: any, ev: any) => any) | null = null;
@@ -51,7 +52,8 @@ class FakeServer {
     }
 
     handleMessage(ws: FakeWebSocket, msg: string) {
-        const message = JSON.parse(msg);
+        const message = parseWebSocketMessage(msg);
+        if (message === undefined) return;
         handleIncomingMessage(
             message,
             this.rooms,

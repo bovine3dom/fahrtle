@@ -20,3 +20,12 @@ export function bindCurrentWebSocket<T extends WebSocketLike>(
   socket.onmessage = guard(handlers.message);
   socket.onclose = guard(handlers.close);
 }
+
+export function parseWebSocketMessage(value: string | Uint8Array): unknown | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}

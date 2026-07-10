@@ -12,6 +12,7 @@ import {
   boundsToWire
 } from "../src/shared/gameLogic";
 import { calculateCO2Emissions } from "../src/utils/co2";
+import { parseWebSocketMessage } from "../src/websocket";
 
 function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
@@ -156,7 +157,8 @@ const server = serve<WSData>({
       ws.data = { roomId: null, playerId: null, connectionKey: null };
     },
     message(ws: ServerWebSocket<WSData>, msg: string | Uint8Array) {
-      const message = JSON.parse(String(msg));
+      const message = parseWebSocketMessage(msg);
+      if (message === undefined) return;
       handleIncomingMessage(message, rooms, ws.data, getwsHooks(ws), updateRoom);
     },
     close(ws: ServerWebSocket<WSData>) {
