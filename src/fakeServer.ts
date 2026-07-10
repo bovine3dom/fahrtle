@@ -4,6 +4,7 @@ import {
     updateRoomLogic,
     handleIncomingMessage,
     handleGameClose,
+    getProjectedRoomTime,
     getRoomBounds,
     boundsToWire
 } from "./shared/gameLogic";
@@ -97,7 +98,7 @@ class FakeServer {
             countdownEnd: room.countdownEnd,
             gameStartTime: room.gameStartTime,
             ...boundsToWire(bounds),
-            serverTime: room.virtualTime,
+            serverTime: getProjectedRoomTime(room),
             realTime: Date.now(),
             isRerun: room.isRerun,
             rate: room.state === 'RUNNING' ? room.playbackRate : 0

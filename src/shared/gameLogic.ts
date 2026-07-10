@@ -144,6 +144,11 @@ function stepClock(room: Room) {
     room.lastRealTime = now;
 }
 
+export function getProjectedRoomTime(room: Room, now = Date.now()) {
+    if (room.state !== 'RUNNING') return room.virtualTime;
+    return room.virtualTime + Math.max(0, now - room.lastRealTime) * room.playbackRate;
+}
+
 export interface GameHooks {
     broadcastRoomState: (room: Room) => void;
     publish: (roomId: string, message: any) => void;
@@ -455,8 +460,7 @@ function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHo
 
     if (targetRoomId && rooms.has(targetRoomId)) {
         const r = rooms.get(targetRoomId)!;
-        const elapsed = now - r.lastRealTime;
-        serverTime = r.state === 'RUNNING' ? r.virtualTime + (elapsed * r.playbackRate) : r.virtualTime;
+        serverTime = getProjectedRoomTime(r, now);
         rate = r.playbackRate;
     }
 
