@@ -137,7 +137,7 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
 
 function stepClock(room: Room) {
     const now = Date.now();
-    const elapsedReal = now - room.lastRealTime;
+    const elapsedReal = Math.max(0, now - room.lastRealTime);
     if (room.state === 'RUNNING') {
         room.virtualTime += elapsedReal * room.playbackRate;
     }
