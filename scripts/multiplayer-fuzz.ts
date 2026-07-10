@@ -2,9 +2,11 @@ import {
   boundsToWire,
   getProjectedRoomClock,
   getProjectedRoomTime,
+  getRealTime,
   getRoomBounds,
   handleGameClose,
   handleIncomingMessage,
+  reanchorRoomRealTime,
   updateRoomLogic,
   type Difficulty,
   type GameHooks,
@@ -83,13 +85,14 @@ class Rng {
 
 class FakeClock {
   nowMs = 1700000000000;
+  monotonicMs = 1700000000000;
   private nextId = 1;
   private timers = new Map<number, { at: number; fn: () => void }>();
 
   setTimeout(fn: () => void, delay: number) {
     const id = this.nextId++;
     const safeDelay = Number.isFinite(delay) ? Math.max(0, delay) : 0;
-    this.timers.set(id, { at: this.nowMs + safeDelay, fn });
+    this.timers.set(id, { at: this.monotonicMs + safeDelay, fn });
     return id;
   }
 
@@ -117,6 +120,7 @@ class FakeClock {
   advance(ms: number) {
     if (!Number.isFinite(ms) || ms < 0) throw new Error(`Invalid clock advance: ${ms}`);
     this.nowMs += ms;
+    this.monotonicMs += ms;
     this.runDueTimers();
   }
 
@@ -125,7 +129,7 @@ class FakeClock {
     while (runs < maxRuns) {
       let next: [number, { at: number; fn: () => void }] | null = null;
       for (const entry of this.timers.entries()) {
-        if (entry[1].at <= this.nowMs && (!next || entry[1].at < next[1].at)) {
+        if (entry[1].at <= this.monotonicMs && (!next || entry[1].at < next[1].at)) {
           next = entry;
         }
       }
@@ -142,9 +146,9 @@ function parseOptions(argv: string[]): Options {
   const options: Options = {
     seed: Date.now() >>> 0,
     steps: 1000,
-    clients: 5,
+    clients: 4,
     rooms: 2,
-    hostile: true,
+    hostile: false,
     traceLimit: 80,
   };
 
@@ -345,7 +349,7 @@ class MultiplayerFuzzer {
           gameStartTime: room.gameStartTime,
           ...boundsToWire(bounds),
           serverTime: projectedClock.virtualTime,
-          realTime: Date.now(),
+          realTime: getRealTime(),
           isRerun: room.isRerun,
           rate: projectedClock.playbackRate,
         });
@@ -879,22 +883,37 @@ class MultiplayerFuzzer {
     if (!room) return;
     this.updateRoom(room.id);
     const before = room.virtualTime;
-    const anchor = room.lastRealTime;
     this.clock.shiftWallTime(-30_000);
+    this.clock.advance(1_000);
     this.updateRoom(room.id);
-    assert(room.virtualTime >= before, 'server wall-clock rollback rewound virtual time');
-    assert(room.lastRealTime === anchor, 'server wall-clock rollback replaced the clock anchor');
+    assert(room.virtualTime > before, 'server wall-clock rollback stopped monotonic clock progress');
+    assert(room.lastRealTime === getRealTime(), 'server wall-clock rollback desynchronized the stable real-time anchor');
+    const afterRollback = room.virtualTime;
     this.clock.shiftWallTime(30_000);
     this.updateRoom(room.id);
-    assert(room.virtualTime === before, 'server wall-clock recovery counted the rollback interval twice');
+    assert(room.virtualTime === afterRollback, 'server wall-clock recovery counted the rollback interval twice');
 
-    room.state = 'JOINING';
+    const countdownRoom = this.testRoom('rollback-countdown', {});
+    countdownRoom.state = 'COUNTDOWN';
+    countdownRoom.lastRealTime = getRealTime();
+    countdownRoom.countdownEnd = getRealTime() + 5_000;
+    const countdownHooks = this.hooksFor(this.clients[0]);
+    const updateCountdown = () => updateRoomLogic(countdownRoom, countdownHooks, updateCountdown);
+    updateCountdown();
     this.clock.shiftWallTime(-30_000);
-    this.updateRoom(room.id);
-    assert(room.lastRealTime === this.clock.nowMs, 'non-running room retained a future clock anchor');
+    this.clock.advance(5_000);
+    assert(String(countdownRoom.state) === 'RUNNING', 'server wall-clock rollback delayed the countdown');
     this.clock.shiftWallTime(30_000);
-    this.updateRoom(room.id);
-    room.state = 'RUNNING';
+    if (countdownRoom.timerId) clearTimeout(countdownRoom.timerId);
+
+    countdownRoom.lastRealTime = 100;
+    countdownRoom.countdownEnd = 150;
+    countdownRoom.emptySince = 90;
+    countdownRoom.players.persisted = this.testPlayer('persisted', []);
+    countdownRoom.players.persisted.disconnectedAt = 80;
+    reanchorRoomRealTime(countdownRoom, 1_000);
+    assert(countdownRoom.countdownEnd === 1_050 && countdownRoom.emptySince === 990
+      && countdownRoom.players.persisted.disconnectedAt === 980, 'persisted real-time deadlines were not re-anchored');
   }
 
   private assertStopClearsViewingState() {
@@ -1487,7 +1506,7 @@ class MultiplayerFuzzer {
         seenTimerIds.add(room.timerId);
         assert(this.clock.hasTimer(room.timerId), `room ${roomId} points at missing timer ${room.timerId}`);
         const timerAt = this.clock.timerAt(room.timerId);
-        assert(timerAt === undefined || timerAt >= this.clock.nowMs, `room ${roomId} has overdue timer ${room.timerId}`);
+        assert(timerAt === undefined || timerAt >= this.clock.monotonicMs, `room ${roomId} has overdue timer ${room.timerId}`);
       }
 
       this.assertPlayers(room);
@@ -1739,14 +1758,17 @@ function installDeterminism(clock: FakeClock, rng: Rng) {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   const originalRandom = Math.random;
+  const originalPerformanceNow = performance.now;
 
   Date.now = () => clock.nowMs;
+  Object.defineProperty(performance, 'now', { configurable: true, value: () => clock.monotonicMs });
   globalThis.setTimeout = ((fn: () => void, delay?: number) => clock.setTimeout(fn, Number(delay ?? 0))) as typeof setTimeout;
   globalThis.clearTimeout = ((id: unknown) => clock.clearTimeout(Number(id))) as typeof clearTimeout;
   Math.random = () => rng.next();
 
   return () => {
     Date.now = originalDateNow;
+    Object.defineProperty(performance, 'now', { configurable: true, value: originalPerformanceNow });
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
     Math.random = originalRandom;

@@ -118,6 +118,23 @@ const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
 const MAX_TIMESTAMP = 10_000_000_000_000;
 const MAX_SPEED_FACTOR = 1_000_000;
+let realTimeAnchor: { wallTime: number; monotonicTime: number } | null = null;
+
+export function getRealTime() {
+    const monotonicTime = performance.now();
+    realTimeAnchor ??= { wallTime: Date.now(), monotonicTime };
+    return realTimeAnchor.wallTime + monotonicTime - realTimeAnchor.monotonicTime;
+}
+
+export function reanchorRoomRealTime(room: Room, now = getRealTime()) {
+    const offset = now - room.lastRealTime;
+    room.lastRealTime = now;
+    if (room.countdownEnd !== null) room.countdownEnd += offset;
+    if (room.emptySince !== null) room.emptySince += offset;
+    for (const player of Object.values(room.players)) {
+        if (player.disconnectedAt !== null) player.disconnectedAt += offset;
+    }
+}
 
 function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
@@ -171,20 +188,16 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
 }
 
 function stepClock(room: Room) {
-    const now = Date.now();
-    if (now < room.lastRealTime) {
-        if (room.state !== 'RUNNING') room.lastRealTime = now;
-        return;
-    }
+    const now = getRealTime();
     room.virtualTime = getProjectedRoomTime(room, now);
     room.lastRealTime = now;
 }
 
-export function getProjectedRoomTime(room: Room, now = Date.now()) {
+export function getProjectedRoomTime(room: Room, now = getRealTime()) {
     return getProjectedRoomClock(room, now).virtualTime;
 }
 
-export function getProjectedRoomClock(room: Room, now = Date.now()) {
+export function getProjectedRoomClock(room: Room, now = getRealTime()) {
     if (room.state !== 'RUNNING') return { virtualTime: room.virtualTime, playbackRate: 0 };
     let remainingRealTime = Math.max(0, now - room.lastRealTime);
     let virtualTime = room.virtualTime;
@@ -312,7 +325,7 @@ function markPlayerDisconnected(
     if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
 
     stepClock(room);
-    player.disconnectedAt = Date.now();
+    player.disconnectedAt = getRealTime();
     hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
     checkCountdownLogic(room, hooks);
 
@@ -327,7 +340,7 @@ function markPlayerDisconnected(
             forceRealtime: player.forceRealtime
         });
     } else {
-        room.emptySince = Date.now();
+        room.emptySince = getRealTime();
         room.playbackRate = 0;
     }
     updateRoom(room);
@@ -339,7 +352,7 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
         room.timerId = undefined;
     }
 
-    const now = Date.now();
+    const now = getRealTime();
     let delay = MAX_IDLE_TIME;
 
     if (room.emptySince !== null) {
@@ -614,14 +627,14 @@ function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint
 }
 
 function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHooks) {
-    const now = Date.now();
+    const now = getRealTime();
     const targetRoomId = message.roomId;
     let serverTime = now;
     let rate = 1.0;
 
     if (targetRoomId && rooms.has(targetRoomId)) {
         const r = rooms.get(targetRoomId)!;
-        const projectedClock = getProjectedRoomClock(r, now);
+        const projectedClock = getProjectedRoomClock(r);
         serverTime = projectedClock.virtualTime;
         rate = projectedClock.playbackRate;
     }
@@ -642,7 +655,7 @@ function handleJoinRoom(
     hooks: GameHooks,
     triggerUpdate: (rid: string) => void
 ) {
-    const now = Date.now();
+    const now = getRealTime();
     const { roomId, playerId, color } = message;
     if (!isSafeKey(roomId) || !isSafeKey(playerId)) return;
     const previousRoomId = wsData.roomId;
@@ -1074,7 +1087,7 @@ export function handleIncomingMessage(
         if (!r) return;
         const { lat, lon } = message;
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
-        hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: Date.now() });
+        hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: getRealTime() });
     }
 }
 
@@ -1084,7 +1097,7 @@ function checkCountdownLogic(room: Room, hooks: GameHooks) {
 
     if (room.state === 'JOINING' && allReady) {
         room.state = 'COUNTDOWN';
-        room.countdownEnd = Date.now() + COUNTDOWN_DURATION;
+        room.countdownEnd = getRealTime() + COUNTDOWN_DURATION;
         hooks.broadcastRoomState(room);
     } else if (room.state === 'COUNTDOWN' && !allReady) {
         room.state = 'JOINING';
@@ -1097,7 +1110,7 @@ function calculatePlaybackRate(room: Room, hooks: GameHooks) {
     const newRate = playbackRateAt(room, room.virtualTime);
     if (Math.abs(room.playbackRate - newRate) > 0.01) {
         room.playbackRate = newRate;
-        hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: Date.now(), rate: room.playbackRate });
+        hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: getRealTime(), rate: room.playbackRate });
     }
 }
 
@@ -1121,7 +1134,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
 
     // Cleanup check
     if (room.emptySince !== null) {
-        const emptyDuration = Date.now() - room.emptySince;
+        const emptyDuration = getRealTime() - room.emptySince;
         if (emptyDuration >= MAX_IDLE_TIME) {
             if (room.timerId) clearTimeout(room.timerId);
             hooks.onRoomDeleted?.(room.id);
@@ -1132,7 +1145,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     for (const pid in room.players) {
         const p = room.players[pid];
         if (pid === 'the-stig-🏎️') continue;
-        if (p.disconnectedAt && Date.now() - p.disconnectedAt >= MAX_IDLE_TIME) {
+        if (p.disconnectedAt && getRealTime() - p.disconnectedAt >= MAX_IDLE_TIME) {
             if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
                 delete room.players[pid];
                 hooks.publish(room.id, {
@@ -1145,7 +1158,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     }
 
     // Handle countdown completion
-    if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
+    if (room.state === 'COUNTDOWN' && room.countdownEnd && getRealTime() >= room.countdownEnd) {
         room.state = 'RUNNING';
         room.gameStartTime = room.virtualTime;
         room.countdownEnd = null;

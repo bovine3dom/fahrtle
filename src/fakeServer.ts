@@ -5,6 +5,8 @@ import {
     handleIncomingMessage,
     handleGameClose,
     getProjectedRoomClock,
+    getRealTime,
+    reanchorRoomRealTime,
     getRoomBounds,
     boundsToWire
 } from "./shared/gameLogic";
@@ -102,7 +104,7 @@ class FakeServer {
             gameStartTime: room.gameStartTime,
             ...boundsToWire(bounds),
             serverTime: projectedClock.virtualTime,
-            realTime: Date.now(),
+            realTime: getRealTime(),
             isRerun: room.isRerun,
             rate: projectedClock.playbackRate
         });
@@ -160,7 +162,7 @@ class FakeServer {
                 const data = JSON.parse(stored);
                 for (const id in data) {
                     const room = data[id] as Room;
-                    room.lastRealTime = Date.now();
+                    reanchorRoomRealTime(room);
                     this.rooms.set(id, room);
                     this.updateRoom(id);
                 }

@@ -2,7 +2,7 @@ import type maplibregl from 'maplibre-gl';
 import { lerp, haversineDist, getBearing } from '../utils/geo';
 import { latLngToCell, gridDisk } from 'h3-js';
 import { getTimeZone } from '../timezone';
-import { getServerTime } from '../time-sync';
+import { getRealServerTime, getServerTime } from '../time-sync';
 import { getPlayerMotionAt } from '../playerRendering';
 import {
   $players, $roomState, $gameStartTime, $gameBounds, $playerSettings,
@@ -202,7 +202,7 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
     const validPointers = t_playerPointers.filter(p => p.pointer !== null) as { pid: string, pointer: { x: number, y: number, bearing: number, distance: number } }[];
     config.onUpdatePointers(validPointers);
 
-    const nowMs = Date.now();
+    const nowMs = getRealServerTime();
     const allPings = $pings.get();
     const activePings = Object.entries(allPings)
       .filter(([_, ping]) => nowMs - ping.timestamp < PING_DURATION);

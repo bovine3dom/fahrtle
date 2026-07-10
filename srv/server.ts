@@ -8,6 +8,7 @@ import {
   handleIncomingMessage,
   handleGameClose,
   getProjectedRoomClock,
+  getRealTime,
   getRoomBounds,
   boundsToWire
 } from "../src/shared/gameLogic";
@@ -220,7 +221,7 @@ function broadcastRoomState(room: Room) {
     gameStartTime: room.gameStartTime,
     ...boundsToWire(bounds),
     serverTime: projectedClock.virtualTime,
-    realTime: Date.now(),
+    realTime: getRealTime(),
     isRerun: room.isRerun,
     rate: projectedClock.playbackRate
   }));
