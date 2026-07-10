@@ -723,9 +723,6 @@ function handleRaceAgain(
     room.gameStartTime = null;
     room.isRerun = true;
 
-    for (const ghost of ghosts) {
-        hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghost.id, player: ghost });
-    }
     for (const pid of Object.keys(room.players)) {
         const p = room.players[pid];
         if (p.isGhost) {
@@ -747,6 +744,9 @@ function handleRaceAgain(
         hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: pid, isReady: false });
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: pid, desiredRate: p.desiredRate, forceRealtime: p.forceRealtime });
         hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: pid, viewingStopName: p.viewingStopName });
+    }
+    for (const ghost of ghosts) {
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghost.id, player: ghost });
     }
     hooks.broadcastRoomState(room);
     triggerUpdate(wsData.roomId!);

@@ -995,11 +995,16 @@ class MultiplayerFuzzer {
     handleGameClose(this.rooms, third.wsData, this.hooksFor(third), this.updateRoom);
 
     const ghostCount = Object.values(room.players).filter((player) => player.isGhost).length;
+    const rerunInboxStart = first.inbox.length;
     this.send(first, { type: 'RACE_AGAIN', waypoints: null }, 'RACE_AGAIN_GUARD_AFTER_DISCONNECT');
     const rerunRoom = this.rooms.get(roomId)!;
     assert(rerunRoom.state === 'JOINING', 'race again did not ignore disconnected unfinished player');
     assert(Object.values(rerunRoom.players).filter((player) => player.isGhost).length === ghostCount + 2, 'race again did not create ghosts for every connected finisher');
     assert(rerunRoom.players[existingGhostId].finishTime === null, 'race again did not re-arm an existing ghost');
+    const rerunMessages = first.inbox.slice(rerunInboxStart);
+    const finishResetIndex = rerunMessages.findIndex((message) => isMessage(message, 'PLAYER_FINISH_UPDATE') && message.playerId === first.playerId && message.finishTime === null);
+    const ghostJoinIndex = rerunMessages.findIndex((message) => isMessage(message, 'PLAYER_JOINED') && message.player?.isGhost);
+    assert(finishResetIndex >= 0 && ghostJoinIndex > finishResetIndex, 'race again announced ghosts before clearing the finisher');
 
     const retainedGhostIds = Object.values(rerunRoom.players).filter((player) => player.isGhost).map((player) => player.id);
     const nextStartTime = rerunRoom.initialStartTime + 60_000;

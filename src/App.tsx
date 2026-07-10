@@ -49,11 +49,14 @@ function App() {
         spread: 140,
         origin: pos ? { x: pos.x, y: pos.y } : { y: 0.6 }
       });
-      setTimeout(() => {
-        const leftToFinish = Object.values(players()).filter(p => !p.finishTime).length;
-        ((p.desiredRate || 1) && leftToFinish > 0) && import('./store').then(({ toggleSnooze }) => toggleSnooze());
+      const timeout = setTimeout(() => {
+        const currentPlayer = players()[mid];
+        if (!currentPlayer || currentPlayer.finishTime == null || roomState() !== 'RUNNING') return;
+        const leftToFinish = Object.values(players()).filter(player => player.finishTime == null).length;
+        if ((currentPlayer.desiredRate || 1) <= 1 && leftToFinish > 0) import('./store').then(({ toggleSnooze }) => toggleSnooze());
         setShowWinModal(true)
       }, 3000);
+      onCleanup(() => clearTimeout(timeout));
     }
   });
 
