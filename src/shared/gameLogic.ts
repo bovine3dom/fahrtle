@@ -822,7 +822,7 @@ function handleSetGameBounds(
 
         for (const pid of Object.keys(room.players)) {
             if (room.players[pid].isGhost) {
-                if (positionChanged || ghostsDisabled || (pid === 'the-stig-🏎️' && !room.computerDriver)) {
+                if (positionChanged || timeChanged || ghostsDisabled || (pid === 'the-stig-🏎️' && !room.computerDriver)) {
                     delete room.players[pid];
                     hooks.publish(wsData.roomId!, { type: 'PLAYER_LEFT', playerId: pid });
                 }

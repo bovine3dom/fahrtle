@@ -1047,21 +1047,29 @@ class MultiplayerFuzzer {
       ghosts: false, league: rerunRoom.league,
     }, 'RACE_AGAIN_GUARD_CHANGE_SETTINGS');
     assert(rerunRoom.state === 'JOINING' && rerunRoom.isRerun, 'settings change left rerun setup');
-    assert(retainedGhostIds.every((id) => Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'non-positional settings change removed a ghost');
+    assert(retainedGhostIds.every((id) => !Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'start-time change retained a ghost');
+    for (const ghostId of retainedGhostIds) {
+      const leaves = first.inbox.slice(settingsInboxStart).filter((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === ghostId);
+      assert(leaves.length === 1, `start-time change emitted ${leaves.length} leave events for ${ghostId}`);
+    }
     assert(Object.values(rerunRoom.players).filter((player) => !player.isGhost).every((player) => !player.isReady), 'settings change readied a player');
     assert(first.inbox.slice(settingsInboxStart).some((message) => isMessage(message, 'READY_UPDATE') && message.playerId === first.playerId && message.isReady === false), 'settings change did not publish the ready reset');
 
+    const positionGhostId = '👻-position-reset';
+    this.send(first, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'position-reset', waypoints: [{ x: 0, y: 0, startTime: nextStartTime, arrivalTime: nextStartTime, speedFactor: 1 }] }],
+    }, 'RACE_AGAIN_GUARD_POSITION_GHOST');
+    assert(rerunRoom.players[positionGhostId], 'position-change test ghost was not added');
     const inboxStart = first.inbox.length;
     this.send(first, {
       type: 'SET_GAME_BOUNDS', startPos: [rerunRoom.startPos[0] + 0.001, rerunRoom.startPos[1]], finishPos: rerunRoom.finishPos,
       startTime: nextStartTime, difficulty: rerunRoom.difficulty, computerDriver: rerunRoom.computerDriver,
       ghosts: false, league: rerunRoom.league,
     }, 'RACE_AGAIN_GUARD_CHANGE_POSITION');
-    assert(retainedGhostIds.every((id) => !Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'position change retained a ghost');
-    for (const ghostId of retainedGhostIds) {
-      const leaves = first.inbox.slice(inboxStart).filter((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === ghostId);
-      assert(leaves.length === 1, `position change emitted ${leaves.length} leave events for ${ghostId}`);
-    }
+    assert(!rerunRoom.players[positionGhostId], 'position change retained a ghost');
+    const positionLeaves = first.inbox.slice(inboxStart).filter((message) => isMessage(message, 'PLAYER_LEFT') && message.playerId === positionGhostId);
+    assert(positionLeaves.length === 1, `position change emitted ${positionLeaves.length} leave events for ${positionGhostId}`);
   }
 
   private disconnect() {
