@@ -501,7 +501,7 @@ function handleJoinRoom(
         const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
         room.players[playerId] = {
             id: playerId,
-            color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
+            color: typeof color === 'string' ? color : ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
             waypoints: [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }],
             desiredRate: 1, forceRealtime: false, finishTime: null,
