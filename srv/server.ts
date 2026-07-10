@@ -7,7 +7,7 @@ import {
   updateRoomLogic,
   handleIncomingMessage,
   handleGameClose,
-  getProjectedRoomTime,
+  getProjectedRoomClock,
   getRoomBounds,
   boundsToWire
 } from "../src/shared/gameLogic";
@@ -212,16 +212,17 @@ function getGameHooks(): GameHooks {
 
 function broadcastRoomState(room: Room) {
   const bounds = getRoomBounds(room);
+  const projectedClock = getProjectedRoomClock(room);
   server.publish(room.id, JSON.stringify({
     type: 'ROOM_STATE_UPDATE',
     state: room.state,
     countdownEnd: room.countdownEnd,
     gameStartTime: room.gameStartTime,
     ...boundsToWire(bounds),
-    serverTime: getProjectedRoomTime(room),
+    serverTime: projectedClock.virtualTime,
     realTime: Date.now(),
     isRerun: room.isRerun,
-    rate: room.state === 'RUNNING' ? room.playbackRate : 0
+    rate: projectedClock.playbackRate
   }));
 }
 

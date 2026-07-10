@@ -503,8 +503,9 @@ function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHo
 
     if (targetRoomId && rooms.has(targetRoomId)) {
         const r = rooms.get(targetRoomId)!;
-        serverTime = getProjectedRoomTime(r, now);
-        rate = r.playbackRate;
+        const projectedClock = getProjectedRoomClock(r, now);
+        serverTime = projectedClock.virtualTime;
+        rate = projectedClock.playbackRate;
     }
 
     hooks.sendToSender({
@@ -579,7 +580,7 @@ function handleJoinRoom(
         type: 'ROOM_STATE', state: room.state, countdownEnd: room.countdownEnd,
         gameStartTime: room.gameStartTime, serverTime: room.virtualTime,
         ...boundsToWire(getRoomBounds(room)), isRerun: room.isRerun,
-        realTime: now, rate: room.state === 'RUNNING' ? room.playbackRate : 0,
+        realTime: now, rate: room.state === 'RUNNING' ? playbackRateAt(room, room.virtualTime) : 0,
         players: room.players
     });
 
