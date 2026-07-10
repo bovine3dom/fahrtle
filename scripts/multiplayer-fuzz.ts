@@ -142,9 +142,9 @@ function parseOptions(argv: string[]): Options {
   const options: Options = {
     seed: Date.now() >>> 0,
     steps: 1000,
-    clients: 4,
+    clients: 5,
     rooms: 2,
-    hostile: false,
+    hostile: true,
     traceLimit: 80,
   };
 
