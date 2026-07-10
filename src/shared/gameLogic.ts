@@ -976,15 +976,15 @@ function calculatePlaybackRate(room: Room, hooks: GameHooks) {
 
 function checkGhostFinishes(room: Room, hooks: GameHooks) {
     const ghosts = Object.values(room.players).filter(p => p.isGhost);
-    const playerStart = Object.values(room.players).filter(p => !p.isGhost)[0]?.waypoints[0]?.startTime || 0;
+    const playerStart = room.gameStartTime ?? room.initialStartTime;
     for (const ghost of ghosts) {
+        if (ghost.finishTime !== null || ghost.waypoints.length === 0) continue;
         const offset = playerStart - ghost.waypoints[0].startTime;
-        if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
-            const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
-            if (room.virtualTime >= (offset + lastWp.arrivalTime)) {
-                ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
-                hooks.publish(room.id, { type: 'PLAYER_FINISH_UPDATE', playerId: ghost.id, finishTime: ghost.finishTime });
-            }
+        const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
+        const finishVirtualTime = offset + lastWp.arrivalTime;
+        if (room.virtualTime >= finishVirtualTime) {
+            ghost.finishTime = Math.max(0, finishVirtualTime - (room.gameStartTime ?? finishVirtualTime));
+            hooks.publish(room.id, { type: 'PLAYER_FINISH_UPDATE', playerId: ghost.id, finishTime: ghost.finishTime });
         }
     }
 }
