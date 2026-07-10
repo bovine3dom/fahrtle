@@ -124,11 +124,14 @@ function lerp(v0: number, v1: number, t: number) {
 function getSpawnPoint(centerLat: number, centerLng: number) {
     const spreadMeters = 50;
     const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
-    const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(centerLat * Math.PI / 180)));
+    const longitudeScale = Math.cos(centerLat * Math.PI / 180);
+    const lngOffset = Math.abs(longitudeScale) < 1e-6
+        ? 0
+        : (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * longitudeScale));
 
     return {
-        x: centerLng + lngOffset,
-        y: centerLat + latOffset
+        x: ((centerLng + lngOffset + 540) % 360) - 180,
+        y: Math.max(-90, Math.min(90, centerLat + latOffset))
     };
 }
 
