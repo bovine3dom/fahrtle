@@ -368,7 +368,8 @@ function isObject(value: unknown): value is Record<string, any> {
 }
 
 function isSafeKey(value: unknown): value is string {
-    return typeof value === 'string' && value.length > 0 && value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
+    return typeof value === 'string' && value.length > 0 && !value.includes('\0')
+        && value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
 }
 
 function isFiniteCoord(value: unknown): value is [number, number] {
