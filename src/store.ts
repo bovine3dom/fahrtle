@@ -1,6 +1,6 @@
 // ==> src/store.ts <==
 import { atom, map } from 'nanostores';
-import { syncClock } from './time-sync';
+import { estimateServerMessageLatency, getMonotonicTime, syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
@@ -267,7 +267,7 @@ function handleRoomState(msg: any) {
   const previousGhosts = $gameBounds.get().ghosts;
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
-  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
   handleGhostFlags(previousGhosts, msg.ghosts);
 }
 
@@ -278,7 +278,7 @@ function handleRoomStateUpdate(msg: any) {
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
   $isRerun.set(msg.isRerun);
-  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
   handleGhostFlags(prevGhosts, msg.ghosts);
 }
 
@@ -300,14 +300,14 @@ function handleWsMessage(event: any) {
   const msg = JSON.parse(event.data);
 
   if (msg.type === 'SYNC_RESPONSE') {
-    const now = Date.now();
-    syncClock(msg.serverTime, msg.realTime || now, msg.rate, (now - msg.clientSendTime) / 2);
+    const now = getMonotonicTime();
+    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, (now - msg.clientSendTime) / 2);
     $globalRate.set(msg.rate);
     return;
   }
 
   if (msg.type === 'CLOCK_UPDATE') {
-    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
     $globalRate.set(msg.rate);
     return;
   }
@@ -408,7 +408,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
 
   ws.onopen = () => {
     $connected.set(true);
-    ws?.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: Date.now(), roomId: effectiveRoomId }));
+    ws?.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId: effectiveRoomId }));
     ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
     if (initialBounds) sendInitialBounds(initialBounds);
     $currentRoom.set(effectiveRoomId);
