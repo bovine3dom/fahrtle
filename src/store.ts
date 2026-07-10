@@ -241,6 +241,25 @@ interface GenericWebSocket {
 }
 
 let ws: GenericWebSocket | null = null;
+let removeClockResumeListeners: (() => void) | null = null;
+
+function bindClockResumeSync(socket: GenericWebSocket, roomId: string) {
+  const requestSync = () => {
+    if (ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId }));
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') requestSync();
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('focus', requestSync);
+  window.addEventListener('pageshow', requestSync);
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', requestSync);
+    window.removeEventListener('pageshow', requestSync);
+  };
+}
 
 function handleRoomState(msg: any) {
   const timelineStart = getRenderableTimelineStart(msg.players, $myPlayerId.get(), msg.gameStartTime);
@@ -394,6 +413,8 @@ function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRac
 }
 
 export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: GameBounds & { time?: string, dailyRaceIndex?: number }) {
+  removeClockResumeListeners?.();
+  removeClockResumeListeners = null;
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
@@ -416,11 +437,14 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
       $currentRoom.set(effectiveRoomId);
       $myPlayerId.set(playerId);
       socket.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId: effectiveRoomId }));
+      removeClockResumeListeners = bindClockResumeSync(socket, effectiveRoomId);
       socket.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
       if (initialBounds) sendInitialBounds(initialBounds, socket);
     },
     message: handleWsMessage,
     close: () => {
+      removeClockResumeListeners?.();
+      removeClockResumeListeners = null;
       ws = null;
       $connected.set(false);
       $currentRoom.set(null);
