@@ -1,6 +1,6 @@
-import { Show, createMemo, createSignal } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $roomState, toggleReady, $gameBounds, $isSinglePlayer, $isDaily, $isRerun, stopImmediately } from '../store';
+import { $currentRoom, leaveRoom, $globalRate, $roomState, toggleReady, $gameBounds, $isSinglePlayer, $isDaily, stopImmediately } from '../store';
 import Clock from '../Clock';
 import { fitGameBounds } from '../Map';
 import { formatDuration } from '../utils/time';
@@ -56,7 +56,6 @@ export function GamePanel(props: {
   rate: () => number;
   elapsedTime: () => string | null;
   isDaily: boolean;
-  isRerun: boolean;
   roomState: () => 'JOINING' | 'COUNTDOWN' | 'RUNNING';
   leaveConfirm: boolean;
   setLeaveConfirm: (v: boolean) => void;
@@ -67,12 +66,16 @@ export function GamePanel(props: {
 }) {
   const room = useStore($currentRoom);
   const roomState = useStore($roomState);
-  const isRerun = useStore($isRerun);
   const bounds = useStore($gameBounds);
   const rate = useStore($globalRate);
   const isDaily = useStore($isDaily);
 
   const [minimized, setMinimized] = createSignal(false);
+  const canToggleReady = () => roomState() !== 'JOINING' || props.isSaved();
+
+  createEffect(() => {
+    if (roomState() === 'JOINING') setMinimized(false);
+  });
 
   const elapsedTime = createMemo(() => {
     const start = props.startTime();
@@ -166,18 +169,20 @@ export function GamePanel(props: {
           <Show when={canCancel()} fallback={
             <Show when={roomState() === 'RUNNING'} fallback={
               <button
+                disabled={!canToggleReady()}
                 onClick={() => {
+                  if (!canToggleReady()) return;
                   toggleReady();
                   !props.players()[props.myId()!].isReady ? fitGameBounds() : null;
                 }}
                 style={{
                   width: '100%', padding: '10px', 'background': props.players()[props.myId()!]?.isReady ? colours.bg : colours.primary,
                   color: props.players()[props.myId()!]?.isReady ? colours.text : 'white',
-                  border: '1px solid colours.border', 'border-radius': '4px', cursor: 'pointer',
+                  border: '1px solid colours.border', 'border-radius': '4px', cursor: canToggleReady() ? 'pointer' : 'not-allowed',
                   'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                 }}
               >
-                {props.players()[props.myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
+                {!canToggleReady() ? 'Confirm settings first' : props.players()[props.myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
               </button>
             }>
               <button disabled style={{
@@ -237,7 +242,7 @@ export function GamePanel(props: {
               </Show>
             </div>
 
-            <Show when={roomState() === 'JOINING' && !isRerun()}>
+            <Show when={roomState() === 'JOINING'}>
               <GameSettings
                 isDaily={props.isDaily}
                 bounds={bounds()}
@@ -294,18 +299,20 @@ export function GamePanel(props: {
             </Show>
             {roomState() !== 'RUNNING' && (
               <button
+                disabled={!canToggleReady()}
                 onClick={() => {
+                  if (!canToggleReady()) return;
                   toggleReady();
                   !props.players()[props.myId()!].isReady ? fitGameBounds() : null;
                 }}
                 style={{
                   width: '100%', padding: '10px', 'background': props.players()[props.myId()!]?.isReady ? colours.bg : colours.primary,
                   color: props.players()[props.myId()!]?.isReady ? colours.text : 'white',
-                  border: '1px solid colours.border', 'border-radius': '4px', cursor: 'pointer',
+                  border: '1px solid colours.border', 'border-radius': '4px', cursor: canToggleReady() ? 'pointer' : 'not-allowed',
                   'font-size': '0.9em', 'font-weight': 'bold', 'margin-bottom': '8px'
                 }}
               >
-                {props.players()[props.myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
+                {!canToggleReady() ? 'Confirm settings first' : props.players()[props.myId()!]?.isReady ? 'Unready' : $isSinglePlayer.get() ? 'Start game' : 'Ready up'}
               </button>
             )}
             <Show when={roomState() === 'RUNNING'}>

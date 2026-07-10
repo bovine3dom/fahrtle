@@ -632,7 +632,13 @@ function handleRaceAgain(
     }
     for (const pid of Object.keys(room.players)) {
         const p = room.players[pid];
-        if (p.isGhost) continue;
+        if (p.isGhost) {
+            if (p.finishTime !== null) {
+                p.finishTime = null;
+                hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: pid, finishTime: null });
+            }
+            continue;
+        }
         const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
         p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
         p.isReady = false;
@@ -666,6 +672,8 @@ function handleSetGameBounds(
 
     const prevStart = room.startPos;
     const prevFinish = room.finishPos;
+    const prevStartTime = room.initialStartTime;
+    const prevGhosts = room.ghosts;
     room.startPos = message.startPos;
     room.finishPos = message.finishPos;
     room.difficulty = message.difficulty || 'Normal';
@@ -680,27 +688,29 @@ function handleSetGameBounds(
 
     if (room.startPos) {
         const [newLat, newLng] = room.startPos;
-        const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
+        const posChanged = !prevStart || prevStart[0] !== newLat || prevStart[1] !== newLng;
         const finishChanged = prevFinish === null || room.finishPos === null
             ? prevFinish !== room.finishPos
-            : Math.abs(prevFinish[0] - room.finishPos[0]) > 0.0001 || Math.abs(prevFinish[1] - room.finishPos[1]) > 0.0001;
-        const timeChanged = message.startTime !== undefined;
+            : prevFinish[0] !== room.finishPos[0] || prevFinish[1] !== room.finishPos[1];
+        const positionChanged = posChanged || finishChanged;
+        const timeChanged = message.startTime !== undefined && message.startTime !== prevStartTime;
         const resetPlayers = posChanged || timeChanged;
+        const ghostsDisabled = prevGhosts === true && !room.ghosts;
 
-        if (resetPlayers || finishChanged || !room.ghosts) {
-            for (const pid of Object.keys(room.players)) {
-                if (room.players[pid].isGhost) {
+        for (const pid of Object.keys(room.players)) {
+            if (room.players[pid].isGhost) {
+                if (positionChanged || ghostsDisabled || (pid === 'the-stig-🏎️' && !room.computerDriver)) {
                     delete room.players[pid];
                     hooks.publish(wsData.roomId!, { type: 'PLAYER_LEFT', playerId: pid });
-                    continue;
                 }
-                if (!resetPlayers) continue;
-                const p = room.players[pid];
-                const spawn = getSpawnPoint(newLat, newLng);
-                p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
-                p.viewingStopName = null;
-                hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
+                continue;
             }
+            if (!resetPlayers) continue;
+            const p = room.players[pid];
+            const spawn = getSpawnPoint(newLat, newLng);
+            p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
+            p.viewingStopName = null;
+            hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
         }
     }
     hooks.broadcastRoomState(room);

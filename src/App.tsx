@@ -1,6 +1,6 @@
 import { Suspense, lazy, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $roomState, $countdownEnd, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, $isDaily, $playerStats, updatePlayerStats, $isRerun, raceAgain } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $roomState, $countdownEnd, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, $isDaily, $playerStats, updatePlayerStats, raceAgain } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import { fitGameBounds, getPlayerScreenPosition } from './Map';
@@ -22,7 +22,6 @@ function App() {
   const room = useStore($currentRoom);
   const rate = useStore($globalRate);
   const roomState = useStore($roomState);
-  const isRerun = useStore($isRerun);
   const countdownEnd = useStore($countdownEnd);
   const bounds = useStore($gameBounds);
   const pickerMode = useStore($pickerMode);
@@ -366,7 +365,6 @@ function App() {
             rate={rate}
             elapsedTime={elapsedTime}
             isDaily={isDaily()}
-            isRerun={isRerun()}
             roomState={roomState}
             leaveConfirm={leaveConfirm()}
             setLeaveConfirm={setLeaveConfirm}
