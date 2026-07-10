@@ -137,16 +137,58 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
 
 function stepClock(room: Room) {
     const now = Date.now();
-    const elapsedReal = Math.max(0, now - room.lastRealTime);
-    if (room.state === 'RUNNING') {
-        room.virtualTime += elapsedReal * room.playbackRate;
-    }
+    room.virtualTime = getProjectedRoomTime(room, now);
     room.lastRealTime = now;
 }
 
 export function getProjectedRoomTime(room: Room, now = Date.now()) {
-    if (room.state !== 'RUNNING') return room.virtualTime;
-    return room.virtualTime + Math.max(0, now - room.lastRealTime) * room.playbackRate;
+    return getProjectedRoomClock(room, now).virtualTime;
+}
+
+export function getProjectedRoomClock(room: Room, now = Date.now()) {
+    if (room.state !== 'RUNNING') return { virtualTime: room.virtualTime, playbackRate: 0 };
+    let remainingRealTime = Math.max(0, now - room.lastRealTime);
+    let virtualTime = room.virtualTime;
+    let rate = room.playbackRate;
+
+    while (remainingRealTime > 0 && rate > 0) {
+        const boundary = nextPlaybackBoundary(room, virtualTime);
+        if (boundary === null) return { virtualTime: virtualTime + remainingRealTime * rate, playbackRate: rate };
+        const realTimeToBoundary = (boundary - virtualTime) / rate;
+        if (realTimeToBoundary > remainingRealTime) return { virtualTime: virtualTime + remainingRealTime * rate, playbackRate: rate };
+        virtualTime = boundary;
+        remainingRealTime -= realTimeToBoundary;
+        rate = playbackRateAt(room, virtualTime);
+    }
+    return { virtualTime, playbackRate: rate };
+}
+
+function nextPlaybackBoundary(room: Room, virtualTime: number) {
+    let boundary = Number.POSITIVE_INFINITY;
+    for (const player of Object.values(room.players)) {
+        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
+        for (const waypoint of player.waypoints) {
+            if (waypoint.startTime > virtualTime) boundary = Math.min(boundary, waypoint.startTime);
+            if (waypoint.arrivalTime > virtualTime) boundary = Math.min(boundary, waypoint.arrivalTime);
+        }
+    }
+    return Number.isFinite(boundary) ? boundary : null;
+}
+
+function playbackRateAt(room: Room, virtualTime: number) {
+    const activeFactors: number[] = [];
+    for (const player of Object.values(room.players)) {
+        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
+        let currentFactor = player.forceRealtime ? 1 : (player.desiredRate || 1);
+        for (const waypoint of player.waypoints) {
+            if (virtualTime >= waypoint.startTime && virtualTime < waypoint.arrivalTime) {
+                currentFactor = player.forceRealtime ? 1 : Math.max(waypoint.speedFactor, player.desiredRate || 1);
+                break;
+            }
+        }
+        activeFactors.push(currentFactor);
+    }
+    return activeFactors.length > 0 ? Math.max(1, Math.min(...activeFactors)) : 1;
 }
 
 export interface GameHooks {
@@ -171,6 +213,7 @@ function markPlayerDisconnected(
     if (!player) return;
     if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
 
+    stepClock(room);
     player.disconnectedAt = Date.now();
     hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
     checkCountdownLogic(room, hooks);
@@ -499,6 +542,7 @@ function handleJoinRoom(
         rooms.set(roomId, room);
     }
 
+    stepClock(room);
     room.emptySince = null;
 
     if (!Object.prototype.hasOwnProperty.call(room.players, playerId)) {
@@ -529,7 +573,6 @@ function handleJoinRoom(
         if (previousRoom) markPlayerDisconnected(previousRoom, previousRoomId, previousPlayerId, hooks, (r) => triggerUpdate(r.id));
     }
 
-    stepClock(room);
     checkCountdownLogic(room, hooks);
 
     hooks.sendToSender({
@@ -770,6 +813,7 @@ export function handleIncomingMessage(
     if (message.type === 'TOGGLE_SNOOZE') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        stepClock(r.room);
         r.player.forceRealtime = false;
         r.player.desiredRate = r.player.desiredRate > 1.0 ? 1.0 : 500.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -780,6 +824,7 @@ export function handleIncomingMessage(
     if (message.type === 'FORCE_REALTIME') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        stepClock(r.room);
         r.player.forceRealtime = !r.player.forceRealtime;
         if (r.player.forceRealtime) r.player.desiredRate = 1.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -850,6 +895,7 @@ export function handleIncomingMessage(
     if (message.type === 'PLAYER_FINISHED') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r || r.player.finishTime !== null || !Number.isFinite(message.finishTime) || message.finishTime < 0) return;
+        stepClock(r.room);
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
         triggerUpdate(wsData.roomId!);
@@ -895,20 +941,7 @@ function checkCountdownLogic(room: Room, hooks: GameHooks) {
 }
 
 function calculatePlaybackRate(room: Room, hooks: GameHooks) {
-    const activeFactors: number[] = [];
-    for (const pid in room.players) {
-        const p = room.players[pid];
-        if (p.isGhost || p.disconnectedAt !== null || p.finishTime !== null) continue;
-        let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
-        for (const wp of p.waypoints) {
-            if (room.virtualTime >= wp.startTime && room.virtualTime < wp.arrivalTime) {
-                currentFactor = p.forceRealtime ? 1.0 : Math.max(wp.speedFactor, p.desiredRate || 1.0);
-                break;
-            }
-        }
-        activeFactors.push(currentFactor);
-    }
-    const newRate = activeFactors.length > 0 ? Math.max(1.0, Math.min(...activeFactors)) : 1.0;
+    const newRate = playbackRateAt(room, room.virtualTime);
     if (Math.abs(room.playbackRate - newRate) > 0.01) {
         room.playbackRate = newRate;
         hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: Date.now(), rate: room.playbackRate });
