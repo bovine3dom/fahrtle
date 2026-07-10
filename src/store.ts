@@ -269,6 +269,7 @@ function handleRoomState(msg: any) {
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
   syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
+  $globalRate.set(msg.rate);
   handleGhostFlags(previousGhosts, msg.ghosts);
 }
 
@@ -280,6 +281,7 @@ function handleRoomStateUpdate(msg: any) {
   $gameStartTime.set(msg.gameStartTime);
   $isRerun.set(msg.isRerun);
   syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
+  $globalRate.set(msg.rate);
   handleGhostFlags(prevGhosts, msg.ghosts);
 }
 
