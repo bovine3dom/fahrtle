@@ -116,6 +116,8 @@ export type Room = {
 
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
+const MAX_TIMESTAMP = 10_000_000_000_000;
+const MAX_SPEED_FACTOR = 1_000_000;
 
 function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
@@ -435,6 +437,14 @@ function isLeague(value: unknown): value is string {
     return typeof value === 'string' && /^\d{8}$/.test(value);
 }
 
+function isSafeTimestamp(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= MAX_TIMESTAMP;
+}
+
+function isSafeSpeedFactor(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_SPEED_FACTOR;
+}
+
 function optionalString(value: unknown): string | undefined {
     return typeof value === 'string' ? value : undefined;
 }
@@ -459,9 +469,9 @@ function isValidWaypointList(value: unknown): value is Waypoint[] {
         if (!isObject(wp)
             || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
             || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
-            || !Number.isFinite(wp.startTime)
-            || !Number.isFinite(wp.arrivalTime)
-            || !Number.isFinite(wp.speedFactor) || wp.speedFactor < 0
+            || !isSafeTimestamp(wp.startTime)
+            || !isSafeTimestamp(wp.arrivalTime)
+            || !isSafeSpeedFactor(wp.speedFactor)
             || wp.startTime < previousArrival
             || wp.arrivalTime < wp.startTime
             || !validOptionalWaypointFields(wp)) return false;
@@ -474,15 +484,16 @@ function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint
     if (!isObject(wp)
         || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
         || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
-        || !Number.isFinite(wp.speedFactor) || wp.speedFactor < 0) return null;
+        || !isSafeSpeedFactor(wp.speedFactor)) return null;
 
     const start = Math.max(lastPoint.arrivalTime, roomTime);
+    if (!isSafeTimestamp(start)) return null;
     let finalArrival = wp.arrivalTime;
     if (finalArrival === undefined) {
         const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
         finalArrival = start + distance / BASE_SPEED;
     }
-    if (!Number.isFinite(finalArrival)) return null;
+    if (!isSafeTimestamp(finalArrival)) return null;
     finalArrival = Math.max(finalArrival, start);
 
     return {
@@ -649,7 +660,7 @@ function handleSetGameBounds(
     if (room.state !== 'JOINING') return;
     if (!isFiniteCoord(message.startPos)) return;
     if (message.finishPos !== null && !isFiniteCoord(message.finishPos)) return;
-    if (message.startTime !== undefined && !Number.isFinite(message.startTime)) return;
+    if (message.startTime !== undefined && !isSafeTimestamp(message.startTime)) return;
     if (!isDifficulty(message.difficulty)) return;
     if (!isLeague(message.league)) return;
 
@@ -895,7 +906,7 @@ export function handleIncomingMessage(
 
     if (message.type === 'PLAYER_FINISHED') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
-        if (!r || r.player.finishTime !== null || !Number.isFinite(message.finishTime) || message.finishTime < 0) return;
+        if (!r || r.player.finishTime !== null || !isSafeTimestamp(message.finishTime) || message.finishTime < 0) return;
         stepClock(r.room);
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
