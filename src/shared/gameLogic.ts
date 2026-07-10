@@ -672,7 +672,7 @@ function handleSetGameBounds(
     room.ghosts = !!message.ghosts;
     room.league = message.league;
 
-    if (message.startTime) {
+    if (message.startTime !== undefined) {
         room.virtualTime = message.startTime;
         room.initialStartTime = message.startTime;
     }
