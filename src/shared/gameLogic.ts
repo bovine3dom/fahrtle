@@ -823,6 +823,7 @@ export function handleIncomingMessage(
             hooks.publish(wsData.roomId, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
         }
         hooks.broadcastRoomState(room);
+        triggerUpdate(wsData.roomId);
         return;
     }
 
