@@ -1008,6 +1008,9 @@ class MultiplayerFuzzer {
 
     const retainedGhostIds = Object.values(rerunRoom.players).filter((player) => player.isGhost).map((player) => player.id);
     const nextStartTime = rerunRoom.initialStartTime + 60_000;
+    this.send(first, { type: 'TOGGLE_READY' }, 'RACE_AGAIN_GUARD_READY_BEFORE_SETTINGS');
+    assert(rerunRoom.players[first.playerId].isReady, 'rerun player did not ready before settings change');
+    const settingsInboxStart = first.inbox.length;
     this.send(second, {
       type: 'SET_GAME_BOUNDS', startPos: rerunRoom.startPos, finishPos: rerunRoom.finishPos,
       startTime: nextStartTime, difficulty: 'Normal', computerDriver: true,
@@ -1016,6 +1019,7 @@ class MultiplayerFuzzer {
     assert(rerunRoom.state === 'JOINING' && rerunRoom.isRerun, 'settings change left rerun setup');
     assert(retainedGhostIds.every((id) => Object.prototype.hasOwnProperty.call(rerunRoom.players, id)), 'non-positional settings change removed a ghost');
     assert(Object.values(rerunRoom.players).filter((player) => !player.isGhost).every((player) => !player.isReady), 'settings change readied a player');
+    assert(first.inbox.slice(settingsInboxStart).some((message) => isMessage(message, 'READY_UPDATE') && message.playerId === first.playerId && message.isReady === false), 'settings change did not publish the ready reset');
 
     const inboxStart = first.inbox.length;
     this.send(first, {

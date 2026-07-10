@@ -770,6 +770,9 @@ function handleSetGameBounds(
     const prevFinish = room.finishPos;
     const prevStartTime = room.initialStartTime;
     const prevGhosts = room.ghosts;
+    const prevDifficulty = room.difficulty;
+    const prevComputerDriver = room.computerDriver;
+    const prevLeague = room.league;
     room.startPos = message.startPos;
     room.finishPos = message.finishPos;
     room.difficulty = message.difficulty || 'Normal';
@@ -792,6 +795,8 @@ function handleSetGameBounds(
         const timeChanged = message.startTime !== undefined && message.startTime !== prevStartTime;
         const resetPlayers = posChanged || timeChanged;
         const ghostsDisabled = prevGhosts === true && !room.ghosts;
+        const settingsChanged = positionChanged || timeChanged || prevDifficulty !== room.difficulty
+            || prevComputerDriver !== room.computerDriver || prevGhosts !== room.ghosts || prevLeague !== room.league;
 
         for (const pid of Object.keys(room.players)) {
             if (room.players[pid].isGhost) {
@@ -801,8 +806,12 @@ function handleSetGameBounds(
                 }
                 continue;
             }
-            if (!resetPlayers) continue;
             const p = room.players[pid];
+            if (settingsChanged && p.isReady) {
+                p.isReady = false;
+                hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: pid, isReady: false });
+            }
+            if (!resetPlayers) continue;
             const spawn = getSpawnPoint(newLat, newLng);
             p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
             p.viewingStopName = null;
