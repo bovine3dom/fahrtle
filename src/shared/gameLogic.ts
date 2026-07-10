@@ -452,10 +452,12 @@ function buildDrivingWaypoints(simplifiedPoints: { x: number, y: number, arrival
 
 async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
     if (!room.startPos || !room.finishPos) return;
+    const requestedStart = [...room.startPos] as [number, number];
+    const requestedFinish = [...room.finishPos] as [number, number];
 
     try {
         const body = JSON.stringify({
-            coordinates: [[room.startPos[1], room.startPos[0]], [room.finishPos[1], room.finishPos[0]]]
+            coordinates: [[requestedStart[1], requestedStart[0]], [requestedFinish[1], requestedFinish[0]]]
         });
 
         const response = await fetch("https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
@@ -469,10 +471,13 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
         const data = await response.json();
         const feature = data.features[0];
         if (!feature) return;
+        if (!room.computerDriver || room.state !== 'RUNNING' || room.players['the-stig-🏎️']
+            || room.startPos[0] !== requestedStart[0] || room.startPos[1] !== requestedStart[1]
+            || room.finishPos?.[0] !== requestedFinish[0] || room.finishPos[1] !== requestedFinish[1]) return;
 
         const coords = feature.geometry.coordinates;
         const steps = feature.properties.segments[0].steps;
-        const startTime = room.gameStartTime || room.virtualTime;
+        const startTime = room.gameStartTime ?? room.virtualTime;
 
         const allTimedPoints = processRouteSteps(steps, coords, startTime);
         const simplified = simplify(allTimedPoints, 0.0005, true) as { x: number, y: number, arrivalTime: number, instruction: string }[];
