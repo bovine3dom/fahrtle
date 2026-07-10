@@ -145,17 +145,7 @@ class FakeServer {
             for (const [id, room] of this.rooms) {
                 const { timerId, ...roomData } = room;
 
-                const prunedPlayers: Record<string, any> = {};
-                for (const pid in room.players) {
-                    const p = room.players[pid];
-                    const waypoints = p.waypoints.filter(wp => !wp.isInterstop);
-                    prunedPlayers[pid] = {
-                        ...p,
-                        waypoints
-                    };
-                }
-
-                data[id] = { ...roomData, players: prunedPlayers };
+                data[id] = roomData;
             }
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
         } catch (e) {

@@ -491,9 +491,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
   
   const playerName = $playerSettings.get().name || myId;
   
-  const nonInterstopWaypoints = player.waypoints.filter(wp => !wp.isInterstop);
-  
-  if (nonInterstopWaypoints.length === 0) return;
+  if (player.waypoints.length === 0) return;
 
   const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
 
@@ -505,7 +503,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
         playerId: myId,
         playerName: playerName,
         color: player.color,
-        waypoints: nonInterstopWaypoints,
+        waypoints: player.waypoints,
         finishTime: finishTime
       })
     });
