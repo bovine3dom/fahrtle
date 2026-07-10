@@ -887,6 +887,14 @@ class MultiplayerFuzzer {
     this.clock.shiftWallTime(30_000);
     this.updateRoom(room.id);
     assert(room.virtualTime === before, 'server wall-clock recovery counted the rollback interval twice');
+
+    room.state = 'JOINING';
+    this.clock.shiftWallTime(-30_000);
+    this.updateRoom(room.id);
+    assert(room.lastRealTime === this.clock.nowMs, 'non-running room retained a future clock anchor');
+    this.clock.shiftWallTime(30_000);
+    this.updateRoom(room.id);
+    room.state = 'RUNNING';
   }
 
   private assertStopClearsViewingState() {

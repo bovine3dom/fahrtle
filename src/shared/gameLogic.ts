@@ -172,7 +172,10 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
 
 function stepClock(room: Room) {
     const now = Date.now();
-    if (now < room.lastRealTime) return;
+    if (now < room.lastRealTime) {
+        if (room.state !== 'RUNNING') room.lastRealTime = now;
+        return;
+    }
     room.virtualTime = getProjectedRoomTime(room, now);
     room.lastRealTime = now;
 }
