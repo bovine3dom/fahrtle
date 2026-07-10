@@ -8,6 +8,7 @@ import { sharedFakeServer } from './fakeServer';
 import { type Difficulty, type GameBounds, CURRENT_LEAGUE, boundsToWire, wireToGameBounds } from './shared/gameLogic';
 import { haversineDist } from './utils/geo';
 import { formatRowTime } from './utils/format';
+import { bindCurrentWebSocket } from './websocket';
 
 export type { Difficulty };
 
@@ -348,7 +349,7 @@ function handleWsMessage(event: any) {
   }
 }
 
-function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRaceIndex?: number }) {
+function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRaceIndex?: number }, socket = ws) {
   let startTime: number | undefined;
   const startPos = initialBounds.start || [51, 0];
   if (startPos && initialBounds.time) {
@@ -357,7 +358,7 @@ function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRac
     if (parsed !== null) startTime = parsed;
   }
 
-  ws?.send(JSON.stringify({
+  socket?.send(JSON.stringify({
     type: 'SET_GAME_BOUNDS',
     ...boundsToWire({
       start: initialBounds.start,
@@ -403,25 +404,27 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
   }
 
   if (!ws) return;
+  const socket = ws;
 
   const effectiveRoomId = roomId || ($isDaily.get() ? 'daily' : 'solo');
 
-  ws.onopen = () => {
-    $connected.set(true);
-    ws?.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId: effectiveRoomId }));
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
-    if (initialBounds) sendInitialBounds(initialBounds);
-    $currentRoom.set(effectiveRoomId);
-    $myPlayerId.set(playerId);
-  };
-
-  ws.onmessage = handleWsMessage;
-
-  ws.onclose = () => {
-    $connected.set(false);
-    $currentRoom.set(null);
-    ghostsFetchedForIndex = null;
-  }
+  bindCurrentWebSocket(socket, (candidate) => ws === candidate, {
+    open: () => {
+      $connected.set(true);
+      $currentRoom.set(effectiveRoomId);
+      $myPlayerId.set(playerId);
+      socket.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId: effectiveRoomId }));
+      socket.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
+      if (initialBounds) sendInitialBounds(initialBounds, socket);
+    },
+    message: handleWsMessage,
+    close: () => {
+      ws = null;
+      $connected.set(false);
+      $currentRoom.set(null);
+      ghostsFetchedForIndex = null;
+    },
+  });
 }
 
 async function removeGhosts() {
@@ -454,6 +457,7 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
   ghostsFetchedForIndex = dailyRaceIndex;
   
   if (!ws || ws.readyState !== 1) return;
+  const socket = ws;
   
   const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
   
@@ -464,8 +468,8 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
     if (!response.ok) return;
     const ghosts = await response.json();
     
-    if (ghosts && ghosts.length > 0) {
-      ws.send(JSON.stringify({
+    if (ghosts && ghosts.length > 0 && ws === socket && socket.readyState === 1 && ghostsFetchedForIndex === dailyRaceIndex) {
+      socket.send(JSON.stringify({
         type: 'ADD_GHOSTS',
         ghosts: ghosts.map((g: any) => ({
           playerId: g.playerId,
