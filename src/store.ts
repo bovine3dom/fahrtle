@@ -9,7 +9,7 @@ import { type Difficulty, type GameBounds, CURRENT_LEAGUE, boundsToWire, wireToG
 import { haversineDist } from './utils/geo';
 import { formatRowTime } from './utils/format';
 import { bindCurrentWebSocket } from './websocket';
-import { buildRenderablePlayer, buildRenderablePlayers, type AnimationSegment } from './playerRendering';
+import { buildRenderablePlayer, buildRenderablePlayers, getRenderableTimelineStart, rebaseRenderableGhosts, type AnimationSegment } from './playerRendering';
 
 export type { Difficulty };
 
@@ -243,7 +243,8 @@ interface GenericWebSocket {
 let ws: GenericWebSocket | null = null;
 
 function handleRoomState(msg: any) {
-  const renderables = buildRenderablePlayers(msg.players, msg.gameStartTime) as Record<string, RenderablePlayer>;
+  const timelineStart = getRenderableTimelineStart(msg.players, $myPlayerId.get(), msg.gameStartTime);
+  const renderables = buildRenderablePlayers(msg.players, timelineStart) as Record<string, RenderablePlayer>;
   for (const pid in msg.players) {
     if (pid === $myPlayerId.get()) {
       const p = msg.players[pid];
@@ -275,6 +276,10 @@ function handleRoomStateUpdate(msg: any) {
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
   $isRerun.set(msg.isRerun);
+  const players = $players.get();
+  const timelineStart = getRenderableTimelineStart(players, $myPlayerId.get(), msg.gameStartTime);
+  const rebasedPlayers = rebaseRenderableGhosts(players, timelineStart);
+  if (rebasedPlayers !== players) $players.set(rebasedPlayers as Record<string, RenderablePlayer>);
   syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
   $globalRate.set(msg.rate);
   handleGhostFlags(prevGhosts, msg.ghosts);
@@ -694,7 +699,8 @@ export function sendPing(lat: number, lon: number) {
 }
 
 function processPlayer(raw: Player): RenderablePlayer {
-  return buildRenderablePlayer(raw, $gameStartTime.get() ?? undefined);
+  const players = $players.get();
+  return buildRenderablePlayer(raw, getRenderableTimelineStart(players, $myPlayerId.get(), $gameStartTime.get()));
 }
 
 export function setGameBounds(partial: Partial<GameBounds>) {

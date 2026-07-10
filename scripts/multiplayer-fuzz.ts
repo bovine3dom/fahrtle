@@ -13,7 +13,7 @@ import {
 } from '../src/shared/gameLogic';
 import { createClockState, projectClock } from '../src/time-sync';
 import { bindCurrentWebSocket, parseWebSocketMessage } from '../src/websocket';
-import { buildRenderablePlayer, buildRenderablePlayers, getPlayerMotionAt } from '../src/playerRendering';
+import { buildRenderablePlayer, buildRenderablePlayers, getPlayerMotionAt, getRenderableTimelineStart, rebaseRenderableGhosts } from '../src/playerRendering';
 
 type WsData = { roomId: string | null; playerId: string | null };
 
@@ -654,7 +654,9 @@ class MultiplayerFuzzer {
       const players = this.rng.bool()
         ? { local, remote }
         : { remote, local };
-      const renderables = buildRenderablePlayers(players, localStart);
+      const timelineStart = getRenderableTimelineStart(players, 'local', null);
+      assert(timelineStart === localStart, 'joining snapshot did not use the local spawn timeline');
+      const renderables = buildRenderablePlayers(players, timelineStart);
       for (const [id, raw] of Object.entries(players)) {
         const segment = renderables[id].segments[0];
         const offset = local.waypoints[0].startTime - raw.waypoints[0].startTime;
@@ -665,6 +667,9 @@ class MultiplayerFuzzer {
       const missingLocal = buildRenderablePlayer(remote);
       assert(missingLocal.segments.every((segment) => finiteNumber(segment.startTime) && finiteNumber(segment.endTime)), 'missing local player produced non-finite segments');
       const renderedLocal = renderables.local;
+      const shifted = rebaseRenderableGhosts(renderables, localStart + 60_000);
+      assert(shifted.remote.segments[0].startTime === renderables.remote.segments[0].startTime + 60_000, 'retained ghost was not rebased');
+      assert(shifted.local === renderables.local, 'rebasing ghosts rebuilt the local player');
       const gapTime = renderedLocal.waypoints[0].arrivalTime + 0.5;
       assert(formatJson(getPlayerMotionAt(renderedLocal, gapTime)?.position) === '[1,2]', 'player moved during a timetable gap');
       const activeTime = (renderedLocal.segments[0].startTime + renderedLocal.segments[0].endTime) / 2;

@@ -41,6 +41,25 @@ export function buildRenderablePlayers<T extends PlayerWithWaypoints>(players: R
   return Object.fromEntries(Object.entries(players).map(([id, player]) => [id, buildRenderablePlayer(player, gameStartTime)]));
 }
 
+export function getRenderableTimelineStart<T extends PlayerWithWaypoints>(players: Record<string, T>, playerId: string | null, gameStartTime?: number | null) {
+  if (typeof gameStartTime === 'number' && Number.isFinite(gameStartTime)) return gameStartTime;
+  const playerStartTime = playerId ? players[playerId]?.waypoints[0]?.startTime : undefined;
+  return Number.isFinite(playerStartTime) ? playerStartTime : undefined;
+}
+
+export function rebaseRenderableGhosts<T extends PlayerWithWaypoints & { segments: AnimationSegment[] }>(players: Record<string, T>, timelineStart?: number) {
+  if (timelineStart === undefined || !Number.isFinite(timelineStart)) return players;
+  let updated = players;
+  for (const [id, player] of Object.entries(players)) {
+    if (!player.isGhost || player.waypoints.length < 2) continue;
+    const expectedStart = player.waypoints[1].startTime + timelineStart - player.waypoints[0].startTime;
+    if (player.segments[0]?.startTime === expectedStart) continue;
+    if (updated === players) updated = { ...players };
+    updated[id] = buildRenderablePlayer(player, timelineStart);
+  }
+  return updated;
+}
+
 export function getPlayerMotionAt(player: PlayerWithWaypoints & { segments: AnimationSegment[] }, time: number) {
   const firstWaypoint = player.waypoints[0];
   if (!firstWaypoint) return null;
