@@ -9,6 +9,7 @@ import { type Difficulty, type GameBounds, CURRENT_LEAGUE, boundsToWire, wireToG
 import { haversineDist } from './utils/geo';
 import { formatRowTime } from './utils/format';
 import { bindCurrentWebSocket } from './websocket';
+import { buildRenderablePlayer, buildRenderablePlayers, type AnimationSegment } from './playerRendering';
 
 export type { Difficulty };
 
@@ -65,13 +66,7 @@ export type Player = {
   isGhost: boolean;
 };
 
-export type AnimationSegment = {
-  start: [number, number];
-  end: [number, number];
-  startTime: number;
-  endTime: number;
-  isInterstop: boolean;
-};
+export type { AnimationSegment } from './playerRendering';
 
 type RenderablePlayer = Player & { isGhost: boolean } & { segments: AnimationSegment[] };
 
@@ -248,9 +243,8 @@ interface GenericWebSocket {
 let ws: GenericWebSocket | null = null;
 
 function handleRoomState(msg: any) {
-  const renderables: Record<string, RenderablePlayer> = {};
+  const renderables = buildRenderablePlayers(msg.players, msg.gameStartTime) as Record<string, RenderablePlayer>;
   for (const pid in msg.players) {
-    renderables[pid] = processPlayer(msg.players[pid]);
     if (pid === $myPlayerId.get()) {
       const p = msg.players[pid];
       if (p.waypoints.length > 0) {
@@ -702,35 +696,7 @@ export function sendPing(lat: number, lon: number) {
 }
 
 function processPlayer(raw: Player): RenderablePlayer {
-  const segments: AnimationSegment[] = [];
-  const myStart = $players.get()[$myPlayerId.get()||'']?.waypoints[0].startTime;
-  const offset = myStart - raw?.waypoints[0].startTime; // this hack doesn't feel right
-
-  for (let i = 0; i < raw.waypoints.length; i++) {
-    const wp = raw.waypoints[i];
-    if (i > 0) {
-      const prev = raw.waypoints[i - 1];
-      segments.push({
-        start: [prev.x, prev.y],
-        end: [wp.x, wp.y],
-        startTime: wp.startTime + offset,
-        endTime: wp.arrivalTime + offset,
-        isInterstop: wp.isInterstop || false
-      });
-    }
-  }
-
-  for (let i = 1; i < segments.length; i++) {
-    if (segments[i].startTime !== segments[i - 1].endTime) {
-      segments[i].startTime = segments[i - 1].endTime;
-    }
-  }
-
-  return {
-    ...raw,
-    isGhost: raw.isGhost,
-    segments
-  };
+  return buildRenderablePlayer(raw, $gameStartTime.get() ?? undefined);
 }
 
 export function setGameBounds(partial: Partial<GameBounds>) {
