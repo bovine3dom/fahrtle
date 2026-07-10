@@ -40,3 +40,26 @@ export function buildRenderablePlayer<T extends PlayerWithWaypoints>(raw: T, gam
 export function buildRenderablePlayers<T extends PlayerWithWaypoints>(players: Record<string, T>, gameStartTime?: number) {
   return Object.fromEntries(Object.entries(players).map(([id, player]) => [id, buildRenderablePlayer(player, gameStartTime)]));
 }
+
+export function getPlayerMotionAt(player: PlayerWithWaypoints & { segments: AnimationSegment[] }, time: number) {
+  const firstWaypoint = player.waypoints[0];
+  if (!firstWaypoint) return null;
+  let position: [number, number] = [firstWaypoint.x, firstWaypoint.y];
+
+  for (const segment of player.segments) {
+    if (time < segment.startTime) break;
+    if (time >= segment.endTime) {
+      position = segment.end;
+      continue;
+    }
+    const progress = (time - segment.startTime) / (segment.endTime - segment.startTime);
+    return {
+      position: [
+        segment.start[0] + (segment.end[0] - segment.start[0]) * progress,
+        segment.start[1] + (segment.end[1] - segment.start[1]) * progress,
+      ] as [number, number],
+      segment,
+    };
+  }
+  return { position, segment: null };
+}

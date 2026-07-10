@@ -3,6 +3,7 @@ import { lerp, haversineDist, getBearing } from '../utils/geo';
 import { latLngToCell, gridDisk } from 'h3-js';
 import { getTimeZone } from '../timezone';
 import { getServerTime } from '../time-sync';
+import { getPlayerMotionAt } from '../playerRendering';
 import {
   $players, $roomState, $gameStartTime, $gameBounds, $playerSettings,
   $playerSpeeds, $playerDistances, $playerTimeZone, $myPlayerId,
@@ -105,34 +106,18 @@ export function startAnimationLoop(map: maplibregl.Map, config: AnimationLoopCon
 
     for (const pid in allPlayers) {
       const player = allPlayers[pid];
-      let targetPos: [number, number] | null = null;
+      const motion = getPlayerMotionAt(player, now);
+      const targetPos = motion?.position ?? null;
 
-      if (player.segments.length === 0) {
-        if (player.waypoints.length > 0) {
-          const p = player.waypoints[0];
-          targetPos = [p.x, p.y];
-        }
-      } else {
-        const last = player.segments[player.segments.length - 1];
-        targetPos = last.end;
+      if (motion?.segment) {
+        const dist = haversineDist({ lon: motion.segment.start[0], lat: motion.segment.start[1] }, { lon: motion.segment.end[0], lat: motion.segment.end[1] });
+        const durationHours = (motion.segment.endTime - motion.segment.startTime) / (1000 * 60 * 60);
+        const speed = durationHours > 0 ? (dist || 0) / durationHours : 0;
+        currentSpeeds[pid] = speed;
+        currentBearings[pid] = getBearing(motion.segment.start[1], motion.segment.start[0], motion.segment.end[1], motion.segment.end[0]);
+      }
 
-        for (const seg of player.segments) {
-          if (now >= seg.startTime && now < seg.endTime) {
-            const t = (now - seg.startTime) / (seg.endTime - seg.startTime);
-            targetPos = [
-              lerp(seg.start[0], seg.end[0], t),
-              lerp(seg.start[1], seg.end[1], t)
-            ];
-
-            const dist = haversineDist({ lon: seg.start[0], lat: seg.start[1] }, { lon: seg.end[0], lat: seg.end[1] });
-            const durationHours = (seg.endTime - seg.startTime) / (1000 * 60 * 60);
-            const speed = durationHours > 0 ? (dist || 0) / durationHours : 0;
-            currentSpeeds[pid] = speed;
-            currentBearings[pid] = getBearing(seg.start[1], seg.start[0], seg.end[1], seg.end[0]);
-            break;
-          }
-        }
-
+      if (player.segments.length > 0) {
         const b = $gameBounds.get().finish;
         const distToFinish = haversineDist(targetPos ? { lon: targetPos[0], lat: targetPos[1] } : null, b?.length === 2 ? { lat: b[0], lon: b[1] } : null);
         currentDists[pid] = distToFinish;
