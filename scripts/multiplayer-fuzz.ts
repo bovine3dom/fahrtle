@@ -237,6 +237,7 @@ class MultiplayerFuzzer {
       this.assertRateBoundariesAreIntegrated();
       this.assertProjectionDoesNotRescanRoutes();
       this.assertBoundaryInputs();
+      this.assertLegacyGhostNormalization();
       this.assertJoiningResetConverges();
       this.assertDisconnectedPlayersDoNotPinPlayback();
       this.assertStopClearsViewingState();
@@ -708,6 +709,34 @@ class MultiplayerFuzzer {
     assert(waypointReads < waypointCount * 20, `projection rescanned ${waypointCount} waypoints ${waypointReads} times`);
   }
 
+  private assertLegacyGhostNormalization() {
+    const client = this.clients[0];
+    const room = this.rooms.get(client.wsData.roomId!)!;
+    this.send(client, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{
+        playerName: 'legacy-timeline',
+        waypoints: [
+          { x: 0, y: 0, startTime: 0, arrivalTime: 0, speedFactor: 1 },
+          { x: 1, y: 1, startTime: 10, arrivalTime: 5, speedFactor: 20, route_departure_time: null },
+          { x: 2, y: 2, startTime: 4, arrivalTime: 3, speedFactor: 20, isWalk: null },
+          { x: 3, y: 3, startTime: 10, arrivalTime: 12, speedFactor: 20 },
+        ],
+      }],
+    }, 'LEGACY_GHOST_NORMALIZATION');
+    const ghost = room.players['👻-legacy-timeline'];
+    assert(ghost?.waypoints[1].startTime === 0 && ghost.waypoints[1].arrivalTime === 5, 'legacy negative segment was not repaired');
+    assert(ghost.waypoints[2].startTime === 5 && ghost.waypoints[2].arrivalTime === 5, 'legacy overlapping segment was not repaired');
+    assert(ghost.waypoints[3].startTime === 10 && ghost.waypoints[3].arrivalTime === 12, 'valid ghost timetable gap was changed');
+    assert(ghost.waypoints[1].route_departure_time === undefined && ghost.waypoints[2].isWalk === undefined, 'nullable ghost fields were retained');
+
+    this.send(client, {
+      type: 'ADD_GHOSTS',
+      ghosts: [{ playerName: 'invalid-optional', waypoints: [{ x: 0, y: 0, startTime: 0, arrivalTime: 0, speedFactor: 1, isWalk: 'yes' }] }],
+    }, 'INVALID_GHOST_OPTIONAL');
+    assert(!room.players['👻-invalid-optional'], 'invalid ghost optional field was accepted');
+  }
+
   private assertJoiningResetConverges() {
     const client = this.clients[0];
     const room = this.rooms.get(client.wsData.roomId!)!;
@@ -961,7 +990,7 @@ class MultiplayerFuzzer {
     handleGameClose(this.rooms, third.wsData, this.hooksFor(third), this.updateRoom);
 
     const ghostCount = Object.values(room.players).filter((player) => player.isGhost).length;
-    this.send(first, { type: 'RACE_AGAIN', waypoints: clone(room.players[first.playerId].waypoints) }, 'RACE_AGAIN_GUARD_AFTER_DISCONNECT');
+    this.send(first, { type: 'RACE_AGAIN', waypoints: null }, 'RACE_AGAIN_GUARD_AFTER_DISCONNECT');
     const rerunRoom = this.rooms.get(roomId)!;
     assert(rerunRoom.state === 'JOINING', 'race again did not ignore disconnected unfinished player');
     assert(Object.values(rerunRoom.players).filter((player) => player.isGhost).length === ghostCount + 2, 'race again did not create ghosts for every connected finisher');

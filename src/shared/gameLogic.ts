@@ -541,22 +541,14 @@ function optionalString(value: unknown): string | undefined {
     return typeof value === 'string' ? value : undefined;
 }
 
-function validOptionalWaypointFields(wp: Record<string, any>) {
-    return (wp.stopName === undefined || typeof wp.stopName === 'string')
-        && (wp.isWalk === undefined || typeof wp.isWalk === 'boolean')
-        && (wp.isWait === undefined || typeof wp.isWait === 'boolean')
-        && (wp.isInterstop === undefined || typeof wp.isInterstop === 'boolean')
-        && (wp.route_color === undefined || typeof wp.route_color === 'string')
-        && (wp.route_short_name === undefined || typeof wp.route_short_name === 'string')
-        && (wp.display_name === undefined || typeof wp.display_name === 'string')
-        && (wp.emoji === undefined || typeof wp.emoji === 'string')
-        && (wp.route_departure_time === undefined || typeof wp.route_departure_time === 'string')
-        && (wp.timeStr === undefined || typeof wp.timeStr === 'string');
+function optionalBoolean(value: unknown): boolean | undefined {
+    return typeof value === 'boolean' ? value : undefined;
 }
 
-function isValidWaypointList(value: unknown): value is Waypoint[] {
-    if (!Array.isArray(value) || value.length === 0) return false;
-    let previousArrival = -Infinity;
+function normalizeGhostWaypoints(value: unknown): Waypoint[] | null {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    const normalized: Waypoint[] = [];
+    let previousArrival: number | undefined;
     for (const wp of value) {
         if (!isObject(wp)
             || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
@@ -564,12 +556,26 @@ function isValidWaypointList(value: unknown): value is Waypoint[] {
             || !isSafeTimestamp(wp.startTime)
             || !isSafeTimestamp(wp.arrivalTime)
             || !isSafeSpeedFactor(wp.speedFactor)
-            || wp.startTime < previousArrival
-            || wp.arrivalTime < wp.startTime
-            || !validOptionalWaypointFields(wp)) return false;
-        previousArrival = wp.arrivalTime;
+            || [wp.stopName, wp.route_color, wp.route_short_name, wp.display_name, wp.emoji, wp.route_departure_time, wp.timeStr]
+                .some(field => field != null && typeof field !== 'string')
+            || [wp.isWalk, wp.isWait, wp.isInterstop]
+                .some(field => field != null && typeof field !== 'boolean')) return null;
+
+        let startTime = wp.startTime;
+        let arrivalTime = wp.arrivalTime;
+        if (previousArrival !== undefined && (startTime < previousArrival || arrivalTime < startTime)) startTime = previousArrival;
+        arrivalTime = Math.max(arrivalTime, startTime);
+        normalized.push({
+            x: wp.x, y: wp.y, startTime, arrivalTime, speedFactor: wp.speedFactor,
+            stopName: optionalString(wp.stopName), isWalk: optionalBoolean(wp.isWalk),
+            isWait: optionalBoolean(wp.isWait), isInterstop: optionalBoolean(wp.isInterstop),
+            route_color: optionalString(wp.route_color), route_short_name: optionalString(wp.route_short_name),
+            display_name: optionalString(wp.display_name), emoji: optionalString(wp.emoji),
+            route_departure_time: optionalString(wp.route_departure_time), timeStr: optionalString(wp.timeStr)
+        });
+        previousArrival = arrivalTime;
     }
-    return true;
+    return normalized;
 }
 
 function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint | null {
@@ -692,7 +698,6 @@ function handleJoinRoom(
 }
 
 function handleRaceAgain(
-    message: any,
     wsData: { roomId: string | null, playerId: string | null },
     result: { room: Room; player: Player },
     hooks: GameHooks,
@@ -701,7 +706,6 @@ function handleRaceAgain(
     const { room } = result;
     const activePlayers = Object.values(room.players).filter(p => !p.isGhost && p.disconnectedAt === null);
     if (activePlayers.length === 0 || activePlayers.some(p => p.finishTime === null)) return;
-    if (!isValidWaypointList(message.waypoints)) return;
     const ghosts = activePlayers.map((p) => {
         const ghostId = `👻-${generatePilotName()}`;
         const ghost: Player = {
@@ -902,7 +906,7 @@ export function handleIncomingMessage(
     if (message.type === 'RACE_AGAIN') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
-        handleRaceAgain(message, wsData, r, hooks, triggerUpdate);
+        handleRaceAgain(wsData, r, hooks, triggerUpdate);
         return;
     }
 
@@ -913,9 +917,12 @@ export function handleIncomingMessage(
         const { ghosts } = message;
         if (!Array.isArray(ghosts)) return;
         for (const ghostData of ghosts) {
-            if (!isObject(ghostData) || typeof ghostData.playerName !== 'string' || !isValidWaypointList(ghostData.waypoints)) continue;
-            const { playerName, waypoints, color } = ghostData;
+            if (!isObject(ghostData) || typeof ghostData.playerName !== 'string') continue;
+            const waypoints = normalizeGhostWaypoints(ghostData.waypoints);
+            if (!waypoints) continue;
+            const { playerName, color } = ghostData;
             const ghostId = `👻-${playerName}`;
+            if (!isSafeKey(ghostId)) continue;
             const ghost: Player = {
                 id: ghostId, color: typeof color === 'string' ? color : `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
                 isReady: true, waypoints, desiredRate: 1e9, forceRealtime: false,
