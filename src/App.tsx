@@ -37,27 +37,39 @@ function App() {
   const [useGhosts, setUseGhosts] = createSignal(false);
   const [showWinModal, setShowWinModal] = createSignal(false);
   const [showSettings, setShowSettings] = createSignal(false);
+  let finishModalTimeout: ReturnType<typeof setTimeout> | undefined;
+  let handledFinish: { playerId: string; finishTime: number } | null = null;
 
   createEffect(() => {
     const mid = myId();
-    if (!mid) return;
-    const p = players()[mid];
-    if (p && p.finishTime && !untrack(() => showWinModal())) {
+    const p = mid ? players()[mid] : undefined;
+    if (!mid || p?.finishTime == null || roomState() !== 'RUNNING') {
+      if (finishModalTimeout) clearTimeout(finishModalTimeout);
+      finishModalTimeout = undefined;
+      if (!mid || p?.finishTime == null) handledFinish = null;
+      return;
+    }
+    if ((!handledFinish || handledFinish.playerId !== mid || handledFinish.finishTime !== p.finishTime) && !untrack(() => showWinModal())) {
+      if (finishModalTimeout) clearTimeout(finishModalTimeout);
+      handledFinish = { playerId: mid, finishTime: p.finishTime };
       const pos = getPlayerScreenPosition(mid);
       confetti({
         particleCount: 200,
         spread: 140,
         origin: pos ? { x: pos.x, y: pos.y } : { y: 0.6 }
       });
-      const timeout = setTimeout(() => {
+      finishModalTimeout = setTimeout(() => {
+        finishModalTimeout = undefined;
         const currentPlayer = players()[mid];
         if (!currentPlayer || currentPlayer.finishTime == null || roomState() !== 'RUNNING') return;
         const leftToFinish = Object.values(players()).filter(player => player.finishTime == null).length;
         if ((currentPlayer.desiredRate || 1) <= 1 && leftToFinish > 0) import('./store').then(({ toggleSnooze }) => toggleSnooze());
         setShowWinModal(true)
       }, 3000);
-      onCleanup(() => clearTimeout(timeout));
     }
+  });
+  onCleanup(() => {
+    if (finishModalTimeout) clearTimeout(finishModalTimeout);
   });
 
   const handleSpectate = () => {
