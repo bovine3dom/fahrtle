@@ -497,7 +497,7 @@ function handleJoinRoom(
 
     room.emptySince = null;
 
-    if (!room.players[playerId]) {
+    if (!Object.prototype.hasOwnProperty.call(room.players, playerId)) {
         const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
         room.players[playerId] = {
             id: playerId,
