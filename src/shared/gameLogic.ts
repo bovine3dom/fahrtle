@@ -116,29 +116,190 @@ export type Room = {
 
 const BASE_SPEED = 5 / (60 * 60 * 1000); // 5 km/h in km/ms
 const MAX_IDLE_TIME = 60000; // 1 minute cleanup check
+const MAX_TIMESTAMP = 10_000_000_000_000;
+const MAX_SPEED_FACTOR = 1_000_000;
+let realTimeAnchor: { wallTime: number; monotonicTime: number } | null = null;
+
+export function getRealTime() {
+    const monotonicTime = performance.now();
+    realTimeAnchor ??= { wallTime: Date.now(), monotonicTime };
+    return realTimeAnchor.wallTime + monotonicTime - realTimeAnchor.monotonicTime;
+}
+
+export function reanchorRoomRealTime(room: Room, now = getRealTime()) {
+    const offset = now - room.lastRealTime;
+    room.lastRealTime = now;
+    if (room.countdownEnd !== null) room.countdownEnd += offset;
+    if (room.emptySince !== null) room.emptySince += offset;
+    for (const player of Object.values(room.players)) {
+        if (player.disconnectedAt !== null) player.disconnectedAt += offset;
+    }
+}
 
 function lerp(v0: number, v1: number, t: number) {
     return v0 * (1 - t) + v1 * t;
 }
 
+function pushMinHeap(heap: number[], value: number) {
+    let index = heap.length;
+    heap.push(value);
+    while (index > 0) {
+        const parent = (index - 1) >> 1;
+        if (heap[parent] <= value) break;
+        heap[index] = heap[parent];
+        index = parent;
+    }
+    heap[index] = value;
+}
+
+function popMinHeap(heap: number[]) {
+    const last = heap.pop();
+    if (last === undefined || heap.length === 0) return;
+    let index = 0;
+    while (true) {
+        const left = index * 2 + 1;
+        if (left >= heap.length) break;
+        const right = left + 1;
+        const child = right < heap.length && heap[right] < heap[left] ? right : left;
+        if (heap[child] >= last) break;
+        heap[index] = heap[child];
+        index = child;
+    }
+    heap[index] = last;
+}
+
+function minHeapValue(heap: number[], isCurrent: (value: number) => boolean) {
+    while (heap.length > 0 && !isCurrent(heap[0])) popMinHeap(heap);
+    return heap[0];
+}
+
 function getSpawnPoint(centerLat: number, centerLng: number) {
     const spreadMeters = 50;
     const latOffset = (Math.random() - 0.5) * 2 * (spreadMeters / 111111);
-    const lngOffset = (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * Math.cos(centerLat * Math.PI / 180)));
+    const longitudeScale = Math.cos(centerLat * Math.PI / 180);
+    const lngOffset = Math.abs(longitudeScale) < 1e-6
+        ? 0
+        : (Math.random() - 0.5) * 2 * (spreadMeters / (111111 * longitudeScale));
 
     return {
-        x: centerLng + lngOffset,
-        y: centerLat + latOffset
+        x: ((centerLng + lngOffset + 540) % 360) - 180,
+        y: Math.max(-90, Math.min(90, centerLat + latOffset))
     };
 }
 
 function stepClock(room: Room) {
-    const now = Date.now();
-    const elapsedReal = now - room.lastRealTime;
-    if (room.state === 'RUNNING') {
-        room.virtualTime += elapsedReal * room.playbackRate;
-    }
+    const now = getRealTime();
+    room.virtualTime = getProjectedRoomTime(room, now);
     room.lastRealTime = now;
+}
+
+export function getProjectedRoomTime(room: Room, now = getRealTime()) {
+    return getProjectedRoomClock(room, now).virtualTime;
+}
+
+export function getProjectedRoomClock(room: Room, now = getRealTime()) {
+    if (room.state !== 'RUNNING') return { virtualTime: room.virtualTime, playbackRate: 0 };
+    let remainingRealTime = Math.max(0, now - room.lastRealTime);
+    let virtualTime = room.virtualTime;
+    let rate = room.playbackRate;
+
+    if (remainingRealTime <= 0 || rate <= 0) return { virtualTime, playbackRate: rate };
+
+    const states: {
+        player: Player;
+        activeWaypoints: number[];
+        activeWaypointSet: Set<number>;
+        factor: number;
+    }[] = [];
+    const events: { time: number; playerIndex: number; waypointIndex: number; active: boolean }[] = [];
+    const factorHeap: number[] = [];
+    const factorCounts = new Map<number, number>();
+    const addFactor = (factor: number) => {
+        const count = factorCounts.get(factor) ?? 0;
+        factorCounts.set(factor, count + 1);
+        if (count === 0) pushMinHeap(factorHeap, factor);
+    };
+    const removeFactor = (factor: number) => {
+        const count = factorCounts.get(factor) ?? 0;
+        if (count <= 1) factorCounts.delete(factor);
+        else factorCounts.set(factor, count - 1);
+    };
+    const getPlayerFactor = (state: typeof states[number]) => {
+        if (state.player.forceRealtime) return 1;
+        const desiredRate = state.player.desiredRate || 1;
+        const waypointIndex = minHeapValue(state.activeWaypoints, (index) => state.activeWaypointSet.has(index));
+        return waypointIndex === undefined
+            ? desiredRate
+            : Math.max(state.player.waypoints[waypointIndex].speedFactor, desiredRate);
+    };
+
+    for (const player of Object.values(room.players)) {
+        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
+        const playerIndex = states.length;
+        const state = { player, activeWaypoints: [] as number[], activeWaypointSet: new Set<number>(), factor: 1 };
+        states.push(state);
+        for (let waypointIndex = 0; waypointIndex < player.waypoints.length; waypointIndex++) {
+            const waypoint = player.waypoints[waypointIndex];
+            if (waypoint.arrivalTime <= waypoint.startTime) continue;
+            if (virtualTime >= waypoint.startTime && virtualTime < waypoint.arrivalTime) {
+                state.activeWaypointSet.add(waypointIndex);
+                pushMinHeap(state.activeWaypoints, waypointIndex);
+            }
+            if (waypoint.startTime > virtualTime) events.push({ time: waypoint.startTime, playerIndex, waypointIndex, active: true });
+            if (waypoint.arrivalTime > virtualTime) events.push({ time: waypoint.arrivalTime, playerIndex, waypointIndex, active: false });
+        }
+        state.factor = getPlayerFactor(state);
+        addFactor(state.factor);
+    }
+
+    events.sort((a, b) => a.time - b.time);
+    let eventIndex = 0;
+    while (eventIndex < events.length && remainingRealTime > 0 && rate > 0) {
+        const boundary = events[eventIndex].time;
+        const realTimeToBoundary = (boundary - virtualTime) / rate;
+        if (realTimeToBoundary > remainingRealTime) return { virtualTime: virtualTime + remainingRealTime * rate, playbackRate: rate };
+        virtualTime = boundary;
+        remainingRealTime -= realTimeToBoundary;
+        const affectedPlayers = new Set<number>();
+        while (eventIndex < events.length && events[eventIndex].time === boundary) {
+            const event = events[eventIndex++];
+            const state = states[event.playerIndex];
+            if (event.active) {
+                state.activeWaypointSet.add(event.waypointIndex);
+                pushMinHeap(state.activeWaypoints, event.waypointIndex);
+            } else {
+                state.activeWaypointSet.delete(event.waypointIndex);
+            }
+            affectedPlayers.add(event.playerIndex);
+        }
+        for (const playerIndex of affectedPlayers) {
+            const state = states[playerIndex];
+            const nextFactor = getPlayerFactor(state);
+            if (nextFactor === state.factor) continue;
+            removeFactor(state.factor);
+            state.factor = nextFactor;
+            addFactor(nextFactor);
+        }
+        rate = Math.max(1, minHeapValue(factorHeap, (factor) => factorCounts.has(factor)) ?? 1);
+    }
+    if (remainingRealTime > 0 && rate > 0) virtualTime += remainingRealTime * rate;
+    return { virtualTime, playbackRate: rate };
+}
+
+function playbackRateAt(room: Room, virtualTime: number) {
+    const activeFactors: number[] = [];
+    for (const player of Object.values(room.players)) {
+        if (player.isGhost || player.disconnectedAt !== null || player.finishTime !== null) continue;
+        let currentFactor = player.forceRealtime ? 1 : (player.desiredRate || 1);
+        for (const waypoint of player.waypoints) {
+            if (virtualTime >= waypoint.startTime && virtualTime < waypoint.arrivalTime) {
+                currentFactor = player.forceRealtime ? 1 : Math.max(waypoint.speedFactor, player.desiredRate || 1);
+                break;
+            }
+        }
+        activeFactors.push(currentFactor);
+    }
+    return activeFactors.length > 0 ? Math.max(1, Math.min(...activeFactors)) : 1;
 }
 
 export interface GameHooks {
@@ -148,7 +309,41 @@ export interface GameHooks {
     onRoomDeleted?: (roomId: string) => void;
     sendToSender: (message: any) => void;
     subscribeToRoom: (roomId: string) => void;
+    unsubscribeFromRoom?: (roomId: string) => void;
     shouldDeletePlayer?: (roomId: string, playerId: string) => boolean;
+}
+
+function markPlayerDisconnected(
+    room: Room,
+    roomId: string,
+    playerId: string,
+    hooks: GameHooks,
+    updateRoom: (room: Room) => void
+) {
+    const player = room.players[playerId];
+    if (!player) return;
+    if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
+
+    stepClock(room);
+    player.disconnectedAt = getRealTime();
+    hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
+    checkCountdownLogic(room, hooks);
+
+    const roomConnections = hooks.getSubscriberCount(roomId);
+    if (roomConnections > 0) {
+        player.forceRealtime = false;
+        player.desiredRate = 500.0;
+        hooks.publish(roomId, {
+            type: 'PLAYER_SNOOZE_UPDATE',
+            playerId,
+            desiredRate: player.desiredRate,
+            forceRealtime: player.forceRealtime
+        });
+    } else {
+        room.emptySince = getRealTime();
+        room.playbackRate = 0;
+    }
+    updateRoom(room);
 }
 
 function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) {
@@ -157,8 +352,16 @@ function scheduleNextTick(room: Room, updateCallback: (roomId: string) => void) 
         room.timerId = undefined;
     }
 
-    const now = Date.now();
+    const now = getRealTime();
     let delay = MAX_IDLE_TIME;
+
+    if (room.emptySince !== null) {
+        delay = Math.min(delay, room.emptySince + MAX_IDLE_TIME - now);
+    }
+
+    for (const player of Object.values(room.players)) {
+        if (player.disconnectedAt) delay = Math.min(delay, player.disconnectedAt + MAX_IDLE_TIME - now);
+    }
 
     if (room.state === 'COUNTDOWN' && room.countdownEnd) {
         const timeToStart = room.countdownEnd - now;
@@ -266,10 +469,12 @@ function buildDrivingWaypoints(simplifiedPoints: { x: number, y: number, arrival
 
 async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
     if (!room.startPos || !room.finishPos) return;
+    const requestedStart = [...room.startPos] as [number, number];
+    const requestedFinish = [...room.finishPos] as [number, number];
 
     try {
         const body = JSON.stringify({
-            coordinates: [[room.startPos[1], room.startPos[0]], [room.finishPos[1], room.finishPos[0]]]
+            coordinates: [[requestedStart[1], requestedStart[0]], [requestedFinish[1], requestedFinish[0]]]
         });
 
         const response = await fetch("https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
@@ -283,10 +488,13 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
         const data = await response.json();
         const feature = data.features[0];
         if (!feature) return;
+        if (!room.computerDriver || room.state !== 'RUNNING' || room.players['the-stig-🏎️']
+            || room.startPos[0] !== requestedStart[0] || room.startPos[1] !== requestedStart[1]
+            || room.finishPos?.[0] !== requestedFinish[0] || room.finishPos[1] !== requestedFinish[1]) return;
 
         const coords = feature.geometry.coordinates;
         const steps = feature.properties.segments[0].steps;
-        const startTime = room.gameStartTime || room.virtualTime;
+        const startTime = room.gameStartTime ?? room.virtualTime;
 
         const allTimedPoints = processRouteSteps(steps, coords, startTime);
         const simplified = simplify(allTimedPoints, 0.0005, true) as { x: number, y: number, arrivalTime: number, instruction: string }[];
@@ -314,22 +522,121 @@ function requireRoomAndPlayer(
     const room = rooms.get(wsData.roomId);
     if (!room) return null;
     if (opts.requireRunning && room.state !== 'RUNNING') return null;
-    const player = room.players[wsData.playerId];
+    const player = Object.prototype.hasOwnProperty.call(room.players, wsData.playerId) ? room.players[wsData.playerId] : undefined;
     if (!player) return null;
     return { room, player };
 }
 
+function isObject(value: unknown): value is Record<string, any> {
+    return typeof value === 'object' && value !== null;
+}
+
+function isSafeKey(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0 && !value.includes('\0')
+        && value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
+}
+
+function isFiniteCoord(value: unknown): value is [number, number] {
+    return Array.isArray(value) && value.length === 2
+        && Number.isFinite(value[0]) && Number.isFinite(value[1])
+        && value[0] >= -90 && value[0] <= 90
+        && value[1] >= -180 && value[1] <= 180;
+}
+
+function isDifficulty(value: unknown): value is Difficulty {
+    return value === 'Easy' || value === 'Normal' || value === 'Transport nerd';
+}
+
+function isLeague(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{8}$/.test(value);
+}
+
+function isSafeTimestamp(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= MAX_TIMESTAMP;
+}
+
+function isSafeSpeedFactor(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_SPEED_FACTOR;
+}
+
+function optionalString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+    return typeof value === 'boolean' ? value : undefined;
+}
+
+function normalizeGhostWaypoints(value: unknown): Waypoint[] | null {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    const normalized: Waypoint[] = [];
+    let previousArrival: number | undefined;
+    for (const wp of value) {
+        if (!isObject(wp)
+            || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
+            || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
+            || !isSafeTimestamp(wp.startTime)
+            || !isSafeTimestamp(wp.arrivalTime)
+            || !isSafeSpeedFactor(wp.speedFactor)
+            || [wp.stopName, wp.route_color, wp.route_short_name, wp.display_name, wp.emoji, wp.route_departure_time, wp.timeStr]
+                .some(field => field != null && typeof field !== 'string')
+            || [wp.isWalk, wp.isWait, wp.isInterstop]
+                .some(field => field != null && typeof field !== 'boolean')) return null;
+
+        let startTime = wp.startTime;
+        let arrivalTime = wp.arrivalTime;
+        if (previousArrival !== undefined && (startTime < previousArrival || arrivalTime < startTime)) startTime = previousArrival;
+        arrivalTime = Math.max(arrivalTime, startTime);
+        normalized.push({
+            x: wp.x, y: wp.y, startTime, arrivalTime, speedFactor: wp.speedFactor,
+            stopName: optionalString(wp.stopName), isWalk: optionalBoolean(wp.isWalk),
+            isWait: optionalBoolean(wp.isWait), isInterstop: optionalBoolean(wp.isInterstop),
+            route_color: optionalString(wp.route_color), route_short_name: optionalString(wp.route_short_name),
+            display_name: optionalString(wp.display_name), emoji: optionalString(wp.emoji),
+            route_departure_time: optionalString(wp.route_departure_time), timeStr: optionalString(wp.timeStr)
+        });
+        previousArrival = arrivalTime;
+    }
+    return normalized;
+}
+
+function buildWaypoint(wp: any, lastPoint: Waypoint, roomTime: number): Waypoint | null {
+    if (!isObject(wp)
+        || !Number.isFinite(wp.x) || wp.x < -180 || wp.x > 180
+        || !Number.isFinite(wp.y) || wp.y < -90 || wp.y > 90
+        || !isSafeSpeedFactor(wp.speedFactor)) return null;
+
+    const start = Math.max(lastPoint.arrivalTime, roomTime);
+    if (!isSafeTimestamp(start)) return null;
+    let finalArrival = wp.arrivalTime;
+    if (finalArrival === undefined) {
+        const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
+        finalArrival = start + distance / BASE_SPEED;
+    }
+    if (!isSafeTimestamp(finalArrival)) return null;
+    finalArrival = Math.max(finalArrival, start);
+
+    return {
+        x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
+        speedFactor: wp.speedFactor, stopName: optionalString(wp.stopName),
+        isWalk: wp.isWalk === true, isWait: wp.isWait === true, isInterstop: wp.isInterstop === true,
+        route_color: optionalString(wp.route_color), route_short_name: optionalString(wp.route_short_name),
+        display_name: optionalString(wp.display_name), emoji: wp.isWalk === true ? '🐾' : (wp.isWait === true ? '⏳' : optionalString(wp.emoji)),
+        route_departure_time: optionalString(wp.route_departure_time), timeStr: optionalString(wp.timeStr)
+    };
+}
+
 function handleSyncRequest(message: any, rooms: Map<string, Room>, hooks: GameHooks) {
-    const now = Date.now();
+    const now = getRealTime();
     const targetRoomId = message.roomId;
     let serverTime = now;
     let rate = 1.0;
 
     if (targetRoomId && rooms.has(targetRoomId)) {
         const r = rooms.get(targetRoomId)!;
-        const elapsed = now - r.lastRealTime;
-        serverTime = r.state === 'RUNNING' ? r.virtualTime + (elapsed * r.playbackRate) : r.virtualTime;
-        rate = r.playbackRate;
+        const projectedClock = getProjectedRoomClock(r);
+        serverTime = projectedClock.virtualTime;
+        rate = projectedClock.playbackRate;
     }
 
     hooks.sendToSender({
@@ -348,8 +655,12 @@ function handleJoinRoom(
     hooks: GameHooks,
     triggerUpdate: (rid: string) => void
 ) {
-    const now = Date.now();
+    const now = getRealTime();
     const { roomId, playerId, color } = message;
+    if (!isSafeKey(roomId) || !isSafeKey(playerId)) return;
+    const previousRoomId = wsData.roomId;
+    const previousPlayerId = wsData.playerId;
+    const switchedPlayer = !!previousRoomId && !!previousPlayerId && (previousRoomId !== roomId || previousPlayerId !== playerId);
 
     let room = rooms.get(roomId);
     if (!room) {
@@ -363,15 +674,16 @@ function handleJoinRoom(
         rooms.set(roomId, room);
     }
 
+    stepClock(room);
     room.emptySince = null;
 
-    if (!room.players[playerId]) {
+    if (!Object.prototype.hasOwnProperty.call(room.players, playerId)) {
         const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
         room.players[playerId] = {
             id: playerId,
-            color: color || ('#' + Math.floor(Math.random() * 16777215).toString(16)),
+            color: typeof color === 'string' ? color : ('#' + Math.floor(Math.random() * 16777215).toString(16)),
             isReady: room.state === 'RUNNING',
-            waypoints: [{ x: spawn.x, y: spawn.y, startTime: 0, arrivalTime: 0, speedFactor: 1 }],
+            waypoints: [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }],
             desiredRate: 1, forceRealtime: false, finishTime: null,
             disconnectedAt: null, viewingStopName: null, isGhost: false
         };
@@ -383,17 +695,23 @@ function handleJoinRoom(
         }
     }
 
+    if (switchedPlayer) hooks.unsubscribeFromRoom?.(previousRoomId);
     wsData.roomId = roomId;
     wsData.playerId = playerId;
-
     hooks.subscribeToRoom(roomId);
-    stepClock(room);
+
+    if (switchedPlayer) {
+        const previousRoom = rooms.get(previousRoomId);
+        if (previousRoom) markPlayerDisconnected(previousRoom, previousRoomId, previousPlayerId, hooks, (r) => triggerUpdate(r.id));
+    }
+
+    checkCountdownLogic(room, hooks);
 
     hooks.sendToSender({
         type: 'ROOM_STATE', state: room.state, countdownEnd: room.countdownEnd,
         gameStartTime: room.gameStartTime, serverTime: room.virtualTime,
         ...boundsToWire(getRoomBounds(room)), isRerun: room.isRerun,
-        realTime: now, rate: room.state === 'RUNNING' ? room.playbackRate : 0,
+        realTime: now, rate: room.state === 'RUNNING' ? playbackRateAt(room, room.virtualTime) : 0,
         players: room.players
     });
 
@@ -402,37 +720,56 @@ function handleJoinRoom(
 }
 
 function handleRaceAgain(
-    message: any,
     wsData: { roomId: string | null, playerId: string | null },
     result: { room: Room; player: Player },
     hooks: GameHooks,
     triggerUpdate: (rid: string) => void
 ) {
-    const { room, player } = result;
-    const ghostId = `👻-${generatePilotName()}`;
-    const hue = Math.floor(Math.random() * 360);
-    const ghost: Player = {
-        id: ghostId, color: `hsl(${hue}, 30%, 50%)`, isReady: true,
-        waypoints: message.waypoints, desiredRate: 1e9, forceRealtime: false,
-        finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
-    };
+    const { room } = result;
+    const activePlayers = Object.values(room.players).filter(p => !p.isGhost && p.disconnectedAt === null);
+    if (activePlayers.length === 0 || activePlayers.some(p => p.finishTime === null)) return;
+    const ghosts = activePlayers.map((p) => {
+        const ghostId = `👻-${generatePilotName()}`;
+        const ghost: Player = {
+            id: ghostId, color: p.color, isReady: true,
+            waypoints: p.waypoints, desiredRate: 1e9, forceRealtime: false,
+            finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
+        };
+        room.players[ghostId] = ghost;
+        return ghost;
+    });
 
-    room.players[ghostId] = ghost;
-
-    const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
-    player.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
-    player.isReady = false;
-    player.finishTime = null;
-
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: null });
     room.state = 'JOINING';
     room.virtualTime = room.initialStartTime;
+    room.countdownEnd = null;
     room.gameStartTime = null;
     room.isRerun = true;
 
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
-    hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
-    hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: false });
+    for (const pid of Object.keys(room.players)) {
+        const p = room.players[pid];
+        if (p.isGhost) {
+            if (p.finishTime !== null) {
+                p.finishTime = null;
+                hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: pid, finishTime: null });
+            }
+            continue;
+        }
+        const spawn = getSpawnPoint(room.startPos[0], room.startPos[1]);
+        p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.initialStartTime, arrivalTime: room.initialStartTime, speedFactor: 1 }];
+        p.isReady = false;
+        p.finishTime = null;
+        p.desiredRate = 1;
+        p.forceRealtime = false;
+        p.viewingStopName = null;
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: pid, finishTime: null });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
+        hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: pid, isReady: false });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: pid, desiredRate: p.desiredRate, forceRealtime: p.forceRealtime });
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: pid, viewingStopName: p.viewingStopName });
+    }
+    for (const ghost of ghosts) {
+        hooks.publish(wsData.roomId!, { type: 'PLAYER_JOINED', playerId: ghost.id, player: ghost });
+    }
     hooks.broadcastRoomState(room);
     triggerUpdate(wsData.roomId!);
 }
@@ -445,8 +782,19 @@ function handleSetGameBounds(
     triggerUpdate: (rid: string) => void
 ) {
     if (room.state !== 'JOINING') return;
+    if (!isFiniteCoord(message.startPos)) return;
+    if (message.finishPos !== null && !isFiniteCoord(message.finishPos)) return;
+    if (message.startTime !== undefined && !isSafeTimestamp(message.startTime)) return;
+    if (!isDifficulty(message.difficulty)) return;
+    if (!isLeague(message.league)) return;
 
     const prevStart = room.startPos;
+    const prevFinish = room.finishPos;
+    const prevStartTime = room.initialStartTime;
+    const prevGhosts = room.ghosts;
+    const prevDifficulty = room.difficulty;
+    const prevComputerDriver = room.computerDriver;
+    const prevLeague = room.league;
     room.startPos = message.startPos;
     room.finishPos = message.finishPos;
     room.difficulty = message.difficulty || 'Normal';
@@ -454,24 +802,42 @@ function handleSetGameBounds(
     room.ghosts = !!message.ghosts;
     room.league = message.league;
 
-    if (message.startTime) {
+    if (message.startTime !== undefined) {
         room.virtualTime = message.startTime;
         room.initialStartTime = message.startTime;
     }
 
     if (room.startPos) {
         const [newLat, newLng] = room.startPos;
-        const posChanged = !prevStart || Math.abs(prevStart[0] - newLat) > 0.0001 || Math.abs(prevStart[1] - newLng) > 0.0001;
-        const timeChanged = message.startTime !== undefined;
+        const posChanged = !prevStart || prevStart[0] !== newLat || prevStart[1] !== newLng;
+        const finishChanged = prevFinish === null || room.finishPos === null
+            ? prevFinish !== room.finishPos
+            : prevFinish[0] !== room.finishPos[0] || prevFinish[1] !== room.finishPos[1];
+        const positionChanged = posChanged || finishChanged;
+        const timeChanged = message.startTime !== undefined && message.startTime !== prevStartTime;
+        const resetPlayers = posChanged || timeChanged;
+        const ghostsDisabled = prevGhosts === true && !room.ghosts;
+        const settingsChanged = positionChanged || timeChanged || prevDifficulty !== room.difficulty
+            || prevComputerDriver !== room.computerDriver || prevGhosts !== room.ghosts || prevLeague !== room.league;
 
-        if (posChanged || timeChanged) {
-            for (const pid of Object.keys(room.players)) {
-                if (room.players[pid].isGhost) { delete room.players[pid]; continue; }
-                const p = room.players[pid];
-                const spawn = getSpawnPoint(newLat, newLng);
-                p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
-                hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
+        for (const pid of Object.keys(room.players)) {
+            if (room.players[pid].isGhost) {
+                if (positionChanged || timeChanged || ghostsDisabled || (pid === 'the-stig-🏎️' && !room.computerDriver)) {
+                    delete room.players[pid];
+                    hooks.publish(wsData.roomId!, { type: 'PLAYER_LEFT', playerId: pid });
+                }
+                continue;
             }
+            const p = room.players[pid];
+            if (settingsChanged && p.isReady) {
+                p.isReady = false;
+                hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: pid, isReady: false });
+            }
+            if (!resetPlayers) continue;
+            const spawn = getSpawnPoint(newLat, newLng);
+            p.waypoints = [{ x: spawn.x, y: spawn.y, startTime: room.virtualTime, arrivalTime: room.virtualTime, speedFactor: 1 }];
+            p.viewingStopName = null;
+            hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: pid, waypoints: p.waypoints });
         }
     }
     hooks.broadcastRoomState(room);
@@ -493,6 +859,7 @@ function handleStopImmediately(
         const idx = message.destinationWpIndex;
         if (idx >= 0 && idx < player.waypoints.length) {
             player.waypoints = player.waypoints.slice(0, idx + 1);
+            player.viewingStopName = null;
             hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
             triggerUpdate(wsData.roomId!);
             return;
@@ -534,6 +901,7 @@ function handleStopImmediately(
         if (last) { last.stopName = 'Stopped'; last.arrivalTime = Math.min(last.arrivalTime, vTime); }
     }
 
+    player.viewingStopName = null;
     hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: player.waypoints });
     triggerUpdate(wsData.roomId!);
 }
@@ -545,6 +913,8 @@ export function handleIncomingMessage(
     hooks: GameHooks,
     updateRoomCallback: (roomId: string) => void
 ) {
+    if (!isObject(message)) return;
+
     const triggerUpdate = (rid: string) => {
         const r = rooms.get(rid);
         if (r) updateRoomLogic(r, hooks, updateRoomCallback);
@@ -556,6 +926,7 @@ export function handleIncomingMessage(
     if (message.type === 'TOGGLE_READY') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (r.room.state === 'RUNNING') return;
         r.player.isReady = !r.player.isReady;
         hooks.publish(wsData.roomId!, { type: 'READY_UPDATE', playerId: wsData.playerId, isReady: r.player.isReady });
         checkCountdownLogic(r.room, hooks);
@@ -566,7 +937,7 @@ export function handleIncomingMessage(
     if (message.type === 'RACE_AGAIN') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
-        handleRaceAgain(message, wsData, r, hooks, triggerUpdate);
+        handleRaceAgain(wsData, r, hooks, triggerUpdate);
         return;
     }
 
@@ -577,10 +948,14 @@ export function handleIncomingMessage(
         const { ghosts } = message;
         if (!Array.isArray(ghosts)) return;
         for (const ghostData of ghosts) {
-            const { playerName, waypoints, color } = ghostData;
+            if (!isObject(ghostData) || typeof ghostData.playerName !== 'string') continue;
+            const waypoints = normalizeGhostWaypoints(ghostData.waypoints);
+            if (!waypoints) continue;
+            const { playerName, color } = ghostData;
             const ghostId = `👻-${playerName}`;
+            if (!isSafeKey(ghostId)) continue;
             const ghost: Player = {
-                id: ghostId, color: color || `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
+                id: ghostId, color: typeof color === 'string' ? color : `hsl(${Math.floor(Math.random() * 360)}, 30%, 50%)`,
                 isReady: true, waypoints, desiredRate: 1e9, forceRealtime: false,
                 finishTime: null, disconnectedAt: null, viewingStopName: null, isGhost: true
             };
@@ -588,12 +963,14 @@ export function handleIncomingMessage(
             hooks.publish(wsData.roomId, { type: 'PLAYER_JOINED', playerId: ghostId, player: ghost });
         }
         hooks.broadcastRoomState(room);
+        triggerUpdate(wsData.roomId);
         return;
     }
 
     if (message.type === 'UPDATE_PLAYER_COLOR') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (typeof message.color !== 'string') return;
         r.player.color = message.color;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_COLOR_UPDATE', playerId: wsData.playerId, color: r.player.color });
         return;
@@ -602,6 +979,7 @@ export function handleIncomingMessage(
     if (message.type === 'TOGGLE_SNOOZE') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        stepClock(r.room);
         r.player.forceRealtime = false;
         r.player.desiredRate = r.player.desiredRate > 1.0 ? 1.0 : 500.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -612,6 +990,7 @@ export function handleIncomingMessage(
     if (message.type === 'FORCE_REALTIME') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        stepClock(r.room);
         r.player.forceRealtime = !r.player.forceRealtime;
         if (r.player.forceRealtime) r.player.desiredRate = 1.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -630,6 +1009,7 @@ export function handleIncomingMessage(
     if (message.type === 'SET_VIEWING_STOP') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
+        if (message.stopName !== null && typeof message.stopName !== 'string') return;
         r.player.viewingStopName = message.stopName;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_VIEW_UPDATE', playerId: wsData.playerId, viewingStopName: r.player.viewingStopName });
         return;
@@ -639,26 +1019,18 @@ export function handleIncomingMessage(
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r) return;
         stepClock(r.room);
-        r.player.viewingStopName = null;
         const { waypoints } = message;
-        if (!Array.isArray(waypoints) || waypoints.length === 0) return;
+        if (!Array.isArray(waypoints) || waypoints.length === 0) { triggerUpdate(wsData.roomId!); return; }
+        const nextWaypoints: Waypoint[] = [];
+        let lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
         for (const wp of waypoints) {
-            const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-            let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
-            let finalArrival = wp.arrivalTime;
-            if (finalArrival === undefined) {
-                const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: wp.y, lon: wp.x }) || 0;
-                finalArrival = start + distance / BASE_SPEED;
-            }
-            r.player.waypoints.push({
-                x: wp.x, y: wp.y, startTime: start, arrivalTime: finalArrival,
-                speedFactor: wp.speedFactor, stopName: wp.stopName,
-                isWalk: wp.isWalk || false, isWait: wp.isWait || false, isInterstop: wp.isInterstop || false,
-                route_color: wp.route_color, route_short_name: wp.route_short_name,
-                display_name: wp.display_name, emoji: wp.isWalk ? '🐾' : (wp.isWait ? '⏳' : wp.emoji),
-                route_departure_time: wp.route_departure_time, timeStr: wp.timeStr
-            });
+            const next = buildWaypoint(wp, lastPoint, r.room.virtualTime);
+            if (!next) { triggerUpdate(wsData.roomId!); return; }
+            nextWaypoints.push(next);
+            lastPoint = next;
         }
+        r.player.viewingStopName = null;
+        r.player.waypoints.push(...nextWaypoints);
         hooks.publish(wsData.roomId!, { type: 'PLAYER_WAYPOINTS_UPDATE', playerId: wsData.playerId, waypoints: r.player.waypoints });
         triggerUpdate(wsData.roomId!);
         return;
@@ -670,19 +1042,9 @@ export function handleIncomingMessage(
         stepClock(r.room);
         const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
-        let start = Math.max(lastPoint.arrivalTime, r.room.virtualTime);
-        let finalArrival = arrivalTime;
-        if (finalArrival === undefined) {
-            const distance = haversineDist({ lat: lastPoint.y, lon: lastPoint.x }, { lat: y, lon: x }) || 0;
-            finalArrival = start + distance / BASE_SPEED;
-        }
+        const newWaypoint = buildWaypoint({ x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop }, lastPoint, r.room.virtualTime);
+        if (!newWaypoint) { triggerUpdate(wsData.roomId!); return; }
         r.player.viewingStopName = null;
-        const newWaypoint: Waypoint = {
-            x, y, startTime: start, arrivalTime: finalArrival, speedFactor,
-            stopName: stopName || undefined, isWalk: isWalk || false, isWait: isWait || false, isInterstop: isInterstop || false,
-            route_color, route_short_name, display_name, emoji: isWalk ? '🐾' : (isWait ? '⏳' : emoji),
-            route_departure_time, timeStr
-        };
         r.player.waypoints.push(newWaypoint);
         hooks.publish(wsData.roomId!, { type: 'WAYPOINT_ADDED', playerId: wsData.playerId, waypoint: newWaypoint });
         triggerUpdate(wsData.roomId!);
@@ -698,9 +1060,11 @@ export function handleIncomingMessage(
 
     if (message.type === 'PLAYER_FINISHED') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
-        if (!r || r.player.finishTime) return;
+        if (!r || r.player.finishTime !== null || !isSafeTimestamp(message.finishTime) || message.finishTime < 0) return;
+        stepClock(r.room);
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
+        triggerUpdate(wsData.roomId!);
         return;
     }
 
@@ -709,7 +1073,8 @@ export function handleIncomingMessage(
         const room = rooms.get(wsData.roomId);
         if (!room) return;
         const { playerId } = message;
-        if (!playerId || !room.players[playerId]) return;
+        if (!isSafeKey(playerId) || !Object.prototype.hasOwnProperty.call(room.players, playerId)) return;
+        if (!room.players[playerId].isGhost) return;
         delete room.players[playerId];
         hooks.publish(wsData.roomId, { type: 'PLAYER_LEFT', playerId });
         checkCountdownLogic(room, hooks);
@@ -721,21 +1086,18 @@ export function handleIncomingMessage(
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
         const { lat, lon } = message;
-        if (typeof lat !== 'number' || typeof lon !== 'number') return;
-        hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: Date.now() });
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+        hooks.publish(wsData.roomId!, { type: 'RECV_PING', playerId: wsData.playerId, lat, lon, timestamp: getRealTime() });
     }
 }
 
 function checkCountdownLogic(room: Room, hooks: GameHooks) {
-    const pCount = Object.keys(room.players).filter(pid => !room.players[pid].isGhost).length;
-    const readyCount = Object.values(room.players)
-        .filter(p => !p.isGhost && p.isReady)
-        .length;
-    const allReady = pCount > 0 && readyCount === pCount;
+    const activePlayers = Object.values(room.players).filter(p => !p.isGhost && !p.disconnectedAt);
+    const allReady = activePlayers.length > 0 && activePlayers.every(p => p.isReady);
 
     if (room.state === 'JOINING' && allReady) {
         room.state = 'COUNTDOWN';
-        room.countdownEnd = Date.now() + COUNTDOWN_DURATION;
+        room.countdownEnd = getRealTime() + COUNTDOWN_DURATION;
         hooks.broadcastRoomState(room);
     } else if (room.state === 'COUNTDOWN' && !allReady) {
         room.state = 'JOINING';
@@ -745,36 +1107,24 @@ function checkCountdownLogic(room: Room, hooks: GameHooks) {
 }
 
 function calculatePlaybackRate(room: Room, hooks: GameHooks) {
-    const activeFactors: number[] = [];
-    for (const pid in room.players) {
-        const p = room.players[pid];
-        let currentFactor = p.forceRealtime ? 1.0 : (p.desiredRate || 1.0);
-        for (const wp of p.waypoints) {
-            if (room.virtualTime >= wp.startTime && room.virtualTime < wp.arrivalTime) {
-                currentFactor = p.forceRealtime ? 1.0 : Math.max(wp.speedFactor, p.desiredRate || 1.0);
-                break;
-            }
-        }
-        activeFactors.push(currentFactor);
-    }
-    const newRate = activeFactors.length > 0 ? Math.max(1.0, Math.min(...activeFactors)) : 1.0;
+    const newRate = playbackRateAt(room, room.virtualTime);
     if (Math.abs(room.playbackRate - newRate) > 0.01) {
         room.playbackRate = newRate;
-        hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: Date.now(), rate: room.playbackRate });
+        hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: getRealTime(), rate: room.playbackRate });
     }
 }
 
 function checkGhostFinishes(room: Room, hooks: GameHooks) {
     const ghosts = Object.values(room.players).filter(p => p.isGhost);
-    const playerStart = Object.values(room.players).filter(p => !p.isGhost)[0]?.waypoints[0]?.startTime || 0;
+    const playerStart = room.gameStartTime ?? room.initialStartTime;
     for (const ghost of ghosts) {
+        if (ghost.finishTime !== null || ghost.waypoints.length === 0) continue;
         const offset = playerStart - ghost.waypoints[0].startTime;
-        if (ghost && !ghost.finishTime && ghost.waypoints.length > 0) {
-            const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
-            if (room.virtualTime >= (offset + lastWp.arrivalTime)) {
-                ghost.finishTime = room.virtualTime - (room.gameStartTime || room.virtualTime);
-                hooks.publish(room.id, { type: 'PLAYER_FINISH_UPDATE', playerId: ghost.id, finishTime: ghost.finishTime });
-            }
+        const lastWp = ghost.waypoints[ghost.waypoints.length - 1];
+        const finishVirtualTime = offset + lastWp.arrivalTime;
+        if (room.virtualTime >= finishVirtualTime) {
+            ghost.finishTime = Math.max(0, finishVirtualTime - (room.gameStartTime ?? finishVirtualTime));
+            hooks.publish(room.id, { type: 'PLAYER_FINISH_UPDATE', playerId: ghost.id, finishTime: ghost.finishTime });
         }
     }
 }
@@ -784,8 +1134,8 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
 
     // Cleanup check
     if (room.emptySince !== null) {
-        const emptyDuration = Date.now() - room.emptySince;
-        if (emptyDuration > MAX_IDLE_TIME) {
+        const emptyDuration = getRealTime() - room.emptySince;
+        if (emptyDuration >= MAX_IDLE_TIME) {
             if (room.timerId) clearTimeout(room.timerId);
             hooks.onRoomDeleted?.(room.id);
             return;
@@ -795,7 +1145,7 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     for (const pid in room.players) {
         const p = room.players[pid];
         if (pid === 'the-stig-🏎️') continue;
-        if (p.disconnectedAt && Date.now() - p.disconnectedAt > MAX_IDLE_TIME) {
+        if (p.disconnectedAt && getRealTime() - p.disconnectedAt >= MAX_IDLE_TIME) {
             if (hooks.shouldDeletePlayer?.(room.id, pid) ?? true) {
                 delete room.players[pid];
                 hooks.publish(room.id, {
@@ -808,10 +1158,17 @@ export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (r
     }
 
     // Handle countdown completion
-    if (room.state === 'COUNTDOWN' && room.countdownEnd && Date.now() >= room.countdownEnd) {
+    if (room.state === 'COUNTDOWN' && room.countdownEnd && getRealTime() >= room.countdownEnd) {
         room.state = 'RUNNING';
         room.gameStartTime = room.virtualTime;
         room.countdownEnd = null;
+        for (const player of Object.values(room.players)) {
+            if (!player.isGhost) player.isReady = true;
+            if (!player.isGhost && player.waypoints.length === 1) {
+                player.waypoints[0].startTime = room.virtualTime;
+                player.waypoints[0].arrivalTime = room.virtualTime;
+            }
+        }
         hooks.broadcastRoomState(room);
 
         if (room.computerDriver && !room.players['the-stig-🏎️']) {
@@ -848,28 +1205,7 @@ export function handleGameClose(
     if (wsData.roomId && wsData.playerId) {
         const room = rooms.get(wsData.roomId);
         if (room) {
-            const player = room.players[wsData.playerId];
-            if (player) {
-                player.disconnectedAt = Date.now();
-
-                const roomConnections = hooks.getSubscriberCount(wsData.roomId);
-                if (roomConnections > 0) {
-                    player.forceRealtime = false;
-                    player.desiredRate = 500.0;
-                    hooks.publish(wsData.roomId, {
-                        type: 'PLAYER_SNOOZE_UPDATE',
-                        playerId: wsData.playerId,
-                        desiredRate: player.desiredRate,
-                        forceRealtime: player.forceRealtime
-                    });
-
-                    updateRoomLogic(room, hooks, updateRoomCallback);
-                } else {
-                    room.emptySince = Date.now();
-                    room.playbackRate = 0;
-                    updateRoomLogic(room, hooks, updateRoomCallback);
-                }
-            }
+            markPlayerDisconnected(room, wsData.roomId, wsData.playerId, hooks, (r) => updateRoomLogic(r, hooks, updateRoomCallback));
         }
     }
 }

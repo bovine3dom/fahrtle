@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "backend": "bun run srv/server.ts",
-    "knip": "bunx --bun knip"
+    "knip": "bunx --bun knip",
+    "fuzz:mp": "bun run scripts/multiplayer-fuzz.ts --clients 5 --rooms 2 --hostile"
   },
   "dependencies": {
     "@googlemaps/polyline-codec": "^1.0.28",

@@ -4,9 +4,13 @@ import {
     updateRoomLogic,
     handleIncomingMessage,
     handleGameClose,
+    getProjectedRoomClock,
+    getRealTime,
+    reanchorRoomRealTime,
     getRoomBounds,
     boundsToWire
 } from "./shared/gameLogic";
+import { parseWebSocketMessage } from "./websocket";
 
 class FakeWebSocket {
     onopen: ((this: any, ev: any) => any) | null = null;
@@ -50,7 +54,8 @@ class FakeServer {
     }
 
     handleMessage(ws: FakeWebSocket, msg: string) {
-        const message = JSON.parse(msg);
+        const message = parseWebSocketMessage(msg);
+        if (message === undefined) return;
         handleIncomingMessage(
             message,
             this.rooms,
@@ -91,16 +96,17 @@ class FakeServer {
 
     private broadcastRoomState(room: Room) {
         const bounds = getRoomBounds(room);
+        const projectedClock = getProjectedRoomClock(room);
         this.publish(room.id, {
             type: 'ROOM_STATE_UPDATE',
             state: room.state,
             countdownEnd: room.countdownEnd,
             gameStartTime: room.gameStartTime,
             ...boundsToWire(bounds),
-            serverTime: room.virtualTime,
-            realTime: Date.now(),
+            serverTime: projectedClock.virtualTime,
+            realTime: getRealTime(),
             isRerun: room.isRerun,
-            rate: room.state === 'RUNNING' ? room.playbackRate : 0
+            rate: projectedClock.playbackRate
         });
     }
 
@@ -130,6 +136,7 @@ class FakeServer {
                 }
             },
             subscribeToRoom: (_roomId: string) => { /* No-op in fake server */ },
+            unsubscribeFromRoom: (_roomId: string) => { /* No-op in fake server */ },
             shouldDeletePlayer: () => false
         };
     }
@@ -140,17 +147,7 @@ class FakeServer {
             for (const [id, room] of this.rooms) {
                 const { timerId, ...roomData } = room;
 
-                const prunedPlayers: Record<string, any> = {};
-                for (const pid in room.players) {
-                    const p = room.players[pid];
-                    const waypoints = p.waypoints.filter(wp => !wp.isInterstop);
-                    prunedPlayers[pid] = {
-                        ...p,
-                        waypoints
-                    };
-                }
-
-                data[id] = { ...roomData, players: prunedPlayers };
+                data[id] = roomData;
             }
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
         } catch (e) {
@@ -165,7 +162,7 @@ class FakeServer {
                 const data = JSON.parse(stored);
                 for (const id in data) {
                     const room = data[id] as Room;
-                    room.lastRealTime = Date.now();
+                    reanchorRoomRealTime(room);
                     this.rooms.set(id, room);
                     this.updateRoom(id);
                 }
