@@ -187,10 +187,17 @@ function getSpawnPoint(centerLat: number, centerLng: number) {
     };
 }
 
-function stepClock(room: Room) {
+function stepClock(room: Room, hooks: GameHooks) {
     const now = getRealTime();
-    room.virtualTime = getProjectedRoomTime(room, now);
+    const projected = getProjectedRoomClock(room, now);
+    const linearTime = room.virtualTime + Math.max(0, now - room.lastRealTime) * room.playbackRate;
+    // Intermediate rate changes can alter the clock even when the final rate is unchanged.
+    const needsSync = room.state === 'RUNNING' && (projected.playbackRate !== room.playbackRate
+        || Math.abs(projected.virtualTime - linearTime) > 0.01);
+    room.virtualTime = projected.virtualTime;
     room.lastRealTime = now;
+    if (room.state === 'RUNNING') room.playbackRate = projected.playbackRate;
+    if (needsSync) hooks.publish(room.id, { type: 'CLOCK_UPDATE', serverTime: room.virtualTime, realTime: now, rate: room.playbackRate });
 }
 
 export function getProjectedRoomTime(room: Room, now = getRealTime()) {
@@ -324,7 +331,7 @@ function markPlayerDisconnected(
     if (!player) return;
     if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
 
-    stepClock(room);
+    stepClock(room, hooks);
     player.disconnectedAt = getRealTime();
     hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
     checkCountdownLogic(room, hooks);
@@ -674,7 +681,7 @@ function handleJoinRoom(
         rooms.set(roomId, room);
     }
 
-    stepClock(room);
+    stepClock(room, hooks);
     room.emptySince = null;
 
     if (!Object.prototype.hasOwnProperty.call(room.players, playerId)) {
@@ -852,7 +859,7 @@ function handleStopImmediately(
     triggerUpdate: (rid: string) => void
 ) {
     const { room, player } = result;
-    stepClock(room);
+    stepClock(room, hooks);
     const vTime = room.virtualTime;
 
     if (message.destinationWpIndex !== undefined) {
@@ -979,7 +986,7 @@ export function handleIncomingMessage(
     if (message.type === 'TOGGLE_SNOOZE') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
-        stepClock(r.room);
+        stepClock(r.room, hooks);
         r.player.forceRealtime = false;
         r.player.desiredRate = r.player.desiredRate > 1.0 ? 1.0 : 500.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -990,7 +997,7 @@ export function handleIncomingMessage(
     if (message.type === 'FORCE_REALTIME') {
         const r = requireRoomAndPlayer(wsData, rooms);
         if (!r) return;
-        stepClock(r.room);
+        stepClock(r.room, hooks);
         r.player.forceRealtime = !r.player.forceRealtime;
         if (r.player.forceRealtime) r.player.desiredRate = 1.0;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_SNOOZE_UPDATE', playerId: wsData.playerId, desiredRate: r.player.desiredRate, forceRealtime: r.player.forceRealtime });
@@ -1018,7 +1025,7 @@ export function handleIncomingMessage(
     if (message.type === 'ADD_WAYPOINTS_BATCH') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r) return;
-        stepClock(r.room);
+        stepClock(r.room, hooks);
         const { waypoints } = message;
         if (!Array.isArray(waypoints) || waypoints.length === 0) { triggerUpdate(wsData.roomId!); return; }
         const nextWaypoints: Waypoint[] = [];
@@ -1039,7 +1046,7 @@ export function handleIncomingMessage(
     if (message.type === 'ADD_WAYPOINT') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r) return;
-        stepClock(r.room);
+        stepClock(r.room, hooks);
         const { x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop } = message;
         const lastPoint = r.player.waypoints[r.player.waypoints.length - 1];
         const newWaypoint = buildWaypoint({ x, y, speedFactor, arrivalTime, stopName, isWalk, isWait, route_color, route_short_name, display_name, emoji, route_departure_time, timeStr, isInterstop }, lastPoint, r.room.virtualTime);
@@ -1061,7 +1068,7 @@ export function handleIncomingMessage(
     if (message.type === 'PLAYER_FINISHED') {
         const r = requireRoomAndPlayer(wsData, rooms, { requireRunning: true });
         if (!r || r.player.finishTime !== null || !isSafeTimestamp(message.finishTime) || message.finishTime < 0) return;
-        stepClock(r.room);
+        stepClock(r.room, hooks);
         r.player.finishTime = message.finishTime;
         hooks.publish(wsData.roomId!, { type: 'PLAYER_FINISH_UPDATE', playerId: wsData.playerId, finishTime: r.player.finishTime });
         triggerUpdate(wsData.roomId!);
@@ -1130,7 +1137,7 @@ function checkGhostFinishes(room: Room, hooks: GameHooks) {
 }
 
 export function updateRoomLogic(room: Room, hooks: GameHooks, updateCallback: (roomId: string) => void) {
-    stepClock(room);
+    stepClock(room, hooks);
 
     // Cleanup check
     if (room.emptySince !== null) {
