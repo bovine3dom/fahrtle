@@ -71,7 +71,7 @@ export function GamePanel(props: {
   const isDaily = useStore($isDaily);
 
   const [minimized, setMinimized] = createSignal(false);
-  const canToggleReady = () => roomState() !== 'JOINING' || props.isSaved();
+  const canToggleReady = () => roomState() !== 'JOINING' || props.players()[props.myId()!]?.isReady || props.isSaved();
 
   createEffect(() => {
     if (roomState() === 'JOINING') setMinimized(false);
