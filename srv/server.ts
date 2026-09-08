@@ -3,7 +3,6 @@ import { serve, type ServerWebSocket } from "bun";
 import {
   type Room,
   type GameHooks,
-  type Waypoint,
   updateRoomLogic,
   handleIncomingMessage,
   handleGameClose,
@@ -14,6 +13,7 @@ import {
 } from "../src/shared/gameLogic";
 import { calculateCO2Emissions } from "../src/utils/co2";
 import { parseWebSocketMessage } from "../src/websocket";
+import { restoreStoredWaypoints } from "../src/shared/waypointPersistence";
 
 function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
@@ -108,17 +108,18 @@ function handleGhostRequest(req: Request, raceIndex: string): Response | Promise
 
   if (req.method === 'GET') {
     const rows = getGhostsQuery.all(raceIndex) as GhostEntry[];
-    const ghosts = rows.map(g => ({ ...g, waypoints: JSON.parse(g.waypoints) as Waypoint[] }));
+    const ghosts = rows.map(g => ({ ...g, waypoints: restoreStoredWaypoints(JSON.parse(g.waypoints)) }));
     return new Response(JSON.stringify(ghosts), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   if (req.method === 'POST') {
     return req.json().then((body) => {
       const { playerId, playerName, color, waypoints, finishTime } = body;
+      const storedWaypoints = body.waypointVersion === 1 ? { version: 1, waypoints } : waypoints;
       db.transaction(() => {
         upsertGhostQuery.run({
           $raceIndex: raceIndex, $playerId: playerId, $playerName: playerName,
-          $color: color ?? null, $waypoints: JSON.stringify(waypoints),
+          $color: color ?? null, $waypoints: JSON.stringify(storedWaypoints),
           $finishTime: finishTime, $submittedAt: Date.now(),
           $kgCO2e: calculateCO2Emissions(waypoints)
         });

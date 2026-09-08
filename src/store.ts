@@ -533,6 +533,7 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
         playerName: playerName,
         color: player.color,
         waypoints: player.waypoints,
+        waypointVersion: 1,
         finishTime: finishTime
       })
     });
