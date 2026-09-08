@@ -329,9 +329,10 @@ function markPlayerDisconnected(
 ) {
     const player = room.players[playerId];
     if (!player) return;
+    // Retained solo players still need a current clock anchor for close-time saves.
+    stepClock(room, hooks);
     if (hooks.shouldDeletePlayer && !hooks.shouldDeletePlayer(roomId, playerId)) return;
 
-    stepClock(room, hooks);
     player.disconnectedAt = getRealTime();
     hooks.publish(roomId, { type: 'PLAYER_DISCONNECT_UPDATE', playerId, disconnectedAt: player.disconnectedAt });
     checkCountdownLogic(room, hooks);

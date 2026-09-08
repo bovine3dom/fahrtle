@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
-import { getRealTime, handleIncomingMessage, updateRoomLogic, type GameHooks, type Room } from '../src/shared/gameLogic';
+import { getRealTime, handleGameClose, handleIncomingMessage, reanchorRoomRealTime, updateRoomLogic, type GameHooks, type Room } from '../src/shared/gameLogic';
 
 let room: Room;
 let elapsed: number;
@@ -70,4 +70,24 @@ test('a second clock advance in a message handler uses the committed rate', () =
   );
   expect(room.virtualTime).toBe(1053);
   expect(room.playbackRate).toBe(1);
+});
+
+test('closing a retained solo player saves elapsed progress before reanchoring on resume', () => {
+  room.lastRealTime = getRealTime() - 10_000;
+  room.playbackRate = 20;
+  for (const waypoint of room.players.player.waypoints) waypoint.speedFactor = 20;
+  hooks.shouldDeletePlayer = () => false;
+  handleGameClose(new Map([[room.id, room]]), { roomId: room.id, playerId: 'player' }, hooks, () => {});
+
+  const saved = JSON.stringify(room);
+  expect(room.virtualTime).toBe(200_000);
+  // The retention guard must still leave duplicate connections' player state alone.
+  expect(room.players.player.disconnectedAt).toBeNull();
+  expect(room.players.player.desiredRate).toBe(1);
+
+  elapsed += 60_000;
+  room = JSON.parse(saved);
+  reanchorRoomRealTime(room);
+  updateRoomLogic(room, hooks, () => {});
+  expect(room.virtualTime).toBe(200_000);
 });
