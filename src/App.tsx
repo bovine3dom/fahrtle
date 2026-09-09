@@ -1,6 +1,6 @@
 import { Suspense, lazy, createSignal, onMount, onCleanup, createMemo, Show, createEffect, untrack } from 'solid-js';
 import { useStore } from '@nanostores/solid';
-import { $currentRoom, leaveRoom, $globalRate, $roomState, $countdownEnd, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, $isDaily, $playerStats, updatePlayerStats, $isRerun, raceAgain } from './store';
+import { $currentRoom, leaveRoom, $globalRate, $roomState, $countdownEnd, $gameBounds, setGameBounds, $pickerMode, $pickedPoint, $gameStartTime, $isDaily, $playerStats, updatePlayerStats, raceAgain } from './store';
 import { getRealServerTime } from './time-sync';
 import Lobby from './Lobby';
 import { fitGameBounds, getPlayerScreenPosition } from './Map';
@@ -22,7 +22,6 @@ function App() {
   const room = useStore($currentRoom);
   const rate = useStore($globalRate);
   const roomState = useStore($roomState);
-  const isRerun = useStore($isRerun);
   const countdownEnd = useStore($countdownEnd);
   const bounds = useStore($gameBounds);
   const pickerMode = useStore($pickerMode);
@@ -38,24 +37,39 @@ function App() {
   const [useGhosts, setUseGhosts] = createSignal(false);
   const [showWinModal, setShowWinModal] = createSignal(false);
   const [showSettings, setShowSettings] = createSignal(false);
+  let finishModalTimeout: ReturnType<typeof setTimeout> | undefined;
+  let handledFinish: { playerId: string; finishTime: number } | null = null;
 
   createEffect(() => {
     const mid = myId();
-    if (!mid) return;
-    const p = players()[mid];
-    if (p && p.finishTime && !untrack(() => showWinModal())) {
+    const p = mid ? players()[mid] : undefined;
+    if (!mid || p?.finishTime == null || roomState() !== 'RUNNING') {
+      if (finishModalTimeout) clearTimeout(finishModalTimeout);
+      finishModalTimeout = undefined;
+      if (!mid || p?.finishTime == null) handledFinish = null;
+      return;
+    }
+    if ((!handledFinish || handledFinish.playerId !== mid || handledFinish.finishTime !== p.finishTime) && !untrack(() => showWinModal())) {
+      if (finishModalTimeout) clearTimeout(finishModalTimeout);
+      handledFinish = { playerId: mid, finishTime: p.finishTime };
       const pos = getPlayerScreenPosition(mid);
       confetti({
         particleCount: 200,
         spread: 140,
         origin: pos ? { x: pos.x, y: pos.y } : { y: 0.6 }
       });
-      setTimeout(() => {
-        const leftToFinish = Object.values(players()).filter(p => !p.finishTime).length;
-        ((p.desiredRate || 1) && leftToFinish > 0) && import('./store').then(({ toggleSnooze }) => toggleSnooze());
+      finishModalTimeout = setTimeout(() => {
+        finishModalTimeout = undefined;
+        const currentPlayer = players()[mid];
+        if (!currentPlayer || currentPlayer.finishTime == null || roomState() !== 'RUNNING') return;
+        const leftToFinish = Object.values(players()).filter(player => player.finishTime == null).length;
+        if ((currentPlayer.desiredRate || 1) <= 1 && leftToFinish > 0) import('./store').then(({ toggleSnooze }) => toggleSnooze());
         setShowWinModal(true)
       }, 3000);
     }
+  });
+  onCleanup(() => {
+    if (finishModalTimeout) clearTimeout(finishModalTimeout);
   });
 
   const handleSpectate = () => {
@@ -215,6 +229,15 @@ function App() {
     return sorted_finishers.concat(sorted_others);
   });
 
+  const canRaceAgain = createMemo(() => {
+    const activePlayers = Object.values(players()).filter(p => !p.isGhost && p.disconnectedAt == null);
+    return roomState() === 'RUNNING' && activePlayers.length > 0 && activePlayers.every(p => p.finishTime != null);
+  });
+
+  createEffect(() => {
+    if (roomState() !== 'RUNNING' && showWinModal()) setShowWinModal(false);
+  });
+
   createEffect(() => {
     if (leaveConfirm()) {
       const t = setTimeout(() => setLeaveConfirm(false), 5000);
@@ -357,7 +380,6 @@ function App() {
             rate={rate}
             elapsedTime={elapsedTime}
             isDaily={isDaily()}
-            isRerun={isRerun()}
             roomState={roomState}
             leaveConfirm={leaveConfirm()}
             setLeaveConfirm={setLeaveConfirm}
@@ -395,10 +417,10 @@ function App() {
           player={players()[myId()!]!}
           onSpectate={handleSpectate}
           onClose={() => setShowWinModal(false)}
-          onRaceAgain={() => {
+          onRaceAgain={canRaceAgain() ? () => {
             raceAgain(players()[myId()!]!.waypoints);
             setShowWinModal(false);
-          }}
+          } : undefined}
         />
       )}
     </>

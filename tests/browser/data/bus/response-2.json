@@ -1,0 +1,61 @@
+{
+	"meta":
+	[
+		{
+			"name": "stop_name",
+			"type": "String"
+		},
+		{
+			"name": "stop_lat",
+			"type": "Float64"
+		},
+		{
+			"name": "stop_lon",
+			"type": "Float64"
+		},
+		{
+			"name": "arrival_time",
+			"type": "DateTime"
+		},
+		{
+			"name": "departure_time",
+			"type": "DateTime"
+		}
+	],
+
+	"data":
+	[
+		{
+			"stop_name": "Waterloo Place (Stop ZJ)",
+			"stop_lat": 55.95361,
+			"stop_lon": -3.1872578,
+			"arrival_time": "2026-01-01 11:00:00",
+			"departure_time": "2026-01-01 11:00:00"
+		},
+		{
+			"stop_name": "Princes Street (Scott Mon.) (Stop PT)",
+			"stop_lat": 55.952087,
+			"stop_lon": -3.195643,
+			"arrival_time": "2026-01-01 11:04:00",
+			"departure_time": "2026-01-01 11:04:00"
+		},
+		{
+			"stop_name": "Frederick Street (Stop GT)",
+			"stop_lat": 55.9519,
+			"stop_lon": -3.1998851,
+			"arrival_time": "2026-01-01 11:07:00",
+			"departure_time": "2026-01-01 11:07:00"
+		}
+	],
+
+	"rows": 3,
+
+	"rows_before_limit_at_least": 3,
+
+	"statistics":
+	{
+		"elapsed": 0.008764623,
+		"rows_read": 8192,
+		"bytes_read": 482619
+	}
+}

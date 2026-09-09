@@ -1,6 +1,7 @@
 // ==> src/store.ts <==
 import { atom, map } from 'nanostores';
-import { syncClock } from './time-sync';
+import { apiBaseUrl, websocketUrl } from './config';
+import { estimateServerMessageLatency, getMonotonicTime, syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 import { parseUserTime } from './utils/time';
 import { throttle } from 'throttle-debounce';
@@ -8,6 +9,8 @@ import { sharedFakeServer } from './fakeServer';
 import { type Difficulty, type GameBounds, CURRENT_LEAGUE, boundsToWire, wireToGameBounds } from './shared/gameLogic';
 import { haversineDist } from './utils/geo';
 import { formatRowTime } from './utils/format';
+import { bindCurrentWebSocket } from './websocket';
+import { buildRenderablePlayer, buildRenderablePlayers, getRenderableTimelineStart, rebaseRenderableGhosts, type AnimationSegment } from './playerRendering';
 
 export type { Difficulty };
 
@@ -57,19 +60,14 @@ export type Player = {
   waypoints: Waypoint[];
   renderableSegments?: AnimationSegment[];
   finishTime?: number;
+  disconnectedAt?: number | null;
   desiredRate?: number;
   forceRealtime?: boolean;
   viewingStopName?: string | null;
   isGhost: boolean;
 };
 
-export type AnimationSegment = {
-  start: [number, number];
-  end: [number, number];
-  startTime: number;
-  endTime: number;
-  isInterstop: boolean;
-};
+export type { AnimationSegment } from './playerRendering';
 
 type RenderablePlayer = Player & { isGhost: boolean } & { segments: AnimationSegment[] };
 
@@ -244,11 +242,30 @@ interface GenericWebSocket {
 }
 
 let ws: GenericWebSocket | null = null;
+let removeClockResumeListeners: (() => void) | null = null;
+
+function bindClockResumeSync(socket: GenericWebSocket, roomId: string) {
+  const requestSync = () => {
+    if (ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId }));
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') requestSync();
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('focus', requestSync);
+  window.addEventListener('pageshow', requestSync);
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', requestSync);
+    window.removeEventListener('pageshow', requestSync);
+  };
+}
 
 function handleRoomState(msg: any) {
-  const renderables: Record<string, RenderablePlayer> = {};
+  const timelineStart = getRenderableTimelineStart(msg.players, $myPlayerId.get(), msg.gameStartTime);
+  const renderables = buildRenderablePlayers(msg.players, timelineStart) as Record<string, RenderablePlayer>;
   for (const pid in msg.players) {
-    renderables[pid] = processPlayer(msg.players[pid]);
     if (pid === $myPlayerId.get()) {
       const p = msg.players[pid];
       if (p.waypoints.length > 0) {
@@ -266,7 +283,9 @@ function handleRoomState(msg: any) {
   const previousGhosts = $gameBounds.get().ghosts;
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
-  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
+  $globalRate.set(msg.rate);
+  $isRerun.set(msg.isRerun);
   handleGhostFlags(previousGhosts, msg.ghosts);
 }
 
@@ -277,7 +296,12 @@ function handleRoomStateUpdate(msg: any) {
   $gameBounds.set(wireToGameBounds(msg));
   $gameStartTime.set(msg.gameStartTime);
   $isRerun.set(msg.isRerun);
-  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+  const players = $players.get();
+  const timelineStart = getRenderableTimelineStart(players, $myPlayerId.get(), msg.gameStartTime);
+  const rebasedPlayers = rebaseRenderableGhosts(players, timelineStart);
+  if (rebasedPlayers !== players) $players.set(rebasedPlayers as Record<string, RenderablePlayer>);
+  syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
+  $globalRate.set(msg.rate);
   handleGhostFlags(prevGhosts, msg.ghosts);
 }
 
@@ -299,14 +323,14 @@ function handleWsMessage(event: any) {
   const msg = JSON.parse(event.data);
 
   if (msg.type === 'SYNC_RESPONSE') {
-    const now = Date.now();
-    syncClock(msg.serverTime, msg.realTime || now, msg.rate, (now - msg.clientSendTime) / 2);
+    const now = getMonotonicTime();
+    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, (now - msg.clientSendTime) / 2);
     $globalRate.set(msg.rate);
     return;
   }
 
   if (msg.type === 'CLOCK_UPDATE') {
-    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, 50);
+    syncClock(msg.serverTime, msg.realTime || Date.now(), msg.rate, estimateServerMessageLatency(msg.realTime));
     $globalRate.set(msg.rate);
     return;
   }
@@ -332,6 +356,7 @@ function handleWsMessage(event: any) {
 
   if (msg.type === 'PLAYER_COLOR_UPDATE') { updatePlayerField(msg.playerId, () => ({ color: msg.color })); return; }
   if (msg.type === 'PLAYER_SNOOZE_UPDATE') { updatePlayerField(msg.playerId, () => ({ desiredRate: msg.desiredRate, forceRealtime: msg.forceRealtime })); return; }
+  if (msg.type === 'PLAYER_DISCONNECT_UPDATE') { updatePlayerField(msg.playerId, () => ({ disconnectedAt: msg.disconnectedAt })); return; }
   if (msg.type === 'PLAYER_VIEW_UPDATE') { updatePlayerField(msg.playerId, () => ({ viewingStopName: msg.viewingStopName })); return; }
   if (msg.type === 'PLAYER_FINISH_UPDATE') { updatePlayerField(msg.playerId, () => ({ finishTime: msg.finishTime })); return; }
 
@@ -346,7 +371,7 @@ function handleWsMessage(event: any) {
   }
 }
 
-function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRaceIndex?: number }) {
+function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRaceIndex?: number }, socket = ws) {
   let startTime: number | undefined;
   const startPos = initialBounds.start || [51, 0];
   if (startPos && initialBounds.time) {
@@ -355,7 +380,7 @@ function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRac
     if (parsed !== null) startTime = parsed;
   }
 
-  ws?.send(JSON.stringify({
+  socket?.send(JSON.stringify({
     type: 'SET_GAME_BOUNDS',
     ...boundsToWire({
       start: initialBounds.start,
@@ -389,37 +414,41 @@ function sendInitialBounds(initialBounds: GameBounds & { time?: string, dailyRac
 }
 
 export function connectAndJoin(roomId: string | null, playerId: string, color?: string, initialBounds?: GameBounds & { time?: string, dailyRaceIndex?: number }) {
+  removeClockResumeListeners?.();
+  removeClockResumeListeners = null;
   if (ws) ws.close();
 
   if ($isSinglePlayer.get()) {
     ws = sharedFakeServer.connect(roomId || ($isDaily.get() ? 'daily' : 'solo'), playerId) as any;
   } else {
-    const wsUri = import.meta.env.PROD
-      ? import.meta.env.VITE_FAHRTLE_WS_URI
-      : 'ws://localhost:8080';
-    ws = new WebSocket(wsUri || '') as any;
+    ws = new WebSocket(websocketUrl) as any;
   }
 
   if (!ws) return;
+  const socket = ws;
 
   const effectiveRoomId = roomId || ($isDaily.get() ? 'daily' : 'solo');
 
-  ws.onopen = () => {
-    $connected.set(true);
-    ws?.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: Date.now(), roomId: effectiveRoomId }));
-    ws?.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
-    if (initialBounds) sendInitialBounds(initialBounds);
-    $currentRoom.set(effectiveRoomId);
-    $myPlayerId.set(playerId);
-  };
-
-  ws.onmessage = handleWsMessage;
-
-  ws.onclose = () => {
-    $connected.set(false);
-    $currentRoom.set(null);
-    ghostsFetchedForIndex = null;
-  }
+  bindCurrentWebSocket(socket, (candidate) => ws === candidate, {
+    open: () => {
+      $connected.set(true);
+      $currentRoom.set(effectiveRoomId);
+      $myPlayerId.set(playerId);
+      socket.send(JSON.stringify({ type: 'SYNC_REQUEST', clientSendTime: getMonotonicTime(), roomId: effectiveRoomId }));
+      removeClockResumeListeners = bindClockResumeSync(socket, effectiveRoomId);
+      socket.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: effectiveRoomId, playerId, color }));
+      if (initialBounds) sendInitialBounds(initialBounds, socket);
+    },
+    message: handleWsMessage,
+    close: () => {
+      removeClockResumeListeners?.();
+      removeClockResumeListeners = null;
+      ws = null;
+      $connected.set(false);
+      $currentRoom.set(null);
+      ghostsFetchedForIndex = null;
+    },
+  });
 }
 
 async function removeGhosts() {
@@ -452,18 +481,17 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
   ghostsFetchedForIndex = dailyRaceIndex;
   
   if (!ws || ws.readyState !== 1) return;
+  const socket = ws;
   
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
-  
-  const url = `${apiUrl}api/ghosts/${dailyRaceIndex}`;
+  const url = `${apiBaseUrl}api/ghosts/${dailyRaceIndex}`;
   
   try {
     const response = await fetch(url);
     if (!response.ok) return;
     const ghosts = await response.json();
     
-    if (ghosts && ghosts.length > 0) {
-      ws.send(JSON.stringify({
+    if (ghosts && ghosts.length > 0 && ws === socket && socket.readyState === 1 && ghostsFetchedForIndex === dailyRaceIndex) {
+      socket.send(JSON.stringify({
         type: 'ADD_GHOSTS',
         ghosts: ghosts.map((g: any) => ({
           playerId: g.playerId,
@@ -488,21 +516,18 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
   
   const playerName = $playerSettings.get().name || myId;
   
-  const nonInterstopWaypoints = player.waypoints.filter(wp => !wp.isInterstop);
-  
-  if (nonInterstopWaypoints.length === 0) return;
-
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
+  if (player.waypoints.length === 0) return;
 
   try {
-    await fetch(`${apiUrl}api/ghosts/${dailyRaceIndex}`, {
+    await fetch(`${apiBaseUrl}api/ghosts/${dailyRaceIndex}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         playerId: myId,
         playerName: playerName,
         color: player.color,
-        waypoints: nonInterstopWaypoints,
+        waypoints: player.waypoints,
+        waypointVersion: 1,
         finishTime: finishTime
       })
     });
@@ -693,35 +718,8 @@ export function sendPing(lat: number, lon: number) {
 }
 
 function processPlayer(raw: Player): RenderablePlayer {
-  const segments: AnimationSegment[] = [];
-  const myStart = $players.get()[$myPlayerId.get()||'']?.waypoints[0].startTime;
-  const offset = myStart - raw?.waypoints[0].startTime; // this hack doesn't feel right
-
-  for (let i = 0; i < raw.waypoints.length; i++) {
-    const wp = raw.waypoints[i];
-    if (i > 0) {
-      const prev = raw.waypoints[i - 1];
-      segments.push({
-        start: [prev.x, prev.y],
-        end: [wp.x, wp.y],
-        startTime: wp.startTime + offset,
-        endTime: wp.arrivalTime + offset,
-        isInterstop: wp.isInterstop || false
-      });
-    }
-  }
-
-  for (let i = 1; i < segments.length; i++) {
-    if (segments[i].startTime !== segments[i - 1].endTime) {
-      segments[i].startTime = segments[i - 1].endTime;
-    }
-  }
-
-  return {
-    ...raw,
-    isGhost: raw.isGhost,
-    segments
-  };
+  const players = $players.get();
+  return buildRenderablePlayer(raw, getRenderableTimelineStart(players, $myPlayerId.get(), $gameStartTime.get()));
 }
 
 export function setGameBounds(partial: Partial<GameBounds>) {

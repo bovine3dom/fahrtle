@@ -1,0 +1,43 @@
+{
+  "capturedAt": "2026-09-09T01:34:45.488Z",
+  "endpoint": "https://compute.olie.science/ch/",
+  "league": "20260706",
+  "timezone": "Europe/London",
+  "startTime": "10:55",
+  "journey": {
+    "source": "gb_great-britain.gtfs",
+    "tripId": "VJ1337840438fef2765928577cf43f983695d03381",
+    "routeId": "57818d98-fe55-899b-197c-9a4f28c63376",
+    "route": "X5",
+    "headsign": "Frederick Street",
+    "departure": "2026-01-01 11:00:00",
+    "start": [
+      55.95361,
+      -3.1872578
+    ],
+    "finish": [
+      55.9519,
+      -3.1998851
+    ]
+  },
+  "requests": [
+    {
+      "query": "\n        SELECT * FROM (\n          SELECT * FROM (\n            SELECT *, ((toHour(departure_time) * 60 + toMinute(departure_time)) - 655 + 1440) % 1440 sort_time\n            FROM transitous_everything_20260706_edgelist_fahrtle2\n            WHERE h3 IN (reinterpretAsUInt64(reverse(unhex('8b1972765ab0fff'))))\n            ORDER by sort_time ASC, travel_time ASC\n            \n           LIMIT 1 BY\n             stop_uuid,\n             departure_time,\n             route_short_name,\n             trip_headsign,\n             final_name\n      \n            LIMIT 1000\n          )\n          ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC\n          \n          LIMIT 1 BY\n            source,\n            departure_time,\n            h3ToParent(next_h3, 9)\n      \n        )\n        ORDER BY sort_time ASC\n        LIMIT 200 OFFSET 0\n      ",
+      "file": "response-0.json",
+      "sha256": "0ad83dfcbfaeb15f19a06746c934929697f8e5d4b9496a3428541e18bda932ea",
+      "status": 200
+    },
+    {
+      "query": "\n        SELECT * FROM (\n          SELECT * FROM (\n            SELECT *, ((toHour(next_arrival) * 60 + toMinute(next_arrival)) - 655 + 1440) % 1440 sort_time\n            FROM transitous_everything_20260706_edgelist_fahrtle2\n            WHERE next_h3 IN (reinterpretAsUInt64(reverse(unhex('8b1972765ab0fff'))))\n            ORDER by sort_time ASC, travel_time ASC\n            \n           LIMIT 1 BY\n             stop_uuid,\n             departure_time,\n             route_short_name,\n             trip_headsign,\n             final_name\n      \n            LIMIT 1000\n          )\n          ORDER BY geoDistance(stop_lon, stop_lat, final_lon, final_lat) DESC, travel_time ASC\n          \n          LIMIT 1 BY\n            source,\n            departure_time,\n            h3ToParent(next_h3, 9)\n      \n        )\n        ORDER BY sort_time ASC\n        LIMIT 200 OFFSET 0\n      ",
+      "file": "response-1.json",
+      "sha256": "866a16245af983c4843e3810a915b8c20f8a20d0ffa64ad2bd31a95cbe68028b",
+      "status": 500
+    },
+    {
+      "query": "\n      SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time\n      FROM transitous_everything_20260706_stop_times_one_day_even_saner2\n      WHERE source = 'gb_great-britain.gtfs'\n        AND trip_id = 'VJ1337840438fef2765928577cf43f983695d03381'\n        AND sane_route_id = '57818d98-fe55-899b-197c-9a4f28c63376'\n        AND departure_time >= '2026-01-01 11:00:00'\n      ORDER BY departure_time ASC, stop_sequence ASC\n      LIMIT 100\n    ",
+      "file": "response-2.json",
+      "sha256": "1ce7a5ecbc24e70e2785a8efc121a8490881443872f36a7bcde9ba5b5dc5e9f4",
+      "status": 200
+    }
+  ]
+}

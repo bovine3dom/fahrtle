@@ -121,7 +121,7 @@ function updatePlayerMarkers(allPlayers: Record<string, any>, playerPositions: R
       el.style.border = '2px solid white';
       el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
 
-      marker = new maplibregl.Marker({ element: el })
+      marker = new maplibregl.Marker({ element: el, subpixelPositioning: true })
         .setLngLat(pos)
         .addTo(mapInstance);
       playerMarkers.set(pid, marker);

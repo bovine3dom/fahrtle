@@ -3,14 +3,17 @@ import { serve, type ServerWebSocket } from "bun";
 import {
   type Room,
   type GameHooks,
-  type Waypoint,
   updateRoomLogic,
   handleIncomingMessage,
   handleGameClose,
+  getProjectedRoomClock,
+  getRealTime,
   getRoomBounds,
   boundsToWire
 } from "../src/shared/gameLogic";
 import { calculateCO2Emissions } from "../src/utils/co2";
+import { parseWebSocketMessage } from "../src/websocket";
+import { restoreStoredWaypoints } from "../src/shared/waypointPersistence";
 
 function log(...args: any[]) {
   console.log(`[${new Date().toISOString()}]`, ...args);
@@ -28,9 +31,34 @@ type GhostEntry = {
 type WSData = {
   roomId: string | null;
   playerId: string | null;
+  connectionKey: string | null;
 };
 
 const rooms = new Map<string, Room>();
+const playerConnections = new Map<string, number>();
+
+function getPlayerConnectionKey(roomId: string, playerId: string) {
+  return `${roomId}\u0000${playerId}`;
+}
+
+function removePlayerConnection(key: string) {
+  const nextCount = (playerConnections.get(key) ?? 0) - 1;
+  if (nextCount <= 0) playerConnections.delete(key);
+  else playerConnections.set(key, nextCount);
+}
+
+function addPlayerConnection(ws: ServerWebSocket<WSData>) {
+  if (!ws.data.roomId || !ws.data.playerId) return;
+  const nextKey = getPlayerConnectionKey(ws.data.roomId, ws.data.playerId);
+  if (ws.data.connectionKey === nextKey) return;
+  if (ws.data.connectionKey) removePlayerConnection(ws.data.connectionKey);
+  ws.data.connectionKey = nextKey;
+  playerConnections.set(nextKey, (playerConnections.get(nextKey) ?? 0) + 1);
+}
+
+function shouldDeletePlayer(roomId: string, playerId: string) {
+  return (playerConnections.get(getPlayerConnectionKey(roomId, playerId)) ?? 0) === 0;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,7 +66,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const db = new Database("ghosts.db", { create: true });
+const db = new Database(process.env.FAHRTLE_DB_PATH ?? "ghosts.db", { create: true });
 db.exec("PRAGMA journal_mode = WAL;"); // improve write performance
 db.run(`
   CREATE TABLE IF NOT EXISTS ghosts (
@@ -80,17 +108,18 @@ function handleGhostRequest(req: Request, raceIndex: string): Response | Promise
 
   if (req.method === 'GET') {
     const rows = getGhostsQuery.all(raceIndex) as GhostEntry[];
-    const ghosts = rows.map(g => ({ ...g, waypoints: JSON.parse(g.waypoints) as Waypoint[] }));
+    const ghosts = rows.map(g => ({ ...g, waypoints: restoreStoredWaypoints(JSON.parse(g.waypoints)) }));
     return new Response(JSON.stringify(ghosts), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   if (req.method === 'POST') {
     return req.json().then((body) => {
       const { playerId, playerName, color, waypoints, finishTime } = body;
+      const storedWaypoints = body.waypointVersion === 1 ? { version: 1, waypoints } : waypoints;
       db.transaction(() => {
         upsertGhostQuery.run({
           $raceIndex: raceIndex, $playerId: playerId, $playerName: playerName,
-          $color: color ?? null, $waypoints: JSON.stringify(waypoints),
+          $color: color ?? null, $waypoints: JSON.stringify(storedWaypoints),
           $finishTime: finishTime, $submittedAt: Date.now(),
           $kgCO2e: calculateCO2Emissions(waypoints)
         });
@@ -110,8 +139,9 @@ function handleLeaderboardRequest(req: Request, version: string): Response {
   return new Response('Method not allowed', { status: 405, headers: corsHeaders });
 }
 
-const server = serve<WSData>({
-  port: 8080,
+export const server = serve<WSData>({
+  port: Number(process.env.FAHRTLE_PORT ?? 8080),
+  hostname: process.env.FAHRTLE_HOST,
   fetch(req: Request, server: any) {
     if (server.upgrade(req)) return;
 
@@ -127,13 +157,18 @@ const server = serve<WSData>({
   },
   websocket: {
     open(ws: ServerWebSocket<WSData>) {
-      ws.data = { roomId: null, playerId: null };
+      ws.data = { roomId: null, playerId: null, connectionKey: null };
     },
     message(ws: ServerWebSocket<WSData>, msg: string | Uint8Array) {
-      const message = JSON.parse(String(msg));
+      const message = parseWebSocketMessage(msg);
+      if (message === undefined) return;
       handleIncomingMessage(message, rooms, ws.data, getwsHooks(ws), updateRoom);
     },
     close(ws: ServerWebSocket<WSData>) {
+      if (ws.data.connectionKey) {
+        removePlayerConnection(ws.data.connectionKey);
+        ws.data.connectionKey = null;
+      }
       handleGameClose(rooms, ws.data, getwsHooks(ws), updateRoom);
     }
   }
@@ -150,7 +185,12 @@ function getwsHooks(ws: ServerWebSocket<WSData>): GameHooks {
       log(`Room: ${roomId}: Deleted.`);
     },
     sendToSender: (message: any) => ws.send(JSON.stringify(message)),
-    subscribeToRoom: (roomId: string) => ws.subscribe(roomId)
+    subscribeToRoom: (roomId: string) => {
+      ws.subscribe(roomId);
+      addPlayerConnection(ws);
+    },
+    unsubscribeFromRoom: (roomId: string) => ws.unsubscribe(roomId),
+    shouldDeletePlayer
   };
 }
 
@@ -164,7 +204,9 @@ const gameHooks: GameHooks = {
     log(`Room: ${roomId}: Deleted.`);
   },
   sendToSender: () => { /* Server root doesn't have a specific sender */ },
-  subscribeToRoom: () => { /* Server root doesn't subscribe */ }
+  subscribeToRoom: () => { /* Server root doesn't subscribe */ },
+  unsubscribeFromRoom: () => { /* Server root doesn't subscribe */ },
+  shouldDeletePlayer
 };
 
 function getGameHooks(): GameHooks {
@@ -173,16 +215,17 @@ function getGameHooks(): GameHooks {
 
 function broadcastRoomState(room: Room) {
   const bounds = getRoomBounds(room);
+  const projectedClock = getProjectedRoomClock(room);
   server.publish(room.id, JSON.stringify({
     type: 'ROOM_STATE_UPDATE',
     state: room.state,
     countdownEnd: room.countdownEnd,
     gameStartTime: room.gameStartTime,
     ...boundsToWire(bounds),
-    serverTime: room.virtualTime,
-    realTime: Date.now(),
+    serverTime: projectedClock.virtualTime,
+    realTime: getRealTime(),
     isRerun: room.isRerun,
-    rate: room.state === 'RUNNING' ? room.playbackRate : 0
+    rate: projectedClock.playbackRate
   }));
 }
 

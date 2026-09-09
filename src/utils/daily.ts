@@ -49,7 +49,7 @@ export async function getRaceByIndex(index: number, races?: any[]) {
     return {
         start: [start[0], start[1]] as [number, number],
         finish: [finish[0], finish[1]] as [number, number],
-        league: race.league,
+        league: String(race.league),
         time
     };
 }
