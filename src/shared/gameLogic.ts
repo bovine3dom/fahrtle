@@ -485,7 +485,7 @@ async function fetchComputerDriverRoute(room: Room, hooks: GameHooks) {
             coordinates: [[requestedStart[1], requestedStart[0]], [requestedFinish[1], requestedFinish[0]]]
         });
 
-        const response = await fetch("https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
+        const response = await fetch(import.meta.env.VITE_FAHRTLE_DRIVING_URL ?? "https://compute.olie.science/heigit-ors/v2/directions/driving-car/geojson", {
             method: 'POST',
             headers: { 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 'Content-Type': 'application/json' },
             body

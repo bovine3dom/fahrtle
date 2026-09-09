@@ -11,10 +11,13 @@ ghosts.db*
 node_modules
 dist
 dist-ssr
+test-results/
+playwright-report/
 *.local
 .env
 .env.*
 !.env.example
+*.tsbuildinfo
 
 # Editor directories and files
 .vscode/*

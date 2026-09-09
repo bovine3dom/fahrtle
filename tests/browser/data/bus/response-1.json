@@ -1,0 +1,15 @@
+{
+	"meta":
+	[
+
+	],
+
+	"data":
+	[
+
+	],
+
+	"rows": 0,
+
+	"exception": "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded, max rows: 10.00 million, current rows: 249.58 million. (TOO_MANY_ROWS) (version 25.9.2.1 (official build))"
+}

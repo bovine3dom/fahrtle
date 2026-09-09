@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "backend": "bun run srv/server.ts",
     "knip": "bunx --bun knip",
-    "fuzz:mp": "bun run scripts/multiplayer-fuzz.ts --clients 5 --rooms 2 --hostile"
+    "fuzz:mp": "bun run scripts/multiplayer-fuzz.ts --clients 5 --rooms 2 --hostile",
+    "test:unit": "bun test",
+    "test:browser": "playwright test",
+    "test:browser:install": "playwright install chromium",
+    "test:typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@googlemaps/polyline-codec": "^1.0.28",
@@ -32,6 +36,7 @@
     "tz-lookup": "^6.1.25"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@types/bun": "^1.3.6",
     "@types/node": "^24.10.1",
     "@types/throttle-debounce": "^5.0.2",

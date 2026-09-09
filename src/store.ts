@@ -1,5 +1,6 @@
 // ==> src/store.ts <==
 import { atom, map } from 'nanostores';
+import { apiBaseUrl, websocketUrl } from './config';
 import { estimateServerMessageLatency, getMonotonicTime, syncClock } from './time-sync';
 import { getTimeZone } from './timezone';
 import { parseUserTime } from './utils/time';
@@ -420,10 +421,7 @@ export function connectAndJoin(roomId: string | null, playerId: string, color?: 
   if ($isSinglePlayer.get()) {
     ws = sharedFakeServer.connect(roomId || ($isDaily.get() ? 'daily' : 'solo'), playerId) as any;
   } else {
-    const wsUri = import.meta.env.PROD
-      ? import.meta.env.VITE_FAHRTLE_WS_URI
-      : 'ws://localhost:8080';
-    ws = new WebSocket(wsUri || '') as any;
+    ws = new WebSocket(websocketUrl) as any;
   }
 
   if (!ws) return;
@@ -485,9 +483,7 @@ async function fetchAndAddGhosts(dailyRaceIndex: number) {
   if (!ws || ws.readyState !== 1) return;
   const socket = ws;
   
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
-  
-  const url = `${apiUrl}api/ghosts/${dailyRaceIndex}`;
+  const url = `${apiBaseUrl}api/ghosts/${dailyRaceIndex}`;
   
   try {
     const response = await fetch(url);
@@ -522,10 +518,8 @@ export async function submitGhostWaypoints(dailyRaceIndex: number, finishTime: n
   
   if (player.waypoints.length === 0) return;
 
-  const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
-
   try {
-    await fetch(`${apiUrl}api/ghosts/${dailyRaceIndex}`, {
+    await fetch(`${apiBaseUrl}api/ghosts/${dailyRaceIndex}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

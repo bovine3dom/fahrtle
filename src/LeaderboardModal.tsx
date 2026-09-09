@@ -4,6 +4,7 @@ import { formatDuration } from './utils/time';
 import { getRaceByIndex } from './utils/daily';
 import { getClosestCityObject } from './utils/tiny-cities';
 import { sensibleNumber } from './utils/format';
+import { apiBaseUrl } from './config';
 
 const s: Record<string, any> = {
   overlay: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', 'z-index': 1000, display: 'flex', 'justify-content': 'center', 'align-items': 'center', 'backdrop-filter': 'blur(4px)' },
@@ -36,8 +37,7 @@ export default function LeaderboardModal(props: LeaderboardModalProps) {
   const [leaderboard] = createResource(
     () => props.version,
     async (version) => {
-      const apiUrl = import.meta.env.PROD ? '' : 'http://localhost:8080/';
-      const response = await fetch(`${apiUrl}api/leaderboard/${version}`);
+      const response = await fetch(`${apiBaseUrl}api/leaderboard/${version}`);
       if (!response.ok) throw new Error('Failed to fetch leaderboard');
       return response.json() as Promise<LeaderboardEntry[]>;
     }

@@ -66,7 +66,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const db = new Database("ghosts.db", { create: true });
+const db = new Database(process.env.FAHRTLE_DB_PATH ?? "ghosts.db", { create: true });
 db.exec("PRAGMA journal_mode = WAL;"); // improve write performance
 db.run(`
   CREATE TABLE IF NOT EXISTS ghosts (
@@ -139,8 +139,9 @@ function handleLeaderboardRequest(req: Request, version: string): Response {
   return new Response('Method not allowed', { status: 405, headers: corsHeaders });
 }
 
-const server = serve<WSData>({
-  port: 8080,
+export const server = serve<WSData>({
+  port: Number(process.env.FAHRTLE_PORT ?? 8080),
+  hostname: process.env.FAHRTLE_HOST,
   fetch(req: Request, server: any) {
     if (server.upgrade(req)) return;
 

@@ -62,6 +62,20 @@ I suggest you use [entr](https://github.com/eradman/entr) to restart the server,
 ```bash
 ls srv/* | entr -r bun run srv/server.ts
 ```
+### Tests
+
+Browser tests require Node.js 22 or later. Install Chromium with `bun run test:browser:install`.
+
+```bash
+bun run test:unit
+bun run test:typecheck
+bun run test:browser
+```
+
+Browser tests start a local server with an in-memory SQLite database. They do not open `ghosts.db`.
+
+Set `FAHRTLE_LIVE_CLICKHOUSE=1` to read map-stop data from ClickHouse. Set `FAHRTLE_CAPTURE_BUS=1` to replace the saved bus data with data from ClickHouse.
+
 **spring cleaning**
 
 every now and then run `bun knip`, clean up unused exports then `tsc -b` and remove the dead code
