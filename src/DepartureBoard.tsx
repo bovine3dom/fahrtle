@@ -11,7 +11,6 @@ import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
 import { memoize } from 'micro-memoize';
 import { augmentWithShape } from './utils/railRoute';
-import { CURRENT_LEAGUE } from './shared/gameLogic';
 import { nextWaypoint } from './utils/memos';
 import { getServerTime } from './time-sync';
 import { DepartureRow, ActionButton } from './components/DepartureRow';
@@ -442,9 +441,10 @@ export default function DepartureBoard() {
     nextWaypoint() && stopImmediately();
     const key = `${row.source}-${row.trip_id}-${row.departure_time}`;
     setLoadingTripKey(key);
+    const league = $gameBounds.get().league;
     const query = `
       SELECT stop_name, stop_lat, stop_lon, arrival_time, departure_time
-      FROM transitous_everything_${$gameBounds.get().league}_stop_times_one_day_even_saner2
+      FROM transitous_everything_${league}_stop_times_one_day_even_saner2
       WHERE source = '${row['source']}'
         AND trip_id = '${row['trip_id']}'
         AND sane_route_id = '${row.sane_route_id}'
@@ -455,14 +455,17 @@ export default function DepartureBoard() {
 
     const shape_pls = chQuery(`
       WITH trip_shape AS (
-        SELECT shape_id FROM transitous_everything_${CURRENT_LEAGUE}_trips
+        SELECT shape_id FROM transitous_everything_${league}_trips
         WHERE trip_id = '${row.trip_id}' AND source = '${row.source}'
       )
       SELECT shape_pt_lat as lat, shape_pt_lon as lon
-      FROM transitous_everything_${CURRENT_LEAGUE}_shapes
+      FROM transitous_everything_${league}_shapes
       WHERE source = '${row.source}' AND shape_id IN (SELECT shape_id FROM trip_shape)
       ORDER BY shape_pt_sequence
-    `);
+    `).catch(err => {
+      console.error('[Shape] Query failed; falling back to stops:', err);
+      return { data: [] };
+    });
     chQuery(query)
       .then(async res => {
         if (res && res.data && res.data.length > 0) {

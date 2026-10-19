@@ -53,6 +53,8 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
         true
     ).map(p => {return {lon: p.x, lat: p.y}})
 
+    if (simplifiedShape.length < 2) return stops;
+
     // locally euclidean
     const refLat = simplifiedShape[0].lat * Math.PI / 180;
     const R = 6371000;
@@ -103,10 +105,8 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
         currentSegmentStart = bestSegment; 
     }
 
-    mappedStops.sort((a, b) => {
-        if (a.segmentIndex === b.segmentIndex) return a.t - b.t;
-        return a.segmentIndex - b.segmentIndex;
-    });
+    if (mappedStops.some((stop, i) => i > 0 &&
+        stop.segmentIndex + stop.t < mappedStops[i - 1].segmentIndex + mappedStops[i - 1].t)) return stops;
 
     const finalPath: RoutePoint[] =[];
     finalPath.push({ ...mappedStops[0].stopData, isInterstop: false });
@@ -114,17 +114,20 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
 
     // Compute distances and times for the entire shape path
     const shapeCoords: [number, number][] = simplifiedShape.map(p => [p.lon, p.lat]);
-    const { pointDistances, totalLegDist } = computeDistancesAndTimes(
+    const { pointDistances } = computeDistancesAndTimes(
         shapeCoords,
         mappedStops[0].stopData,
         mappedStops[mappedStops.length - 1].stopData
     );
 
+    const stopDistance = ({ segmentIndex, t }: typeof mappedStops[number]) =>
+        pointDistances[segmentIndex] + t * (pointDistances[segmentIndex + 1] - pointDistances[segmentIndex]);
+
     for (let i = 1; i < mappedStops.length; i++) {
         const startStop = mappedStops[i - 1].stopData;
         const endStop = mappedStops[i].stopData;
-        const legStartDist = pointDistances[mappedStops[i - 1].segmentIndex + 1] || 0;
-        const legEndDist = pointDistances[mappedStops[i].segmentIndex + 1] || totalLegDist;
+        const legStartDist = stopDistance(mappedStops[i - 1]);
+        const legEndDist = stopDistance(mappedStops[i]);
         const legDist = legEndDist - legStartDist;
         const legTimeDiff = (endStop.time || 0) - (startStop.time || 0);
 
@@ -133,6 +136,11 @@ export async function augmentWithShape(stops: any[], shapePoints: any[]) {
             const pointTime = startStop.time + segmentDistRatio * legTimeDiff;
 
             finalPath.push({
+                ...startStop,
+                isWalk: false,
+                isWait: false,
+                stopName: undefined,
+                timeStr: undefined,
                 lng: simplifiedShape[currentShapeIndex].lon,
                 lat: simplifiedShape[currentShapeIndex].lat,
                 time: pointTime,
