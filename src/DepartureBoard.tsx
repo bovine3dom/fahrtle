@@ -10,7 +10,8 @@ import { getRouteEmoji } from './getRouteEmoji';
 import { parseDBTime, getWallSeconds } from './utils/time';
 import { formatRowTime } from './utils/format';
 import { memoize } from 'micro-memoize';
-import { augmentWithRailRoute, augmentWithShape } from './utils/railRoute';
+import { augmentWithShape } from './utils/railRoute';
+import { CURRENT_LEAGUE } from './shared/gameLogic';
 import { nextWaypoint } from './utils/memos';
 import { getServerTime } from './time-sync';
 import { DepartureRow, ActionButton } from './components/DepartureRow';
@@ -76,10 +77,7 @@ function processTripResults(res: any[], row: DepartureResult) {
   return points;
 }
 
-function submitTripWaypoints(points: any[], row: DepartureResult, close: () => void, setLoading: (v: null) => void, shapeData: any[]) {
-  const augmentor = shapeData.length > points.length * 1.5
-    ? (ps: any[]) => augmentWithShape(ps.map(p => ({ lon: p.lng, ...p })), shapeData)
-    : getRouteEmoji(row.route_type) === '🚆' ? augmentWithRailRoute : null;
+function submitTripWaypoints(points: any[], close: () => void, setLoading: (v: null) => void, shapeData: any[]) {
   const doSubmit = (pts: any[]) => {
     submitWaypointsBatch(pts);
     $playerSettings.get().autoFollow && $isFollowing.set(true);
@@ -87,9 +85,9 @@ function submitTripWaypoints(points: any[], row: DepartureResult, close: () => v
     setLoading(null);
   };
 
-  if (augmentor) {
-    augmentor(points).then(doSubmit).catch(err => {
-      console.error("[RailRoute] Full fallback due to error:", err);
+  if (shapeData.length > points.length * 1.5) {
+    augmentWithShape(points.map(p => ({ lon: p.lng, ...p })), shapeData).then(doSubmit).catch(err => {
+      console.error("[Shape] Falling back to stops:", err);
       doSubmit(points);
     });
   } else {
@@ -457,18 +455,19 @@ export default function DepartureBoard() {
 
     const shape_pls = chQuery(`
       WITH trip_shape AS (
-        SELECT shape_id FROM transitous_everything_20260218_trips
+        SELECT shape_id FROM transitous_everything_${CURRENT_LEAGUE}_trips
         WHERE trip_id = '${row.trip_id}' AND source = '${row.source}'
       )
       SELECT shape_pt_lat as lat, shape_pt_lon as lon
-      FROM transitous_everything_20260218_shapes
-      WHERE shape_id IN (SELECT shape_id FROM trip_shape)
+      FROM transitous_everything_${CURRENT_LEAGUE}_shapes
+      WHERE source = '${row.source}' AND shape_id IN (SELECT shape_id FROM trip_shape)
+      ORDER BY shape_pt_sequence
     `);
     chQuery(query)
       .then(async res => {
         if (res && res.data && res.data.length > 0) {
           const points = processTripResults(res.data, row);
-          submitTripWaypoints(points, row, close, () => setLoadingTripKey(null), (await shape_pls).data);
+          submitTripWaypoints(points, close, () => setLoadingTripKey(null), (await shape_pls).data);
         } else {
           setLoadingTripKey(null);
         }
